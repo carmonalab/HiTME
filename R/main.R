@@ -10,7 +10,7 @@ calc_CTcomp <- function(object, sample.col = NULL, annot.cols = "scGate_multi",
   celltype.compositions <- list()
   
   for (annot.col in annot.cols) {
-    if (length(pbmc3k@meta.data[[annot.cols]]) == 0) {
+    if (length(object@meta.data[[annot.cols]]) == 0) {
       stop(paste("Annotation metadata column", annot.col,"could not be found"))
     }
     
@@ -21,15 +21,17 @@ calc_CTcomp <- function(object, sample.col = NULL, annot.cols = "scGate_multi",
     if (is.null(sample.col)) {
       comp_table <- table(object@meta.data[[annot.col]],
                           useNA = useNA)
+      comp_table_freq <- prop.table(comp_table+1) * 100 # To get percentage
     } else {
-      tryCatch(invisible(length(object@meta.data[[sample.col]])), error = function(e){ stop(paste("Sample column could not be found"))})
+      if (length(object@meta.data[[sample.col]]) == 0) {
+        stop(paste("Sample column could not be found"))
+      }
       comp_table <- table(object@meta.data[[annot.col]],
                           object@meta.data[[sample.col]],
                           useNA = useNA)
+      comp_table_freq <- prop.table(comp_table+1, margin = 2) * 100 # To get percentage
     }
 
-    comp_table_freq <- prop.table(comp_table+1)
-    
     if (sum(comp_table) < min.cells) {
       warning(paste("There are less than", min.cells,
                     "cells detected. This is too few to calculate a reasonable celltype composition, please check or adjust parameter min.cells."))
