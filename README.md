@@ -3,11 +3,25 @@
 New tool for classifying all cell types in the tumor microenvirontment
 
 # How to calculate cell type compositions
-To calculate the cell type composition, one metadata column is required as input.
+calc_CTcomp calculates the cell type composition from a seurat object with a metadata column containing the cell type annotations (e.g. called "celltype").
+```r
+calc_CTcomp(object = panc8, annot.cols = "celltype")
+```
+
 To calculate cell subtype composition, it is adviced to create a separate metadata column for each subtype composition, e.g.
+- One metadata column called "celltype"
 - One metadata column called "CD8_subtypes" containing only CD8 subtype annotations (all other cells as "NA")
 - One metadata column called "CD4_subtypes" ...
+```r
+calc_CTcomp(object = panc8, annot.cols = c("celltype", "CD8_subtypes", "CD4_subtypes"))
+```
 
+You can also calculate the cell type composition for each sample by indicating a metadata column containing the sample names:
+```r
+calc_CTcomp(object = panc8, annot.cols = "celltype", sample.col = "Sample")
+```
+
+## Example
 ```r
 devtools::install_github('satijalab/seurat-data')
 library(SeuratData)
