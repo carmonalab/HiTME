@@ -25,15 +25,10 @@ calc_CTcomp <- function(object, sample.col = "Sample", meta.df, maps = NULL,
   broadtype_comp_table <- table(object$scGate_multi,
                                 object@meta.data[[sample.col]],
                                 useNA = useNA)
-  head(t(broadtype_comp_table))
   broadtype_comp_table_freq <- prop.table(broadtype_comp_table+1, margin = 2)
-  
-  head(t(broadtype_comp_table_freq))
   
   # clr-transform
   broadtype_comp_table_clr <- Hotelling::clr(t(broadtype_comp_table_freq))
-  
-  head(broadtype_comp_table_clr)
   
   celltype.compositions$broad_cell_types[["cell_counts"]] <- as.data.frame.matrix(t(broadtype_comp_table))
   celltype.compositions$broad_cell_types[["freq"]] <- as.data.frame.matrix(t(broadtype_comp_table_freq))
@@ -47,22 +42,15 @@ calc_CTcomp <- function(object, sample.col = "Sample", meta.df, maps = NULL,
     subtype_comp_table <- table(object$functional.cluster[which(object$functional.cluster %in% map.subtypes)],
                                 object$Sample[which(object$functional.cluster %in% map.subtypes)],
                                 useNA = useNA)
+    subtype_comp_table <- subtype_comp_table[-nrow(subtype_comp_table),-ncol(subtype_comp_table)] 
+    
     if (sum(subtype_comp_table) < min.cells) {
       warning(paste("Using the", map, "there are less than", min.cells, "cells detected, too few to calculate a reasonable celltype composition, please check."))
       next
     }
     
-    subtype_comp_table <- subtype_comp_table[-nrow(subtype_comp_table),-ncol(subtype_comp_table)] 
-    
-    head(t(subtype_comp_table))
-    
     subtype_comp_table_freq <- prop.table(subtype_comp_table+1, margin = 2)
-    
-    head(t(subtype_comp_table_freq))
-    
     subtype_comp_table_clr <- Hotelling::clr(t(subtype_comp_table_freq))
-    
-    head(subtype_comp_table_clr)
     
     map.name <- stringr::str_remove(map, "ref\\.")
     celltype.compositions$subtypes[[map.name]][["cell_counts"]] <- as.data.frame.matrix(t(subtype_comp_table))
