@@ -2,7 +2,6 @@
 # Calculates relative abundance (freq) and clr-transformed freq
 
 aux <- file.path(getwd(), "aux")
-m <- c("CD8T_human_ref_v1","CD4T_human_ref_v2", "DC_human_ref_v1", "MoMac_human_v1")
 
 ## Use this to add new maps with new subtypes
 # CD8T_human_ref_v1 <- load.reference.map("~/Dropbox/CSI/reference_atlases/CD8T_human_ref_v1.rds")
@@ -15,6 +14,9 @@ m <- c("CD8T_human_ref_v1","CD4T_human_ref_v2", "DC_human_ref_v1", "MoMac_human_
 #   # Need to add "\n" (line break) at the end, otherwise read.csv will complain
 #   cat(c(paste0(map.subtypes, collapse = ","), "\n"), file = file.path(aux, sprintf("%s.txt", map)), sep = "")
 # }
+
+# Default maps
+m <- c("CD8T_human_ref_v1","CD4T_human_ref_v2", "DC_human_ref_v1", "MoMac_human_v1")
 
 calc_CTcomp <- function(object, sample.col = "Sample", meta.df, maps = m,
                         min.cells = 10, useNA = TRUE){
