@@ -8,19 +8,36 @@ annotate_cells <- function(dir, scGate.model, ref.maps,
   
   param <- BiocParallel::MulticoreParam(workers = ncores, progressbar = progressbar)
   
+  print("Running scGate")
   BiocParallel::bplapply(
-    X = files, 
+    X = files,
     BPPARAM =  param,
     FUN = function(file) {
-      path <- file.path(dir, file)
-      x <- readRDS(path)
-      x <- scGate(x, model=models.TME)
-      for (map in ref.maps) {
-        x <- Run.ProjecTILs(x, map)
+         path <- file.path(dir, file)
+         x <- readRDS(path)
+         x <- scGate(x, model=models.TME)
+         saveRDS(x, path)
       }
-      saveRDS(x, path)
-    }
   )
+  print("Finished scGate")
+  
+  for (i in 1:length(ref.maps)) {
+    ref.map.name <- names(ref.maps)[i]
+    print(paste("Running ProjecTILs with map:  ", ref.map.name))
+    BiocParallel::bplapply(
+      X = files, 
+      BPPARAM =  param,
+      FUN = function(file) {
+        path <- file.path(dir, file)
+        x <- readRDS(path)
+        x <- ProjecTILs.classifier(x, ref.maps[[i]])
+        x@meta.data[[paste0(ref.map.name, ".subtypes")]] <- x@meta.data[["functional.cluster"]]
+        x@meta.data[["functional.cluster"]] <- NULL
+        saveRDS(x, path)
+      }
+    )
+    print(paste("Finished ProjecTILs with map:  ", ref.map.name))
+  }
 }
 
 
