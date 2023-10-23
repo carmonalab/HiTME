@@ -35,6 +35,9 @@ library(bettermc)
 # library(parallel)
 
 
+# Example data
+path_root <- file.path("~", "Dropbox", "CSI", "Standardized_SingleCell_Datasets", "ZhangY_2022_34653365", "output", "test")
+
 # Define scGate model
 scGate_models_DB <- get_scGateDB(branch = "master", verbose = T, force_update = TRUE)
 models.TME <- scGate_models_DB$human$TME_HiRes
