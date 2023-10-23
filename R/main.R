@@ -1,34 +1,26 @@
 # Annotate cell types in parallel
-annotate_cells <- function(dir, scGate.model, ref.maps, mc.cores.scGate = 6, mc.cores.ProjecTILs = 3){
+annotate_cells <- function(dir, scGate.model, ref.maps,
+                           ncores = 1, progressbar = T){
   files <- list.files(dir)
   if (!all(endsWith(files, '.rds'))) {
     stop(paste("There are some files not ending on '.rds'"))
   }
   
-  print("Running scGate")
-  mclapply(files,
-           FUN = function(file) {
-             path <- file.path(dir, file)
-             x <- readRDS(path)
-             x <- scGate(x, model=scGate.model, ncores=1)
-             saveRDS(x, path)},
-           mc.cores = mc.cores.scGate)
-  print("Finished scGate")
+  param <- BiocParallel::MulticoreParam(workers = ncores, progressbar = progressbar)
   
-  for (map_file in ref.maps) {
-    map_name <- tail(unlist(strsplit(map_file, .Platform$file.sep)), n=1)
-    map <- load.reference.map(map_file)
-    print(paste("Running ProjecTILs with map:  ", map_name))
-    mclapply(files,
-             FUN = function(file){
-               path <- file.path(dir, file)
-               x <- readRDS(path)
-               x <- ProjecTILs.classifier(x, map, ncores=1)
-               saveRDS(x, path)
-             }, mc.cores = mc.cores.ProjecTILs)
-    print(paste("Finished ProjecTILs with map:  ", map_name))
-    gc(verbose = F)
-  }
+  BiocParallel::bplapply(
+    X = files, 
+    BPPARAM =  param,
+    FUN = function(file) {
+      path <- file.path(dir, file)
+      x <- readRDS(path)
+      x <- scGate(x, model=models.TME)
+      for (map in ref.maps) {
+        x <- Run.ProjecTILs(x, map)
+      }
+      saveRDS(x, path)
+    }
+  )
 }
 
 
