@@ -5,6 +5,7 @@ New tool for classifying all cell types in the tumor microenvirontment
 # Annotate cell types
 You can annotate cells with scGate and ProjecTILs in a parallel for-loop.
 The function takes as input the path to the directory containing the seurat objects saved as .rds files (preferably each sample saved as separate .rds file). The directory should not contain other .rds files.
+Note: running annotate_cells in parallel is heavy on RAM. With 64GB RAM, do not go over mc.cores = 4, better stay with mc.cores = 3, if you run other things mc.cores = 2.
 ```r
 scGate_models_DB <- get_scGateDB(branch = "master", verbose = T, force_update = TRUE)
 models.TME <- scGate_models_DB$human$TME_HiRes
