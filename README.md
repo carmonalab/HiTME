@@ -18,7 +18,7 @@ ref.maps.list <- list(file.path(path_ref, "CD8T_human_ref_v1.rds"),
 annotate_cells(dir = file.path(path_output, "test"),
                scGate.model = models.TME,
                ref.maps = ref.maps.list,
-               mc.cores = 4)
+               mc.cores = 3)
 ```
 
 
