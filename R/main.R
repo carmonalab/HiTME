@@ -1,4 +1,37 @@
-# Calculates:
+# Annotate cell types in parallel
+annotate_cells <- function(dir, scGate.model, ref.maps, mc.cores = 1){
+  files <- list.files(dir)
+  if (!all(endsWith(files, '.rds'))) {
+    stop(paste("There are some files not ending on '.rds'"))
+  }
+  
+  print("Running scGate")
+  mclapply(files,
+           FUN = function(file) {
+             path <- file.path(dir, file)
+             x <- readRDS(path)
+             x <- scGate(x, model=scGate.model, ncores=1)
+             saveRDS(x, path)},
+           mc.cores = mc.cores)
+  print("Finished scGate")
+  
+  for (map_file in ref.maps) {
+    map_name <- tail(unlist(strsplit(map_file, .Platform$file.sep)), n=1)
+    map <- load.reference.map(map_file)
+    print(paste("Running ProjecTILs with map:  ", map_name))
+    mclapply(files,
+             FUN = function(file){
+               path <- file.path(dir, file)
+               x <- readRDS(path)
+               x <- ProjecTILs.classifier(x, map, ncores=1)
+               saveRDS(x, path)
+             }, mc.cores = mc.cores)
+    print(paste("Finished ProjecTILs with map:  ", map_name))
+  }
+}
+
+
+# Calculate cell type composition
 # - Cell counts
 # - relative abundance (freq, sums to 100% for each metadata column provided)
 # - clr-transformed relative abundance (freq_clr)
