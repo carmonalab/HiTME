@@ -2,14 +2,15 @@
 
 New tool for classifying all cell types in the tumor microenvirontment
 
-# Annotate cell types
-You can annotate cells with scGate and ProjecTILs in a parallel for-loop.
+# Annotate sample cell types
+You can annotate cells with scGate and ProjecTILs in a parallel for-loop from samples stored on disk for large datasets.
 The function takes as input the path to the directory containing the seurat objects saved as .rds files (preferably each sample saved as separate .rds file). The directory should not contain other .rds files.
-Note: running annotate_cells in parallel is heavy on RAM. On a MacBook Pro with 10 cores and 64GB RAM mc.cores.scGate = 6 and mc.cores.ProjecTILs = 3 are suggested.
+For each ProjecTIL reference map (provided in named list), a new metadata column will be created called x.subtypes, where x = reference map name from list, e.g. CD8_subtypes, CD4_subtypes, ...
 
 ```r
 # Example data
-path_data <- file.path("~", "Dropbox", "CSI", "Standardized_SingleCell_Datasets", "ZhangY_2022_34653365", "output", "test")
+path_data <- file.path("~", "Dropbox", "CSI", "Standardized_SingleCell_Datasets",
+                       "ZhangY_2022_34653365", "output", "test")
 
 # Define scGate model
 scGate_models_DB <- get_scGateDB(branch = "master", verbose = T, force_update = TRUE)
@@ -17,11 +18,10 @@ models.TME <- scGate_models_DB$human$TME_HiRes
 
 # Load ProjecTILs reference maps
 path_ref <- "~/Dropbox/CSI/reference_atlases"
-ref.maps <- list()
-ref.maps[["ref.CD8"]] <- load.reference.map(file.path(path_ref, "CD8T_human_ref_v1.rds"))
-ref.maps[["ref.CD4"]] <- load.reference.map(file.path(path_ref, "CD4T_human_ref_v2.rds"))
-ref.maps[["ref.DC"]] <- load.reference.map(file.path(path_ref, "DC_human_ref_v1.rds"))
-ref.maps[["ref.MoMac"]] <- load.reference.map(file.path(path_ref, "MoMac_human_v1.rds"))
+ref.maps <- list(CD8 = load.reference.map(file.path(path_ref, "CD8T_human_ref_v1.rds")),
+                 CD4 = load.reference.map(file.path(path_ref, "CD4T_human_ref_v2.rds")),
+                 DC = load.reference.map(file.path(path_ref, "DC_human_ref_v1.rds")),
+                 MoMac = load.reference.map(file.path(path_ref, "MoMac_human_v1.rds")))
 
 annotate_cells(dir = path_data,
                scGate.model = models.TME,
