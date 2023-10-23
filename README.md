@@ -5,7 +5,27 @@ New tool for classifying all cell types in the tumor microenvirontment
 # Annotate cell types
 You can annotate cells with scGate and ProjecTILs in a parallel for-loop.
 The function takes as input the path to the directory containing the seurat objects saved as .rds files (preferably each sample saved as separate .rds file). The directory should not contain other .rds files.
-Note: running annotate_cells in parallel is heavy on RAM. With 64GB RAM mc.cores = 3 is suggested, if you run other things mc.cores = 2.
+Note: running annotate_cells in parallel is heavy on RAM. On a MacBook Pro with 10 cores and 64GB RAM mc.cores.scGate = 6 and mc.cores.ProjecTILs = 3 are suggested.
+
+It is advised to increase R's vector memory size to allocate large vectors for ProjecTILs. 
+**After creating the .Renviron file, please restart RStudio for it to take effect**
+```{bash create_Renviron}
+#include vector max size
+max_size=200Gb
+
+# create .Renviron file if not present
+if ! [ -a ".Renviron" ]
+then
+  touch .Renviron
+  echo R_MAX_VSIZE=$max_size > .Renviron
+  echo New .Renviron file created!
+else
+  echo .Renviron already present!
+  echo Check size of the allowed vector:
+  cat .Renviron
+fi
+```
+
 ```r
 # Required for progress bar only
 # NOTE: not maintained anymore!
@@ -14,9 +34,12 @@ library(bettermc)
 # Alternatively: use the "parallel" package
 # library(parallel)
 
+
+# Define scGate model
 scGate_models_DB <- get_scGateDB(branch = "master", verbose = T, force_update = TRUE)
 models.TME <- scGate_models_DB$human$TME_HiRes
 
+# Set paths for ProjecTIL reference maps
 path_ref <- "~/Dropbox/CSI/reference_atlases"
 ref.maps.list <- list(file.path(path_ref, "CD8T_human_ref_v1.rds"),
                       file.path(path_ref, "CD4T_human_ref_v2.rds"),
@@ -26,7 +49,7 @@ ref.maps.list <- list(file.path(path_ref, "CD8T_human_ref_v1.rds"),
 annotate_cells(dir = file.path(path_output, "test"),
                scGate.model = models.TME,
                ref.maps = ref.maps.list,
-               mc.cores = 3)
+               mc.cores.scGate = 6, mc.cores.ProjecTILs = 3)
 ```
 
 
