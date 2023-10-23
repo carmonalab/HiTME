@@ -2,7 +2,27 @@
 
 New tool for classifying all cell types in the tumor microenvirontment
 
-# How to calculate cell type compositions
+# Annotate cell types
+You can annotate cells with scGate and ProjecTILs in a parallel for-loop.
+The function takes as input the path to the directory containing the seurat objects saved as .rds files (preferably each sample saved as separate .rds file). The directory should not contain other .rds files.
+```r
+scGate_models_DB <- get_scGateDB(branch = "master", verbose = T, force_update = TRUE)
+models.TME <- scGate_models_DB$human$TME_HiRes
+
+path_ref <- "~/Dropbox/CSI/reference_atlases"
+ref.maps.list <- list(file.path(path_ref, "CD8T_human_ref_v1.rds"),
+                      file.path(path_ref, "CD4T_human_ref_v2.rds"),
+                      file.path(path_ref, "DC_human_ref_v1.rds"),
+                      file.path(path_ref, "MoMac_human_v1.rds"))
+
+annotate_cells(dir = file.path(path_output, "test"),
+               scGate.model = models.TME,
+               ref.maps = ref.maps.list,
+               mc.cores = 4)
+```
+
+
+# Calculate cell type compositions
 calc_CTcomp calculates the cell type composition from a seurat object with a metadata column containing the cell type annotations (e.g. called "celltype").
 ```r
 calc_CTcomp(object = panc8, annot.cols = "celltype")
