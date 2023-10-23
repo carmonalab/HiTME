@@ -31,7 +31,7 @@ annotate_cells <- function(dir, scGate.model, ref.maps,
         path <- file.path(dir, file)
         x <- readRDS(path)
         x <- ProjecTILs.classifier(x, ref.maps[[i]])
-        x@meta.data[[paste0(ref.map.name, ".subtypes")]] <- x@meta.data[["functional.cluster"]]
+        x@meta.data[[paste0(ref.map.name, "_subtypes")]] <- x@meta.data[["functional.cluster"]]
         x@meta.data[["functional.cluster"]] <- NULL
         saveRDS(x, path)
       }
