@@ -1,6 +1,6 @@
 # HiTME :dart: :facepunch:
 
-New tool for classifying all cell types in the tumor microenvirontment
+New tool for classifying all cell types in the tumor microenvironment
 
 # Annotate sample cell types
 You can annotate cells with scGate and ProjecTILs in a parallel for-loop from samples stored on disk for large datasets.
