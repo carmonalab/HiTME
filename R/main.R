@@ -1,5 +1,5 @@
 # Annotate cell types in parallel
-annotate_cells <- function(dir, scGate.model, ref.maps, mc.cores = 1){
+annotate_cells <- function(dir, scGate.model, ref.maps, mc.cores.scGate = 6, mc.cores.ProjecTILs = 3){
   files <- list.files(dir)
   if (!all(endsWith(files, '.rds'))) {
     stop(paste("There are some files not ending on '.rds'"))
@@ -12,7 +12,7 @@ annotate_cells <- function(dir, scGate.model, ref.maps, mc.cores = 1){
              x <- readRDS(path)
              x <- scGate(x, model=scGate.model, ncores=1)
              saveRDS(x, path)},
-           mc.cores = mc.cores)
+           mc.cores = mc.cores.scGate)
   print("Finished scGate")
   
   for (map_file in ref.maps) {
@@ -25,8 +25,9 @@ annotate_cells <- function(dir, scGate.model, ref.maps, mc.cores = 1){
                x <- readRDS(path)
                x <- ProjecTILs.classifier(x, map, ncores=1)
                saveRDS(x, path)
-             }, mc.cores = mc.cores)
+             }, mc.cores = mc.cores.ProjecTILs)
     print(paste("Finished ProjecTILs with map:  ", map_name))
+    gc(verbose = F)
   }
 }
 
