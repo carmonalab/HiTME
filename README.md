@@ -7,6 +7,7 @@ To `annotate_cells` you need to install [ProjecTILs](https://github.com/carmonal
 ```r
 remotes::install_github("carmonalab/ProjecTILs")
 ```
+<br>
 
 # Annotate sample cell types
 You can `annotate_cells` with [scGate](https://github.com/carmonalab/scGate) and [ProjecTILs](https://github.com/carmonalab/ProjecTILs) in a parallel for-loop from samples stored on disk for large datasets.
@@ -34,7 +35,7 @@ annotate_cells(dir = path_data,
                ref.maps = ref.maps,
                ncores = 6)
 ```
-
+<br>
 
 # Calculate cell type compositions
 `calc_CTcomp` calculates the cell type composition from a seurat object with one or multiple metadata column `annot.cols` containing the cell type annotations (e.g. called "celltype").
