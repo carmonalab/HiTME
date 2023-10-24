@@ -12,7 +12,7 @@ remotes::install_github("carmonalab/ProjecTILs")
 # Annotate sample cell types
 You can `annotate_cells` with [scGate](https://github.com/carmonalab/scGate) and [ProjecTILs](https://github.com/carmonalab/ProjecTILs) in a parallel for-loop from samples stored on disk for large datasets.
 The function takes as input the path to the directory containing the seurat objects saved as .rds files (preferably each sample saved as separate .rds file). The directory should not contain other .rds files.
-For each `ProjecTIL` reference map (provided in named list), a new metadata column will be created called x.subtypes, where x = reference map name from list, e.g. CD8_subtypes, CD4_subtypes, ...
+For each `ProjecTIL` reference map (provided in named list), a new metadata column will be created called x_subtypes, where x = reference map name from list, e.g. CD8_subtypes, CD4_subtypes, ...
 
 ```r
 # Example data
