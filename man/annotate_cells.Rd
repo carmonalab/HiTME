@@ -39,7 +39,7 @@ ref.maps <- list(CD8 = load.reference.map(file.path(path_ref, "CD8T_human_ref_v1
                  DC = load.reference.map(file.path(path_ref, "DC_human_ref_v1.rds")),
                  MoMac = load.reference.map(file.path(path_ref, "MoMac_human_v1.rds")))
 annotate_cells(dir = path_data,
-              scGate.model = models.TME,
-              ref.maps = ref.maps,
-              ncores = 6)
+               scGate.model = models.TME,
+               ref.maps = ref.maps,
+               ncores = 6)
 }

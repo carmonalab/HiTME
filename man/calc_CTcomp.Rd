@@ -34,11 +34,11 @@ Calculate cell type composition
 }
 \examples{
 devtools::install_github('satijalab/seurat-data')
-                         library(SeuratData)
-                         options(timeout = max(300, getOption("timeout")))
-                         InstallData("panc8")
-                         data("panc8")
-                         panc8 = UpdateSeuratObject(object = panc8)
+library(SeuratData)
+options(timeout = max(300, getOption("timeout")))
+InstallData("panc8")
+data("panc8")
+panc8 = UpdateSeuratObject(object = panc8)
 # Calculate overall composition
 celltype.compositions.overall <- calc_CTcomp(object = panc8, annot.cols = "celltype")
 

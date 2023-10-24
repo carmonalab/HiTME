@@ -8,6 +8,9 @@
 #' @param ncores The number of cores to use
 #' @param progressbar Whether to show a progressbar or not
 #'
+#' @importFrom BiocParallel MulticoreParam bplapply
+#' @importFrom scGate scGate
+#' @importFrom ProjecTILs ProjecTILs.classifier
 #' @return No return in R. The input files will be overwritten.
 #' @export annotate_cells
 #'
@@ -26,10 +29,10 @@
 #'                  CD4 = load.reference.map(file.path(path_ref, "CD4T_human_ref_v2.rds")),
 #'                  DC = load.reference.map(file.path(path_ref, "DC_human_ref_v1.rds")),
 #'                  MoMac = load.reference.map(file.path(path_ref, "MoMac_human_v1.rds")))
-#'annotate_cells(dir = path_data,
-#'               scGate.model = models.TME,
-#'               ref.maps = ref.maps,
-#'               ncores = 6)
+#' annotate_cells(dir = path_data,
+#'                scGate.model = models.TME,
+#'                ref.maps = ref.maps,
+#'                ncores = 6)
 annotate_cells <- function(dir, scGate.model, ref.maps,
                            ncores = 1, progressbar = TRUE){
   files <- list.files(dir)
@@ -50,7 +53,7 @@ annotate_cells <- function(dir, scGate.model, ref.maps,
     FUN = function(file) {
          path <- file.path(dir, file)
          x <- readRDS(path)
-         x <- scGate(x, model=models.TME)
+         x <- scGate::scGate(x, model=models.TME)
          saveRDS(x, path)
       }
   )
@@ -65,7 +68,7 @@ annotate_cells <- function(dir, scGate.model, ref.maps,
       FUN = function(file) {
         path <- file.path(dir, file)
         x <- readRDS(path)
-        x <- ProjecTILs.classifier(x, ref.maps[[i]])
+        x <- ProjecTILs::ProjecTILs.classifier(x, ref.maps[[i]])
         x@meta.data[[paste0(ref.map.name, "_subtypes")]] <- x@meta.data[["functional.cluster"]]
         x@meta.data[["functional.cluster"]] <- NULL
         saveRDS(x, path)
@@ -86,16 +89,17 @@ annotate_cells <- function(dir, scGate.model, ref.maps,
 #' @param useNA Whether to include not annotated cells or not (labelled as "NA" in the annot.cols). Can be defined separately for each annot.cols (provide single boolean or vector of booleans)
 #' @param rename.Multi.to.NA Whether to rename cells labelled as "Multi" by scGate to "NA"
 #'
+#' @importFrom Hotelling clr
 #' @return Cell type compositions as a list of data.frames containing cell counts, relative abundance (freq) and clr-transformed freq (freq_clr), respectively.
 #' @export calc_CTcomp
 #'
 #' @examples
 #' devtools::install_github('satijalab/seurat-data')
-#'                          library(SeuratData)
-#'                          options(timeout = max(300, getOption("timeout")))
-#'                          InstallData("panc8")
-#'                          data("panc8")
-#'                          panc8 = UpdateSeuratObject(object = panc8)
+#' library(SeuratData)
+#' options(timeout = max(300, getOption("timeout")))
+#' InstallData("panc8")
+#' data("panc8")
+#' panc8 = UpdateSeuratObject(object = panc8)
 #' # Calculate overall composition
 #' celltype.compositions.overall <- calc_CTcomp(object = panc8, annot.cols = "celltype")
 #'
@@ -163,6 +167,7 @@ calc_CTcomp <- function(object, sample.col = NULL, annot.cols = "scGate_multi",
 #' @param ncores Number of CPU cores to use for parallelization
 #' @param progressbar Whether to show a progressbar or not
 #'
+#' @importFrom BiocParallel MulticoreParam bplapply
 #' @return A list of Seurat objects saved to disk as separate .rds files
 #' @export save_objs
 #'
@@ -187,6 +192,8 @@ save_objs <- function(obj.list, dir, ncores = 6, progressbar = T){
 #' @param ncores Number of CPU cores to use for parallelization
 #' @param progressbar Whether to show a progressbar or not
 #'
+#' @importFrom BiocParallel MulticoreParam bplapply
+#' @importFrom stringr str_remove_all
 #' @return A list of Seurat objects read into R
 #' @export read_objs
 #'
