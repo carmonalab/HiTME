@@ -165,3 +165,53 @@ calc_CTcomp <- function(object, sample.col = NULL, annot.cols = "scGate_multi",
   }
   return(celltype.compositions)
 }
+
+
+#' Save object list to disk, in parallel
+#'
+#' @param obj.list A list of Seurat objects
+#' @param dir File location
+#' @param ncores Number of CPU cores to use for parallelization
+#' @param progressbar Whether to show a progressbar or not
+#'
+#' @return A list of Seurat objects saved to disk as separate .rds files
+#' @export save_objs
+#'
+#' @examples
+#' save_objs(obj.list, "./output/samples)
+save_objs <- function(obj.list, dir, ncores = 6, progressbar = T){
+  param <- BiocParallel::MulticoreParam(workers = ncores, progressbar = progressbar)
+  invisible(BiocParallel::bplapply(
+              X = obj.list,
+              BPPARAM =  param,
+              FUN = function(x) {
+                sample_name <- unique(x$Sample)
+                file_name <- file.path(dir, sprintf("%s.rds", sample_name))
+                saveRDS(x, file_name)
+                }))
+}
+
+
+#' Read all .rds files in a directory and return list of Seurat objects, in parallel
+#'
+#' @param dir File location
+#' @param ncores Number of CPU cores to use for parallelization
+#' @param progressbar Whether to show a progressbar or not
+#'
+#' @return A list of Seurat objects read into R
+#' @export read_objs
+#'
+#' @examples
+#' obj.list <- read_objs("./output/samples)
+read_objs <- function(dir, ncores = 6, progressbar = T){
+  param <- BiocParallel::MulticoreParam(workers = ncores, progressbar = progressbar)
+  file_names <- list.files(dir)
+  obj.list <- BiocParallel::bplapply(
+    X = file_names,
+    BPPARAM =  param,
+    FUN = function(x) {
+      readRDS(file.path(dir, x))
+      })
+  names(obj.list) <- stringr::str_remove_all(file_names, '.rds')
+  return(obj.list)
+}
