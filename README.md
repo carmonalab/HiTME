@@ -2,7 +2,12 @@
 
 New tool for classifying all cell types in the tumor microenvironment
 
-# TO DO
+# TO DO ❗
+```r
+# Installation for devs. From Rstudio Terminal, run the following code:
+# R CMD build /directory_of_your_downloaded_project_/HiTME
+# R CMD install HiTME_0.1.tar.gz
+```
 Provide better example dataset for public use.
 - Use annotate_cells on samples
 - Use calc_CTcomp on
@@ -10,6 +15,7 @@ Provide better example dataset for public use.
   - Multi sample object
   - List of sample objects from folder (still needs to be implemented) -> additionally, combine all samples into one big composition
 - Update example plots
+<br>
 
 ### Installation
 To `annotate_cells` you need to install [ProjecTILs](https://github.com/carmonalab/ProjecTILs) from GitHub:
@@ -24,8 +30,17 @@ The function takes as input the path to the directory containing the seurat obje
 For each `ProjecTIL` reference map (provided in named list), a new metadata column will be created called x_subtypes, where x = reference map name from list, e.g. CD8_subtypes, CD4_subtypes, ...
 
 ```r
+# Create separate .rds files for each sample
+obj.list <- SplitObject(obj, split.by = "Sample")
+
+# Use helper functions to save/load your object list to/from disk
+save_objs(obj.list, "./output/samples")
+obj.list <- read_objs("./output/samples")
+```
+
+```r
 # Example data
-path_data <- file.path("~/Dropbox/CSI/Standardized_SingleCell_Datasets/ZhangY_2022_34653365/output/test")
+path_data <- file.path("~/Dropbox/CSI/Standardized_SingleCell_Datasets/ZhangY_2022_34653365/output/samples_subset")
 
 # Define scGate model
 scGate_models_DB <- get_scGateDB(branch = "master", verbose = T, force_update = TRUE)
@@ -46,9 +61,13 @@ annotate_cells(dir = path_data,
 <br>
 
 # Calculate cell type compositions
-`calc_CTcomp` calculates the cell type composition from a seurat object with one or multiple metadata column `annot.cols` containing the cell type annotations (e.g. called "celltype").
+`calc_CTcomp` calculates the cell type composition from a Seurat object with one or multiple metadata column `annot.cols` containing the cell type annotations (e.g. called "celltype").
 ```r
-calc_CTcomp(object = panc8, annot.cols = "celltype")
+# For a single Seurat object:
+celltype.compositions <- calc_CTcomp(object = panc8, annot.cols = "celltype")
+
+# For multiple Seurat objects in a directory:
+celltype.compositions <- dir_calc_CTcomp(dir = path_data, annot.cols = "scGate_multi")
 ```
 
 To calculate cell subtype composition, it is adviced to create a separate metadata column for each subtype composition, e.g.
@@ -56,12 +75,12 @@ To calculate cell subtype composition, it is adviced to create a separate metada
 - One metadata column called "CD8_subtypes" containing only CD8 subtype annotations (all other cells as "NA")
 - One metadata column called "CD4_subtypes" ...
 ```r
-calc_CTcomp(object = panc8, annot.cols = c("celltype", "CD8_subtypes", "CD4_subtypes"))
+celltype.compositions <- calc_CTcomp(object = panc8, annot.cols = c("celltype", "CD8_subtypes", "CD4_subtypes"))
 ```
 
 You can also calculate the cell type composition for each sample by indicating a metadata column `sample.col` containing the sample names:
 ```r
-calc_CTcomp(object = panc8, annot.cols = "celltype", sample.col = "Sample")
+celltype.compositions <- calc_CTcomp(object = panc8, annot.cols = "celltype", sample.col = "Sample")
 ```
 
 ## Example
