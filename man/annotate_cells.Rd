@@ -24,10 +24,12 @@ No return in R. The input files will be overwritten.
 Annotate cell types in parallel
 }
 \examples{
+library(ProjecTILs)
+
 path_data <- file.path("~", "Dropbox", "CSI", "Standardized_SingleCell_Datasets", "ZhangY_2022_34653365", "output", "test")
 
 # Define scGate model
-scGate_models_DB <- get_scGateDB(branch = "master", verbose = T, force_update = TRUE)
+scGate_models_DB <- scGate::get_scGateDB(branch = "master", verbose = T, force_update = TRUE)
 models.TME <- scGate_models_DB$human$TME_HiRes
 
 # Load ProjecTILs reference maps

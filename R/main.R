@@ -12,10 +12,12 @@
 #' @export annotate_cells
 #'
 #' @examples
+#' library(ProjecTILs)
+#'
 #' path_data <- file.path("~", "Dropbox", "CSI", "Standardized_SingleCell_Datasets", "ZhangY_2022_34653365", "output", "test")
 #'
 #' # Define scGate model
-#' scGate_models_DB <- get_scGateDB(branch = "master", verbose = T, force_update = TRUE)
+#' scGate_models_DB <- scGate::get_scGateDB(branch = "master", verbose = T, force_update = TRUE)
 #' models.TME <- scGate_models_DB$human$TME_HiRes
 #'
 #' # Load ProjecTILs reference maps
@@ -99,19 +101,6 @@ annotate_cells <- function(dir, scGate.model, ref.maps,
 #'
 #' # Calculate sample-wise composition
 #' celltype.compositions.sample_wise <- calc_CTcomp(object = panc8, annot.cols = "celltype", sample.col = "orig.ident")
-#'
-#' # Plot overall composition
-#' par(mar = c(8.1, 4.1, 4.1, 2.1))
-#' barplot(unlist(celltype.compositions.overall[["celltype"]][["freq"]]),
-#'         ylab = "Relative abundance (%)",
-#'         las = 2)
-#' # Plot sample-wise composition
-#' df <- celltype.compositions.sample_wise[["celltype"]][["freq"]]
-#' dflong <- reshape2::melt(t(df))
-#' library(ggplot2)
-#' ggplot(dflong, aes(x=Var1, y=value, color=Var1)) +
-#'   geom_boxplot() + geom_point() + theme_classic() +
-#'   theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) + labs(x = "", y = "Relative abundance (%)") + NoLegend()
 calc_CTcomp <- function(object, sample.col = NULL, annot.cols = "scGate_multi",
                         min.cells = 10, useNA = FALSE, rename.Multi.to.NA = FALSE){
   if (length(useNA) == 1) {
