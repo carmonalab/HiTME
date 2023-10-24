@@ -19,3 +19,6 @@ A list of Seurat objects read into R
 \description{
 Read all .rds files in a directory and return list of Seurat objects, in parallel
 }
+\examples{
+obj.list <- read_objs("./output/samples")
+}

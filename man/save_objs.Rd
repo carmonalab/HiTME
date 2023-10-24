@@ -21,3 +21,6 @@ A list of Seurat objects saved to disk as separate .rds files
 \description{
 Save object list to disk, in parallel
 }
+\examples{
+save_objs(obj.list, "./output/samples")
+}

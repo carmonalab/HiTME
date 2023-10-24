@@ -178,7 +178,7 @@ calc_CTcomp <- function(object, sample.col = NULL, annot.cols = "scGate_multi",
 #' @export save_objs
 #'
 #' @examples
-#' save_objs(obj.list, "./output/samples)
+#' save_objs(obj.list, "./output/samples")
 save_objs <- function(obj.list, dir, ncores = 6, progressbar = T){
   param <- BiocParallel::MulticoreParam(workers = ncores, progressbar = progressbar)
   invisible(BiocParallel::bplapply(
@@ -202,7 +202,7 @@ save_objs <- function(obj.list, dir, ncores = 6, progressbar = T){
 #' @export read_objs
 #'
 #' @examples
-#' obj.list <- read_objs("./output/samples)
+#' obj.list <- read_objs("./output/samples")
 read_objs <- function(dir, ncores = 6, progressbar = T){
   param <- BiocParallel::MulticoreParam(workers = ncores, progressbar = progressbar)
   file_names <- list.files(dir)
