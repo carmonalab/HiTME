@@ -2,6 +2,15 @@
 
 New tool for classifying all cell types in the tumor microenvironment
 
+# TO DO
+Provide better example dataset for public use.
+- Use annotate_cells on samples
+- Use calc_CTcomp on
+  - Single sample object
+  - Multi sample object
+  - List of sample objects from folder (still needs to be implemented) -> additionally, combine all samples into one big composition
+- Update example plots
+
 ### Installation
 To `annotate_cells` you need to install [ProjecTILs](https://github.com/carmonalab/ProjecTILs) from GitHub:
 ```r
