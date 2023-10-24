@@ -7,6 +7,9 @@ New tool for classifying all cell types in the tumor microenvironment
 # Installation for devs. From Rstudio Terminal, run the following code:
 # R CMD build /directory_of_your_downloaded_project_/HiTME
 # R CMD install HiTME_0.1.tar.gz
+
+# Then load as usual
+# library(HiTME)
 ```
 Provide better example dataset for public use.
 - Use annotate_cells on samples
