@@ -2,10 +2,16 @@
 
 New tool for classifying all cell types in the tumor microenvironment
 
+### Installation
+To `annotate_cells` you need to install [ProjecTILs](https://github.com/carmonalab/ProjecTILs) from GitHub:
+```r
+remotes::install_github("carmonalab/ProjecTILs")
+```
+
 # Annotate sample cell types
-You can annotate cells with scGate and ProjecTILs in a parallel for-loop from samples stored on disk for large datasets.
+You can `annotate_cells` with [scGate](https://github.com/carmonalab/scGate) and [ProjecTILs](https://github.com/carmonalab/ProjecTILs) in a parallel for-loop from samples stored on disk for large datasets.
 The function takes as input the path to the directory containing the seurat objects saved as .rds files (preferably each sample saved as separate .rds file). The directory should not contain other .rds files.
-For each ProjecTIL reference map (provided in named list), a new metadata column will be created called x.subtypes, where x = reference map name from list, e.g. CD8_subtypes, CD4_subtypes, ...
+For each `ProjecTIL` reference map (provided in named list), a new metadata column will be created called x.subtypes, where x = reference map name from list, e.g. CD8_subtypes, CD4_subtypes, ...
 
 ```r
 # Example data
@@ -31,7 +37,7 @@ annotate_cells(dir = path_data,
 
 
 # Calculate cell type compositions
-calc_CTcomp calculates the cell type composition from a seurat object with a metadata column containing the cell type annotations (e.g. called "celltype").
+`calc_CTcomp` calculates the cell type composition from a seurat object with one or multiple metadata column `annot.cols` containing the cell type annotations (e.g. called "celltype").
 ```r
 calc_CTcomp(object = panc8, annot.cols = "celltype")
 ```
@@ -44,7 +50,7 @@ To calculate cell subtype composition, it is adviced to create a separate metada
 calc_CTcomp(object = panc8, annot.cols = c("celltype", "CD8_subtypes", "CD4_subtypes"))
 ```
 
-You can also calculate the cell type composition for each sample by indicating a metadata column containing the sample names:
+You can also calculate the cell type composition for each sample by indicating a metadata column `sample.col` containing the sample names:
 ```r
 calc_CTcomp(object = panc8, annot.cols = "celltype", sample.col = "Sample")
 ```
