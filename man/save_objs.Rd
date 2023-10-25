@@ -4,7 +4,12 @@
 \alias{save_objs}
 \title{Save object list to disk, in parallel}
 \usage{
-save_objs(obj.list, dir, ncores = 6, progressbar = T)
+save_objs(
+  obj.list,
+  dir,
+  ncores = parallelly::availableCores() - 2,
+  progressbar = T
+)
 }
 \arguments{
 \item{obj.list}{A list of Seurat objects}

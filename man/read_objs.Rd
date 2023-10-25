@@ -4,10 +4,17 @@
 \alias{read_objs}
 \title{Read all .rds files in a directory and return list of Seurat objects, in parallel}
 \usage{
-read_objs(dir, ncores = 6, progressbar = T)
+read_objs(
+  dir = NULL,
+  file.list = NULL,
+  ncores = parallelly::availableCores() - 2,
+  progressbar = T
+)
 }
 \arguments{
 \item{dir}{File location}
+
+\item{file.list}{A list of files (with full pathname)}
 
 \item{ncores}{Number of CPU cores to use for parallelization}
 

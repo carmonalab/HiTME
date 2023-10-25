@@ -5,16 +5,21 @@
 \title{Calculate cell type composition}
 \usage{
 calc_CTcomp(
-  object,
+  object = NULL,
+  dir = NULL,
   sample.col = NULL,
   annot.cols = "scGate_multi",
   min.cells = 10,
   useNA = FALSE,
-  rename.Multi.to.NA = FALSE
+  rename.Multi.to.NA = FALSE,
+  ncores = parallelly::availableCores() - 2,
+  progressbar = T
 )
 }
 \arguments{
-\item{object}{A seurat object}
+\item{object}{A seurat object or a list of seurat objects}
+
+\item{dir}{Directory containing the sample .rds files}
 
 \item{sample.col}{The Seurat object metadata column containing sample names}
 
@@ -25,6 +30,10 @@ calc_CTcomp(
 \item{useNA}{Whether to include not annotated cells or not (labelled as "NA" in the annot.cols). Can be defined separately for each annot.cols (provide single boolean or vector of booleans)}
 
 \item{rename.Multi.to.NA}{Whether to rename cells labelled as "Multi" by scGate to "NA"}
+
+\item{ncores}{The number of cores to use}
+
+\item{progressbar}{Whether to show a progressbar or not}
 }
 \value{
 Cell type compositions as a list of data.frames containing cell counts, relative abundance (freq) and clr-transformed freq (freq_clr), respectively.
