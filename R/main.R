@@ -168,7 +168,7 @@ calc_CTcomp <- function(object = NULL,
 
       if (sum(comp_table) < min.cells) {
         warning(paste("There are less than", min.cells,
-                      "cells detected. This is too few to calculate a reasonable celltype composition, please check or adjust parameter min.cells."))
+                      "cells detected. This is too few to calculate a reasonable celltype composition, If needed, set parameter min.cells = 0."))
         next
       }
 
@@ -242,23 +242,22 @@ calc_CTcomp <- function(object = NULL,
       comp_table <- comp_tables[[i]]
       comp_table[is.na(comp_table)] <- 0
 
-      low_count_samples <- colnames(comp_table)[colSums(comp_table) < min.cells]
+      low_count_samples <- rownames(comp_table)[rowSums(comp_table) < min.cells]
+
+      comp_table_freq <- as.data.frame(prop.table(as.matrix(comp_table)+1, margin = 1) * 100) # To get percentage
 
       if (length(low_count_samples) >= 1) {
-        warning(paste("There are less than", min.cells,
+        warning(paste("There are less than", min.cells, annot.cols[i],
                       "cells detected in sample(s)", low_count_samples,
-                      ". For this sample(s), no celltype composition was calculated. If you want it anyways, set parameter min.cells = 0."))
-        comp_table <- comp_table[, !colnames(comp_table) %in% low_count_samples]
+                      ". For this sample(s), no celltype composition was calculated. If needed, set parameter min.cells = 0.\n"))
+        comp_table_freq <- comp_table_freq[!rownames(comp_table_freq) %in% low_count_samples, ]
       }
-
-      comp_table_freq <- prop.table(as.matrix(comp_table)+1, margin = 1) * 100 # To get percentage
 
       ## clr-transform
       comp_table_clr <- Hotelling::clr(comp_table_freq)
 
       ## Sort
       comp_table <- as.data.frame.matrix(comp_table)
-      comp_table_freq <- as.data.frame.matrix(comp_table_freq)
       comp_table_clr <- as.data.frame.matrix(comp_table_clr)
       comp_table <- comp_table[order(row.names(comp_table)), ]
       comp_table_freq <- comp_table_freq[order(row.names(comp_table_freq)), ]
