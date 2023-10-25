@@ -11,12 +11,7 @@ New tool for classifying all cell types in the tumor microenvironment
 # Then load as usual
 # library(HiTME)
 ```
-Provide better example dataset for public use.
-- Use annotate_cells on samples
-- Use calc_CTcomp on
-  - Single sample object
-  - Multi sample object
-  - List of sample objects from folder (still needs to be implemented) -> additionally, combine all samples into one big composition
+- Provide better example dataset for public use.
 - Update example plots
 <br>
 
@@ -64,26 +59,38 @@ annotate_cells(dir = path_data,
 <br>
 
 # Calculate cell type compositions
-`calc_CTcomp` calculates the cell type composition from a Seurat object with one or multiple metadata column `annot.cols` containing the cell type annotations (e.g. called "celltype").
-```r
-# For a single Seurat object:
-celltype.compositions <- calc_CTcomp(object = panc8, annot.cols = "celltype")
-
-# For multiple Seurat objects in a directory:
-celltype.compositions <- dir_calc_CTcomp(dir = path_data, annot.cols = "scGate_multi")
-```
+`calc_CTcomp` calculates the cell type composition from one or multiple metadata column `annot.cols` containing the cell type annotations (e.g. called "celltype").
+Accepted inputs are:
+- `object` = a single Seurat object
+- `object` = a list of Seurat objects
+- `dir` = a directory containing Seurat objects saved as .rds (`object` parameter will be ignored)
 
 To calculate cell subtype composition, it is adviced to create a separate metadata column for each subtype composition, e.g.
 - One metadata column called "celltype"
 - One metadata column called "CD8_subtypes" containing only CD8 subtype annotations (all other cells as "NA")
 - One metadata column called "CD4_subtypes" ...
 ```r
-celltype.compositions <- calc_CTcomp(object = panc8, annot.cols = c("celltype", "CD8_subtypes", "CD4_subtypes"))
-```
+# Helper functions to read/save multiple .rds in a directory
+path_data <- file.path("~/Dropbox/CSI/Standardized_SingleCell_Datasets/ZhangY_2022_34653365/output/samples_subset")
+obj.list <- read_objs(path_data)
+# obj.list <- save_objs(obj.list, path_data)
 
-You can also calculate the cell type composition for each sample by indicating a metadata column `sample.col` containing the sample names:
-```r
-celltype.compositions <- calc_CTcomp(object = panc8, annot.cols = "celltype", sample.col = "Sample")
+# For a single Seurat object (one sample)
+celltype.compositions <- calc_CTcomp(obj.list[[1]])
+# For a single Seurat object, multiple cell type columns
+celltype.compositions <- calc_CTcomp(obj.list[[1]], annot.cols = c("scGate_multi", "CD8_subtypes"))
+
+# For a single Seurat object (containing multiple samples)
+obj <- merge(obj.list[[1]],obj.list[2:length(obj.list)])
+celltype.compositions <- calc_CTcomp(obj, sample.col = "Sample")
+
+# For a list of Seurat objects
+celltype.compositions <- calc_CTcomp(obj.list)
+celltype.compositions <- calc_CTcomp(obj.list, annot.cols = c("scGate_multi", "CD8_subtypes"))
+
+# From a directory with Seurat objects (e.g. samples), without loading all into memory but instead looping over the single files
+celltype.compositions <- calc_CTcomp(dir = path_data)
+celltype.compositions <- calc_CTcomp(dir = path_data, annot.cols = c("scGate_multi", "CD8_subtypes"))
 ```
 
 ## Example
