@@ -88,7 +88,7 @@ celltype.compositions <- calc_CTcomp(obj, sample.col = "Sample")
 
 # For a list of Seurat objects
 celltype.compositions <- calc_CTcomp(obj.list)
-celltype.compositions <- calc_CTcomp(obj.list, annot.cols = c("scGate_multi", "CD8_subtypes"))
+celltype.compositions <- calc_CTcomp(obj.list, annot.cols = c("scGate_multi", "CD8_subtypes", "CD4_subtypes", "DC_subtypes", "MoMac_subtypes"))
 
 # From a directory with Seurat objects (e.g. samples), without loading all into memory but instead looping over the single files
 celltype.compositions <- calc_CTcomp(dir = path_data)
