@@ -73,7 +73,7 @@ To calculate cell subtype composition, it is adviced to create a separate metada
 # Helper functions to read/save multiple .rds in a directory
 path_data <- file.path("~/Dropbox/CSI/Standardized_SingleCell_Datasets/ZhangY_2022_34653365/output/samples_subset")
 obj.list <- read_objs(path_data)
-# obj.list <- save_objs(obj.list, path_data)
+# save_objs(obj.list, path_data)
 
 # For a single Seurat object (one sample)
 celltype.compositions <- calc_CTcomp(obj.list[[1]])
