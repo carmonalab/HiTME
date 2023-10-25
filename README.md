@@ -59,21 +59,20 @@ annotate_cells(dir = path_data,
 <br>
 
 # Calculate cell type compositions
-`calc_CTcomp` calculates the cell type composition from one or multiple metadata column `annot.cols` containing the cell type annotations (e.g. called "celltype").
+`calc_CTcomp` calculates the cell type composition from one or multiple metadata column `annot.cols` containing the cell type annotations (e.g. called "scGate_multi", "CD8_subtypes", ...).
 Accepted inputs are:
 - `object` = a single Seurat object
 - `object` = a list of Seurat objects
 - `dir` = a directory containing Seurat objects saved as .rds (`object` parameter will be ignored)
 
 To calculate cell subtype composition, it is adviced to create a separate metadata column for each subtype composition, e.g.
-- One metadata column called "celltype"
+- One metadata column called "scGate_multi"
 - One metadata column called "CD8_subtypes" containing only CD8 subtype annotations (all other cells as "NA")
 - One metadata column called "CD4_subtypes" ...
 ```r
-# Helper functions to read/save multiple .rds in a directory
+# Load data
 path_data <- file.path("~/Dropbox/CSI/Standardized_SingleCell_Datasets/ZhangY_2022_34653365/output/samples_subset")
 obj.list <- read_objs(path_data)
-# save_objs(obj.list, path_data)
 
 # For a single Seurat object (one sample)
 celltype.compositions <- calc_CTcomp(obj.list[[1]])
