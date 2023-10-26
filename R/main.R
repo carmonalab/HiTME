@@ -84,7 +84,7 @@ annotate_cells <- function(dir, scGate.model, ref.maps,
 #'
 #' @param object A seurat object or a list of seurat objects
 #' @param dir Directory containing the sample .rds files
-#' @param sample.col The Seurat object metadata column containing sample names
+#' @param split.by The Seurat object metadata column containing sample names
 #' @param annot.cols The Seurat object metadata column(s) containing celltype annotations (provide as character vector, containing the metadata column name(s))
 #' @param min.cells Set a minimum threshold for number of cells to calculate relative abundance (e.g. less than 10 cells -> no relative abundnace will be calculated)
 #' @param useNA Whether to include not annotated cells or not (labelled as "NA" in the annot.cols). Can be defined separately for each annot.cols (provide single boolean or vector of booleans)
@@ -109,14 +109,14 @@ annotate_cells <- function(dir, scGate.model, ref.maps,
 #' celltype.compositions.overall <- calc_CTcomp(object = panc8, annot.cols = "celltype")
 #'
 #' # Calculate sample-wise composition
-#' celltype.compositions.sample_wise <- calc_CTcomp(object = panc8, annot.cols = "celltype", sample.col = "orig.ident")
+#' celltype.compositions.sample_wise <- calc_CTcomp(object = panc8, annot.cols = "celltype", split.by = "orig.ident")
 calc_CTcomp <- function(object = NULL,
                         dir = NULL,
-                        sample.col = NULL,
+                        split.by = NULL,
                         annot.cols = "scGate_multi",
                         min.cells = 10,
                         useNA = FALSE,
-                        rename.Multi.to.NA = FALSE,
+                        rename.Multi.to.NA = TRUE,
                         ncores = parallelly::availableCores() - 2, progressbar = T) {
   if (!is.null(object) & !is.null(dir)) {
     stop(paste("Cannot provide object and dir"))
@@ -152,16 +152,16 @@ calc_CTcomp <- function(object = NULL,
         object@meta.data[[annot.cols[i]]][object@meta.data[[annot.cols[i]]] == "Multi"] <- NA
       }
 
-      if (is.null(sample.col)) {
+      if (is.null(split.by)) {
         comp_table <- table(object@meta.data[[annot.cols[i]]],
                             useNA = useNA[i])
         comp_table_freq <- prop.table(comp_table+1) * 100 # To get percentage
       } else {
-        if (length(object@meta.data[[sample.col]]) == 0) {
+        if (length(object@meta.data[[split.by]]) == 0) {
           stop(paste("Sample column could not be found"))
         }
         comp_table <- table(object@meta.data[[annot.cols[i]]],
-                            object@meta.data[[sample.col]],
+                            object@meta.data[[split.by]],
                             useNA = useNA[i])
         comp_table_freq <- prop.table(comp_table+1, margin = 2) * 100 # To get percentage
       }
@@ -198,39 +198,42 @@ calc_CTcomp <- function(object = NULL,
       if (!is.null(dir)) {
         obj <- readRDS(file.path(dir, files[j]))
       }
-      if (rename.Multi.to.NA) {
-        obj@meta.data[[annot.cols[i]]][obj@meta.data[[annot.cols[i]]] == "Multi"] <- NA
-      }
 
       if (j == 1) { # For the first sample, create a comp_tables list
         comp_tables <- list()
         for (i in 1:length(annot.cols)) {
+          if (rename.Multi.to.NA) {
+            obj@meta.data[[annot.cols[i]]][obj@meta.data[[annot.cols[i]]] == "Multi"] <- NA
+          }
           if (length(obj@meta.data[[annot.cols[i]]]) == 0) {
             stop(paste("Annotation metadata column", annot.cols[i],"could not be found in", object_names[j]))
           }
-          if (is.null(sample.col)) {
+          if (is.null(split.by)) {
             comp_tables[[annot.cols[i]]] <- as.data.frame.matrix(t(table(obj@meta.data[[annot.cols[i]]],
                                                                          useNA = useNA[i])))
             rownames(comp_tables[[annot.cols[i]]]) <- object_names[j]
           } else {
-            stop(paste("Cannot define sample.col if multiple objects are provided"))
+            stop(paste("Cannot define split.by if multiple objects are provided"))
           }
         }
       } else { # For subsequent samples, append to the comp_tables list
         for (i in 1:length(annot.cols)) {
+          if (rename.Multi.to.NA) {
+            obj@meta.data[[annot.cols[i]]][obj@meta.data[[annot.cols[i]]] == "Multi"] <- NA
+          }
           if (length(obj@meta.data[[annot.cols[i]]]) == 0) {
             stop(paste("Annotation metadata column", annot.cols[i],"could not be found in", object_names[j]))
           }
           if (rename.Multi.to.NA) {
             obj@meta.data[[annot.cols[i]]][obj@meta.data[[annot.cols[i]]] == "Multi"] <- NA
           }
-          if (is.null(sample.col)) {
+          if (is.null(split.by)) {
             x <- as.data.frame.matrix(t(table(obj@meta.data[[annot.cols[i]]],
                                               useNA = useNA[i])))
             rownames(x) <- object_names[j]
             comp_tables[[annot.cols[i]]] <- as.data.frame.matrix(t(transform(merge(t(x),t(comp_tables[[annot.cols[i]]]),by=0,all=TRUE), row.names=Row.names, Row.names=NULL)))
           } else {
-            stop(paste("Cannot define sample.col if multiple objects are provided"))
+            stop(paste("Cannot define split.by if multiple objects are provided"))
           }
         }
       }
@@ -271,7 +274,6 @@ calc_CTcomp <- function(object = NULL,
   }
   return(celltype.compositions)
 }
-
 
 #' Save object list to disk, in parallel
 #'
