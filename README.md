@@ -14,6 +14,8 @@ New tool for classifying all cell types in the tumor microenvironment
 - Provide better example dataset for public use.
 - Update example plots
 - **Consider scGate_multi classification vs ProjecTILs filter annotation**
+- Compare cells having scGate_multi "NA" and have ProjecTIL classifications
+- Check cells having multiple classifications?
 <br>
 
 ### Installation
