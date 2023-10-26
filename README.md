@@ -110,7 +110,7 @@ celltype.compositions <- calc_CTcomp(obj.list[[1]], annot.cols = c("scGate_multi
 
 # For a single Seurat object (containing multiple samples)
 obj <- merge(obj.list[[1]],obj.list[2:length(obj.list)])
-celltype.compositions <- calc_CTcomp(obj, sample.col = "Sample")
+celltype.compositions <- calc_CTcomp(obj, split.by = "Sample")
 
 # For a list of Seurat objects
 celltype.compositions <- calc_CTcomp(obj.list)
@@ -135,7 +135,7 @@ panc8 = UpdateSeuratObject(object = panc8)
 celltype.compositions.overall <- calc_CTcomp(object = panc8, annot.cols = "celltype")
 
 # Calculate sample-wise composition
-celltype.compositions.sample_wise <- calc_CTcomp(object = panc8, annot.cols = "celltype", sample.col = "orig.ident")
+celltype.compositions.sample_wise <- calc_CTcomp(object = panc8, annot.cols = "celltype", split.by = "orig.ident")
 
 ###################################################################
 # Plot overall composition
