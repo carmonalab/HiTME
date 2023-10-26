@@ -2,15 +2,20 @@
 
 #' Annotate cell types in parallel
 #'
+#' @param object A seurat object or a list of seurat objects
 #' @param dir The directory where your sample .rds files(seurat objects) are located
 #' @param scGate.model The scGate model to use (use get_scGateDB() to get a list of available models)
 #' @param ref.maps A named list of the ProjecTILs reference maps to use
+#' @param split.by A Seurat object metadata column to split by (e.g. sample names)
+#' @param remerge When setting split.by, if remerge = TRUE one object will be returned. If remerge = FALSE a list of objects will be returned.
 #' @param ncores The number of cores to use
 #' @param progressbar Whether to show a progressbar or not
 #'
 #' @importFrom BiocParallel MulticoreParam bplapply
+#' @importFrom parallelly availableCores
 #' @importFrom scGate scGate
 #' @importFrom ProjecTILs ProjecTILs.classifier
+#' @importFrom Seurat SplitObject
 #' @return No return in R. The input files will be overwritten.
 #' @export annotate_cells
 #'
@@ -33,50 +38,111 @@
 #'                scGate.model = models.TME,
 #'                ref.maps = ref.maps,
 #'                ncores = 6)
-annotate_cells <- function(dir, scGate.model, ref.maps,
-                           ncores = 1, progressbar = TRUE){
-  files <- list.files(dir)
-  if (!all(endsWith(files, '.rds'))) {
-    stop(paste("There are some files not ending on '.rds'"))
+annotate_cells <- function(object = NULL, dir = NULL,
+                           scGate.model = NULL,
+                           ref.maps = NULL,
+                           split.by = NULL, remerge = TRUE,
+                           ncores = parallelly::availableCores() - 2, progressbar = TRUE){
+  if (!is.null(object) & !is.null(dir)) {
+    stop(paste("Cannot provide object and dir"))
+  }
+  if (!is.null(ref.maps)) {
+    if (!is.list(ref.maps)) {
+      stop("Please provide ref.maps as named list, containing the reference map(s), even if it is just one. The name will be used for the metadata column containing the cell type annotations")
+    }
   }
 
-  if (!is.list(ref.maps)) {
-    stop("Please provide ref.maps as named list, containing the reference map(s), even if it is just one. The name will be used for the metadata column containing the cell type annotations")
+  if (!is.null(dir)) {
+    files <- list.files(dir)
+    if (!all(endsWith(files, '.rds'))) {
+      stop(paste("There are some files not ending on '.rds'"))
+    }
   }
+
+  if (!is.null(split.by)) {
+    object <- Seurat::SplitObject(object, split.by = split.by)
+  }
+
+  # Either:
+  # - The input is a single Seurat object
+  # - The input is a list of Seurat objects
+  # - The input is directory containing multiple .rds files (each a single object)
 
   param <- BiocParallel::MulticoreParam(workers = ncores, progressbar = progressbar)
 
-  print("Running scGate")
-  BiocParallel::bplapply(
-    X = files,
-    BPPARAM =  param,
-    FUN = function(file) {
-         path <- file.path(dir, file)
-         x <- readRDS(path)
-         x <- scGate::scGate(x, model=models.TME)
-         saveRDS(x, path)
-      }
-  )
-  print("Finished scGate")
-
-  for (i in 1:length(ref.maps)) {
-    ref.map.name <- names(ref.maps)[i]
-    print(paste("Running ProjecTILs with map:  ", ref.map.name))
-    BiocParallel::bplapply(
-      X = files,
-      BPPARAM =  param,
-      FUN = function(file) {
-        path <- file.path(dir, file)
-        x <- readRDS(path)
-        x <- ProjecTILs::ProjecTILs.classifier(x, ref.maps[[i]])
-        x@meta.data[[paste0(ref.map.name, "_subtypes")]] <- x@meta.data[["functional.cluster"]]
-        x@meta.data[["functional.cluster"]] <- NULL
-        saveRDS(x, path)
-      }
-    )
-    print(paste("Finished ProjecTILs with map:  ", ref.map.name))
+  # Run scGate, if model is provided
+  if (!is.null(scGate.model)) {
+    print("Running scGate")
+    if (isS4(object)) { # If input is a single Seurat object
+      object <- scGate::scGate(object, model=models.TME)
+    } else if (is.list(object)) { # If input is object list
+      object <- BiocParallel::bplapply(
+        X = object,
+        BPPARAM = param,
+        FUN = function(x) {
+          x <- scGate::scGate(x, model=models.TME)
+        }
+      )
+    } else if (!is.null(dir)) { # If input is directory
+      BiocParallel::bplapply(
+        X = files,
+        BPPARAM = param,
+        FUN = function(file) {
+          path <- file.path(dir, file)
+          x <- readRDS(path)
+          x <- scGate::scGate(x, model=models.TME)
+          saveRDS(x, path)
+        }
+      )
+    }
+    print("Finished scGate")
   }
+
+  # Run ProjecTILs if ref.maps is provided
+  if (!is.null(ref.maps)) {
+    for (i in 1:length(ref.maps)) {
+      ref.map.name <- names(ref.maps)[i]
+      print(paste("Running ProjecTILs with map:  ", ref.map.name))
+      if (isS4(object)) { # If input is a single Seurat object
+        object <- ProjecTILs::ProjecTILs.classifier(object, ref.maps[[i]])
+        object@meta.data[[paste0(ref.map.name, "_subtypes")]] <- object@meta.data[["functional.cluster"]]
+        object@meta.data[["functional.cluster"]] <- NULL
+      } else if (is.list(object)) { # If input is object list
+        object <- BiocParallel::bplapply(
+          X = object,
+          BPPARAM = param,
+          FUN = function(x) {
+            x <- ProjecTILs::ProjecTILs.classifier(x, ref.maps[[i]])
+            x@meta.data[[paste0(ref.map.name, "_subtypes")]] <- x@meta.data[["functional.cluster"]]
+            x@meta.data[["functional.cluster"]] <- NULL
+            x
+          }
+        )
+      } else if (!is.null(dir)) { # If input is directory
+        BiocParallel::bplapply(
+          X = files,
+          BPPARAM = param,
+          FUN = function(file) {
+            path <- file.path(dir, file)
+            x <- readRDS(path)
+            x <- ProjecTILs::ProjecTILs.classifier(x, ref.maps[[i]])
+            x@meta.data[[paste0(ref.map.name, "_subtypes")]] <- x@meta.data[["functional.cluster"]]
+            x@meta.data[["functional.cluster"]] <- NULL
+            saveRDS(x, path)
+          }
+        )
+      }
+      print(paste("Finished ProjecTILs with map:  ", ref.map.name))
+    }
+  }
+  if (!is.null(split.by)) {
+    if (remerge) {
+      object <- merge(object[[1]],object[2:length(object)])
+    }
+  }
+  if (!is.null(object)) {return(object)}
 }
+
 
 
 
@@ -84,7 +150,7 @@ annotate_cells <- function(dir, scGate.model, ref.maps,
 #'
 #' @param object A seurat object or a list of seurat objects
 #' @param dir Directory containing the sample .rds files
-#' @param split.by The Seurat object metadata column containing sample names
+#' @param split.by A Seurat object metadata column to split by (e.g. sample names)
 #' @param annot.cols The Seurat object metadata column(s) containing celltype annotations (provide as character vector, containing the metadata column name(s))
 #' @param min.cells Set a minimum threshold for number of cells to calculate relative abundance (e.g. less than 10 cells -> no relative abundnace will be calculated)
 #' @param useNA Whether to include not annotated cells or not (labelled as "NA" in the annot.cols). Can be defined separately for each annot.cols (provide single boolean or vector of booleans)
