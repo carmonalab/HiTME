@@ -26,9 +26,16 @@ remotes::install_github("carmonalab/ProjecTILs")
 <br>
 
 # Annotate sample cell types
-You can `annotate_cells` with [scGate](https://github.com/carmonalab/scGate) and [ProjecTILs](https://github.com/carmonalab/ProjecTILs) in a parallel for-loop from samples stored on disk for large datasets.
-The function takes as input the path to the directory containing the seurat objects saved as .rds files (preferably each sample saved as separate .rds file). The directory should not contain other .rds files.
+You can `annotate_cells` with [scGate](https://github.com/carmonalab/scGate) and [ProjecTILs](https://github.com/carmonalab/ProjecTILs).
 For each `ProjecTIL` reference map (provided in named list), a new metadata column will be created called x_subtypes, where x = reference map name from list, e.g. CD8_subtypes, CD4_subtypes, ...
+
+Accepted inputs are:
+- `object` = a single Seurat object
+- `object` = a list of Seurat objects
+- `dir` = a directory containing Seurat objects saved as .rds files
+
+The function takes as input the path to the directory containing the seurat objects saved as .rds files (preferably small files, e.g. each sample saved as separate .rds file). The directory should not contain other files.
+The idea is to process large datasets in a parallel for-loop from samples stored on disk, in order to prevent running out of RAM memory.
 
 ```r
 # Create separate .rds files for each sample
@@ -57,10 +64,26 @@ ref.maps <- list(CD8 = load.reference.map(file.path(path_ref, "CD8T_human_ref_v1
                  DC = load.reference.map(file.path(path_ref, "DC_human_ref_v1.rds")),
                  MoMac = load.reference.map(file.path(path_ref, "MoMac_human_v1.rds")))
 
-annotate_cells(dir = path_data,
+# For a single Seurat object
+annotate_cells(object = object,
+               scGate.model = models.TME,
+               ref.maps = ref.maps)
+
+# For a single Seurat object, split by a metadata column, e.g. "Sample"
+annotate_cells(object = object,
                scGate.model = models.TME,
                ref.maps = ref.maps,
-               ncores = 6)
+               split.by = "Sample")
+
+# For a list of Seurat objects
+annotate_cells(object = obj.list,
+               scGate.model = models.TME,
+               ref.maps = ref.maps)
+
+# From a directory with Seurat objects (e.g. samples), without loading all into memory but instead looping over the single files
+annotate_cells(dir = path_data,
+               scGate.model = models.TME,
+               ref.maps = ref.maps)
 ```
 <br>
 
