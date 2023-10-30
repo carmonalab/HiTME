@@ -4,14 +4,29 @@
 \alias{annotate_cells}
 \title{Annotate cell types in parallel}
 \usage{
-annotate_cells(dir, scGate.model, ref.maps, ncores = 1, progressbar = TRUE)
+annotate_cells(
+  object = NULL,
+  dir = NULL,
+  scGate.model = NULL,
+  ref.maps = NULL,
+  split.by = NULL,
+  remerge = TRUE,
+  ncores = parallelly::availableCores() - 2,
+  progressbar = TRUE
+)
 }
 \arguments{
+\item{object}{A seurat object or a list of seurat objects}
+
 \item{dir}{The directory where your sample .rds files(seurat objects) are located}
 
 \item{scGate.model}{The scGate model to use (use get_scGateDB() to get a list of available models)}
 
 \item{ref.maps}{A named list of the ProjecTILs reference maps to use}
+
+\item{split.by}{A Seurat object metadata column to split by (e.g. sample names)}
+
+\item{remerge}{When setting split.by, if remerge = TRUE one object will be returned. If remerge = FALSE a list of objects will be returned.}
 
 \item{ncores}{The number of cores to use}
 

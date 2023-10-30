@@ -7,11 +7,11 @@
 calc_CTcomp(
   object = NULL,
   dir = NULL,
-  sample.col = NULL,
+  split.by = NULL,
   annot.cols = "scGate_multi",
   min.cells = 10,
   useNA = FALSE,
-  rename.Multi.to.NA = FALSE,
+  rename.Multi.to.NA = TRUE,
   ncores = parallelly::availableCores() - 2,
   progressbar = T
 )
@@ -21,7 +21,7 @@ calc_CTcomp(
 
 \item{dir}{Directory containing the sample .rds files}
 
-\item{sample.col}{The Seurat object metadata column containing sample names}
+\item{split.by}{A Seurat object metadata column to split by (e.g. sample names)}
 
 \item{annot.cols}{The Seurat object metadata column(s) containing celltype annotations (provide as character vector, containing the metadata column name(s))}
 
@@ -52,5 +52,5 @@ panc8 = UpdateSeuratObject(object = panc8)
 celltype.compositions.overall <- calc_CTcomp(object = panc8, annot.cols = "celltype")
 
 # Calculate sample-wise composition
-celltype.compositions.sample_wise <- calc_CTcomp(object = panc8, annot.cols = "celltype", sample.col = "orig.ident")
+celltype.compositions.sample_wise <- calc_CTcomp(object = panc8, annot.cols = "celltype", split.by = "orig.ident")
 }
