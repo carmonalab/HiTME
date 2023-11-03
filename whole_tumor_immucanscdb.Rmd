@@ -1,0 +1,153 @@
+---
+title: Trial of HiTME package with whole tumor datasets
+author: "J. Garnica <josep.garnicacaparros at unil.ch>"
+knit: (function(input_file, encoding) {
+  out_dir <- 'docs';
+  rmarkdown::render(input_file,
+ encoding=encoding,
+ output_file=file.path(dirname(input_file), out_dir, 'index.html'))})
+---
+
+
+# Prepare packages and environtment
+```{r load_packages_functions, message=F, warning=F}
+renv::restore()
+
+# load packages
+pckgs <- c("tidyverse", "Seurat", "scGate", 
+           "Matrix", "patchwork",
+           "data.table", "STACAS",
+           "SignatuR", "ProjecTILs",
+           "scCustomize", "UCell")
+for(package in pckgs){
+  tryCatch(
+    {
+      library(package,
+              character.only = T,
+              quietly = T)
+    },
+    error = function(e){
+      message(e)
+    })
+}
+
+options(timeout=4000) # increase time out for downloading
+
+my_seed <- 321
+set.seed(my_seed)
+```
+
+Also, increase memory parameters to allocate large vectors, otherwise R might crash
+```{bash create_Renviron}
+#include vector max size
+max_size=250Gb
+
+# create .Renviron file if not present
+if ! [ -a ".Renviron" ]
+then
+  touch .Renviron
+  echo R_MAX_VSIZE=$max_size > .Renviron
+  echo New .Renviron file created!
+else
+  echo .Renviron already present!
+  echo Checking size of the allowed vector:
+  cat .Renviron
+fi
+```
+
+
+
+
+# Load data
+We will use the datasets obtained from https://immucanscdb.vital-it.ch/ and previously processed. Only using the ones with whole tumor cells. Moreover, we will also add the Joanito et al., 2022 dataset which include whole tissue from colorectal samples.
+
+
+The list of datasets from https://immucanscdb.vital-it.ch/ are detailed in https://docs.google.com/spreadsheets/d/1bFZ_jnmWUDJ9gaycsLaIsRmUryUWpdpW5aZY7V4Vpc0/edit#gid=0
+
+We retrieve this dataframe from google drive
+
+```{r}
+imm.db <- readxl::read_xlsx("data/Standarized_datasets_DB.xlsx")
+
+# keep whole tumor datasets
+table(imm.db$Enrichment_cell_types)
+
+imm.db %>% 
+  ggplot(aes(y = Enrichment_cell_types, fill = Enrichment_cell_types)) +
+  geom_bar(show.legend = F) +
+  labs(x = "Number of datasets") +
+  ggprism::theme_prism()
+# there are 25 datasets for unbiased, we'll use those
+
+sd <- imm.db %>% 
+  filter(Enrichment_cell_types == "unbiased") %>%
+  ggplot(aes(x = Cancer_type, y = N_samples_light,
+             fill = Cancer_type)) +
+  geom_col(aes(group = CSI_Dataset_id),
+           position = position_dodge(width = .9),
+          show.legend = F) +
+  geom_hline(yintercept = 10, linetype = 2) +
+  geom_label(aes(label = N_samples_light,
+                group = CSI_Dataset_id),
+                position = position_dodge(width = .9),
+             fill = "white",
+             show.legend = F) +
+  labs(y = "Number of samples\n(small samples removed)") +
+  ggprism::theme_prism() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+
+png("figs/samples_perCancer.png", width = 1500, height = 500)
+sd
+dev.off()
+```
+
+Now we will load the light (no small samples and downsampled) rds file for this corresponding files
+
+```{r}
+rds <- imm.db %>% 
+        # get only whole tumor
+        filter(Enrichment_cell_types == "unbiased") %>% 
+        # get only datasets with >+ 10 samples/patients
+        filter(N_samples_light >= 10) %>% 
+        select(RDS_id, CSI_Dataset_id) %>% 
+        as.data.frame()
+
+```
+
+## Load immucanscdb selected datasets
+```{r}
+# path to light rds
+light.path <- "~/Dropbox/CSI/Standardized_SingleCell_Datasets/immucanscdb/output/light_rds"
+
+#create a list to store the seurat objects
+seu <- list()
+
+for(a in seq_along(rds)){
+  # look for the rds in the light rds directory
+  rds.file <- list.files(light.path, rds[a,1], full.names = T)
+  #load file
+  tmp <- readRDS(rds.file)
+  
+  # add missing metadata for CSI_Dataset_id
+  tmp$CSI_Dataset_id <- rds[a,2]
+  
+  # add to list
+  seu[[rds[a,2]]] <- readRDS(file.path())
+}
+
+rm(tmp)
+gc()
+```
+
+## Load also Joanito dataset
+```{r}
+seu[["JoaI_2022_35773407"]] <- 
+  readRDS("~/Dropbox/CSI/Standardized_SingleCell_Datasets/JoaI_2022_35773407/output/JoaI_2022_35773407_Nofilt_Downsampled_light.rds")
+```
+
+
+
+
+
+
+
