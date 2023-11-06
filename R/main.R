@@ -8,6 +8,8 @@
 #' @param ref.maps A named list of the ProjecTILs reference maps to use
 #' @param split.by A Seurat object metadata column to split by (e.g. sample names)
 #' @param remerge When setting split.by, if remerge = TRUE one object will be returned. If remerge = FALSE a list of objects will be returned.
+#' @param additional.signatures Adding UCell additional signatures to compute on each cell.
+#' @param return.Seurat Whether to return a Hit S4 object or add the data into Seurat object metadata
 #' @param ncores The number of cores to use
 #' @param progressbar Whether to show a progressbar or not
 #'
@@ -38,6 +40,8 @@
 #'                scGate.model = models.TME,
 #'                ref.maps = ref.maps,
 #'                ncores = 6)
+#'
+
 annotate_cells <- function(object = NULL,
                            dir = NULL,
                            scGate.model = NULL,
@@ -45,8 +49,10 @@ annotate_cells <- function(object = NULL,
                            split.by = NULL,
                            remerge = TRUE,
                            additional.signatures = NULL,
+                           return.Seurat = FALSE,
                            ncores = parallelly::availableCores() - 2,
-                           progressbar = TRUE){
+                           progressbar = TRUE
+                           ){
 
   if (is.null(object) & is.null(dir)) {
     stop("Please provide either a Seurat object or a directory with rds files")
@@ -66,16 +72,34 @@ annotate_cells <- function(object = NULL,
     stop("Please provide at least either an scGate model or reference map for cell type classification")
   }
 
-  if (!is.null(dir)) {
-    files <- list.files(dir)
-    if (!all(endsWith(files, '.rds'))) {
-      stop("There are some files not ending on '.rds'")
-    }
-  }
-
+  # split object into a list if indicated
   if (!is.null(split.by)) {
     object <- Seurat::SplitObject(object, split.by = split.by)
   }
+
+  if (!is.null(dir)) {
+    files <- list.files(dir,
+                        pattern = "[.]rds$")
+    # get ncores per file
+    internal_cores <- floor(ncores / length(files))
+    if(internal_cores == 0){internal_cores <- 1}
+
+    # when running from directory only return seurat object
+    return.Seurat <- TRUE
+
+  } else if (!is.null(object)){
+    # Define internal ncores for scGate and projectils functions
+    if(is.list(object)){
+      internal_cores <- floor(ncores / length(object))
+      if(internal_cores == 0){internal_cores <- 1}
+    } else {
+      internal_cores <- ncores
+    }
+  }
+
+
+
+
 
   # Either:
   # - The input is a single Seurat object
@@ -84,31 +108,34 @@ annotate_cells <- function(object = NULL,
 
   param <- BiocParallel::MulticoreParam(workers = ncores, progressbar = progressbar)
 
+
   # Run scGate, if model is provided
   if (!is.null(scGate.model)) {
     message("Running scGate\n")
-    if (isS4(object)) { # If input is a single Seurat object
-      <<<<<<< HEAD
-      object <- scGate::scGate(object, model=models.TME, ncores = ncores)
-    } else if (is.list(object)) { # If input is object list
-      for (i in 1:length(object)) {
-        object[[i]] <- scGate::scGate(object[[i]], model=models.TME, ncores = ncores)
+    # If input is a single Seurat object
+    if (isS4(object)) {
+      if(class(object) != "Seurat"){
+        stop("Not Seurat object included, cannot be processed.\n")
       }
-      =======
-        object <- scGate::scGate(object,
-                                 model=scGate.model,
-                                 ncores = ncores)
-    } else if (is.list(object)) { # If input is object list
+      object <- scGate::scGate(object,
+                               model = scGate.model,
+                               additional.signatures = additional.signatures,
+                               ncores = internal_cores)
+    # If input is object list
+    } else if (is.list(object)) {
       object <- BiocParallel::bplapply(
         X = object,
         BPPARAM = param,
         FUN = function(x) {
+          if(class(x) != "Seurat"){
+            stop("Not Seurat object included, cannot be processed.\n")
+          }
           x <- scGate::scGate(x,
                               model=scGate.model,
-                              ncores = )
+                              additional.signatures = additional.signatures,
+                              ncores = internal_cores)
         }
       )
-      >>>>>>> 38ce0a7 (new messages when empty parameters)
     } else if (!is.null(dir)) { # If input is directory
       BiocParallel::bplapply(
         X = files,
@@ -116,11 +143,14 @@ annotate_cells <- function(object = NULL,
         FUN = function(file) {
           path <- file.path(dir, file)
           x <- readRDS(path)
-          <<<<<<< HEAD
+          if(class(x) != "Seurat"){
+            stop("Not Seurat object included, cannot be processed.\n")
+          }
           x <- scGate::scGate(x, model=models.TME, ncores = 1)
-          =======
-            x <- scGate::scGate(x, model=scGate.model)
-          >>>>>>> 38ce0a7 (new messages when empty parameters)
+            x <- scGate::scGate(x,
+                                model= scGate.model,
+                                additional.signatures = additional.signatures,
+                                ncores = internal_cores)
           saveRDS(x, path)
         }
       )
@@ -137,26 +167,47 @@ annotate_cells <- function(object = NULL,
       ref.map.name <- names(ref.maps)[i]
       message(paste("Running ProjecTILs with map:  ", ref.map.name, "\n"))
 
-      if (isS4(object)) { # If input is a single Seurat object
+      # If input is a single Seurat object
+      if (isS4(object)) {
+        if(class(object) != "Seurat"){
+          stop("Not Seurat object included, cannot be processed.\n")
+        }
         object <- ProjecTILs::ProjecTILs.classifier(object,
                                                     ref.maps[[i]],
-                                                    ncores = ncores)
+                                                    ncores = internal_cores)
 
         object@meta.data[[paste0(ref.map.name, "_subtypes")]] <- object@meta.data[["functional.cluster"]]
         object@meta.data[["functional.cluster"]] <- NULL
-      } else if (is.list(object)) { # If input is object list
-        object <- ProjecTILs::ProjecTILs.classifier(object, ref.maps[[i]], ncores = ncores)
-        for (j in 1:length(object)) {
-          object[[j]]@meta.data[[paste0(ref.map.name, "_subtypes")]] <- object[[j]]@meta.data[["functional.cluster"]]
-          object[[j]]@meta.data[["functional.cluster"]] <- NULL
-        }
-      } else if (!is.null(dir)) { # If input is directory
+
+        # If input is object list
+      } else if (is.list(object)) {
+        BiocParallel::bplapply(
+          X = object,
+          BPPARAM = param,
+          FUN = function(x) {
+            if(class(x) != "Seurat"){
+              stop("Not Seurat object included, cannot be processed.\n")
+            }
+            x <- ProjecTILs::ProjecTILs.classifier(x,
+                                                   ref.maps[[i]],
+                                                   ncores = internal_cores)
+            x@meta.data[[paste0(ref.map.name, "_subtypes")]] <- x@meta.data[["functional.cluster"]]
+            x@meta.data[["functional.cluster"]] <- NULL
+            saveRDS(x, path)
+          }
+        )
+
+        # If input is directory
+      } else if (!is.null(dir)) {
         BiocParallel::bplapply(
           X = files,
           BPPARAM = param,
           FUN = function(file) {
             path <- file.path(dir, file)
             x <- readRDS(path)
+            if(class(x) != "Seurat"){
+              stop("Not Seurat object included, cannot be processed.\n")
+            }
             x <- ProjecTILs::ProjecTILs.classifier(x, ref.maps[[i]])
             x@meta.data[[paste0(ref.map.name, "_subtypes")]] <- x@meta.data[["functional.cluster"]]
             x@meta.data[["functional.cluster"]] <- NULL
@@ -178,7 +229,9 @@ annotate_cells <- function(object = NULL,
   }
 
   if (!is.null(object)) {
-    return(object)
+    if(return.Seurat){
+      return(object)
+    }
   }
 }
 
