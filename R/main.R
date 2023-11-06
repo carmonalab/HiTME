@@ -179,10 +179,8 @@ annotate_cells <- function(object = NULL,
         object <- ProjecTILs::ProjecTILs.classifier(object,
                                                     ref.maps[[i]],
                                                     ncores = internal_cores)
-        object@meta.data[[paste0(ref.map.name, "_subtypes")]] <- object@meta.data[["functional.cluster"]]
-        object@meta.data[["functional.cluster"]] <- NULL
-        object@meta.data[[paste0(ref.map.name, "_confidence")]] <- object@meta.data[["functional.cluster.conf"]]
-        object@meta.data[["functional.cluster.conf"]] <- NULL
+        object <- addProjectilsClassification(object,
+                                              ref.map.name = ref.map.name)
 
         # If input is object list
       } else if (is.list(object)) {
@@ -196,10 +194,7 @@ annotate_cells <- function(object = NULL,
             x <- ProjecTILs::ProjecTILs.classifier(x,
                                                    ref.maps[[i]],
                                                    ncores = internal_cores)
-            x@meta.data[[paste0(ref.map.name, "_subtypes")]] <- x@meta.data[["functional.cluster"]]
-            x@meta.data[["functional.cluster"]] <- NULL
-            x@meta.data[[paste0(ref.map.name, "_confidence")]] <- x@meta.data[["functional.cluster.conf"]]
-            x@meta.data[["functional.cluster.conf"]] <- NULL
+            x <- addProjectilsClassification(x, ref.map.name = ref.map.name)
             saveRDS(x, path)
           }
         )
@@ -218,10 +213,7 @@ annotate_cells <- function(object = NULL,
             x <- ProjecTILs::ProjecTILs.classifier(x,
                                                    ref.maps[[i]],
                                                    ncores = internal_cores)
-            x@meta.data[[paste0(ref.map.name, "_subtypes")]] <- x@meta.data[["functional.cluster"]]
-            x@meta.data[["functional.cluster"]] <- NULL
-            x@meta.data[[paste0(ref.map.name, "_confidence")]] <- x@meta.data[["functional.cluster.conf"]]
-            x@meta.data[["functional.cluster.conf"]] <- NULL
+            x <- addProjectilsClassification(x, ref.map.name = ref.map.name)
             saveRDS(x, path)
           }
         )
@@ -236,6 +228,11 @@ annotate_cells <- function(object = NULL,
   if (!is.null(split.by)) {
     if (remerge) {
       object <- merge(object[[1]],object[2:length(object)])
+
+      # Add consensus projectils annotation
+      object <- classificationConsensus(object)
+    } else {
+      object <- lapply(object, classificationConsensus)
     }
   }
 

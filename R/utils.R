@@ -87,7 +87,9 @@ CreateHiTObject <- function(object,
   # Create empty s4 object to fill next
   projectils.s4 <- new(Class = "Projectils")
 
-  for(i in names(ref.maps)){
+  slots <- c(names(ref.maps), "Consensus")
+
+  for(i in slots){
 
     li <- list(Classification = object@meta.data[,grep(paste0(i,".*(_subtypes$|_confidence$])"),
                                                    names(object@meta.data)), drop = F],
@@ -114,3 +116,42 @@ CreateHiTObject <- function(object,
 
 
 }
+
+
+
+
+### Change names of added projectils classification
+addProjectilsClassification <- function(object,
+                                        ref.map.name){
+  object@meta.data[[paste0(ref.map.name, "_subtypes")]] <- object@meta.data[["functional.cluster"]]
+  object@meta.data[["functional.cluster"]] <- NULL
+  object@meta.data[[paste0(ref.map.name, "_confidence")]] <- object@meta.data[["functional.cluster.conf"]]
+  object@meta.data[["functional.cluster.conf"]] <- NULL
+
+  return(object)
+}
+
+
+### Create consensus from the various projectils classification maps
+
+# Define the custom logic function
+consensus <- function(...) {
+  if (all(is.na(c(...)))) {
+    return(NA)
+  } else if (sum(!is.na(c(...))) == 1) {
+    return(c(...)[!is.na(c(...))])
+  } else {
+    return("Multiple")
+  }
+}
+
+classificationConsensus <- function(object,
+                                    pattern = "_subtype") {
+  subtype.cols <- grep(pattern, names(object@meta.data), value = T)
+  object@meta.data <- object@meta.data %>%
+    mutate(Consensus_subtype = pmap(select(., all_of(subtype.cols)),
+                                    consensus))
+  return(object)
+}
+
+
