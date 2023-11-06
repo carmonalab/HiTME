@@ -96,9 +96,9 @@ sd <- imm.db %>%
   ggprism::theme_prism() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
 
-png("figs/samples_perCancer.png", width = 1500, height = 500)
-sd
-dev.off()
+# png("figs/samples_perCancer.png", width = 1500, height = 500)
+ sd
+# dev.off()
 ```
 
 Now we will load the light (no small samples and downsampled) rds file for this corresponding files
@@ -122,17 +122,19 @@ light.path <- "~/Dropbox/CSI/Standardized_SingleCell_Datasets/immucanscdb/output
 #create a list to store the seurat objects
 seu <- list()
 
-for(a in seq_along(rds)){
+for(a in 1:nrow(rds)){
   # look for the rds in the light rds directory
   rds.file <- list.files(light.path, rds[a,1], full.names = T)
   #load file
   tmp <- readRDS(rds.file)
   
+  message("##### Loaded ", rds[a,2], "#####\n")
+  
   # add missing metadata for CSI_Dataset_id
   tmp$CSI_Dataset_id <- rds[a,2]
   
   # add to list
-  seu[[rds[a,2]]] <- readRDS(file.path())
+  seu[[rds[a,2]]] <- tmp
 }
 
 rm(tmp)
@@ -143,7 +145,60 @@ gc()
 ```{r}
 seu[["JoaI_2022_35773407"]] <- 
   readRDS("~/Dropbox/CSI/Standardized_SingleCell_Datasets/JoaI_2022_35773407/output/JoaI_2022_35773407_Nofilt_Downsampled_light.rds")
+
+seu[["JoaI_2022_35773407"]]$CSI_Dataset_id <- "Joanito_2022_35773407"
 ```
+
+## Explore list metadata
+```{r}
+wmeta.list <- list()
+for(i in names(seu)){
+  met <- seu[[i]]@meta.data
+  
+  names(met) <- tolower(names(met))
+  
+  if (!(any(grepl("anno", names(met))))){
+    met <- met %>% mutate(annotation_authors = cell.type)
+  } else if(!(any(grepl("annotation_authors", names(met))))){
+    met <- met %>% mutate(annotation_authors = annotation_major)
+  }
+  
+  wmeta.list[[i]] <-  met
+}
+
+rm(met)
+
+wmeta <- wmeta.list %>% 
+          data.table::rbindlist(use.names = T, fill = T)
+```
+
+Plot
+
+```{r}
+sum.ct <- 
+  wmeta %>% 
+  # convert variant names
+  mutate(annotation = ifelse(grepl("^B", annotation_authors),
+                             "B cells",
+                             grepl("^T", annotation_authors))) %>% 
+  
+  count(csi_dataset_id, annotation) %>% 
+  group_by(csi_dataset_id) %>% 
+  mutate(Freq = n / sum(n)) 
+  
+  
+  
+ctplot <- 
+  ggplot(aes(annotation, Freq,
+             fill = annotation, color = annotation)) +
+    geom_boxplot() +
+    geom_point() +
+    ggprism::theme_prism()
+
+ctplot
+```
+
+
 
 
 
