@@ -74,15 +74,11 @@ annotate_cells <- function(object = NULL, dir = NULL,
   if (!is.null(scGate.model)) {
     print("Running scGate")
     if (isS4(object)) { # If input is a single Seurat object
-      object <- scGate::scGate(object, model=models.TME)
+      object <- scGate::scGate(object, model=models.TME, ncores = ncores)
     } else if (is.list(object)) { # If input is object list
-      object <- BiocParallel::bplapply(
-        X = object,
-        BPPARAM = param,
-        FUN = function(x) {
-          x <- scGate::scGate(x, model=models.TME)
-        }
-      )
+      for (x in object) {
+        x <- scGate::scGate(x, model=models.TME, ncores = ncores)
+      }
     } else if (!is.null(dir)) { # If input is directory
       BiocParallel::bplapply(
         X = files,
@@ -90,7 +86,7 @@ annotate_cells <- function(object = NULL, dir = NULL,
         FUN = function(file) {
           path <- file.path(dir, file)
           x <- readRDS(path)
-          x <- scGate::scGate(x, model=models.TME)
+          x <- scGate::scGate(x, model=models.TME, ncores = 1)
           saveRDS(x, path)
         }
       )
@@ -108,16 +104,11 @@ annotate_cells <- function(object = NULL, dir = NULL,
         object@meta.data[[paste0(ref.map.name, "_subtypes")]] <- object@meta.data[["functional.cluster"]]
         object@meta.data[["functional.cluster"]] <- NULL
       } else if (is.list(object)) { # If input is object list
-        object <- BiocParallel::bplapply(
-          X = object,
-          BPPARAM = param,
-          FUN = function(x) {
-            x <- ProjecTILs::ProjecTILs.classifier(x, ref.maps[[i]])
+        object <- ProjecTILs::ProjecTILs.classifier(object, ref.maps[[i]], ncores = ncores)
+        for (x in object) {
             x@meta.data[[paste0(ref.map.name, "_subtypes")]] <- x@meta.data[["functional.cluster"]]
             x@meta.data[["functional.cluster"]] <- NULL
-            x
-          }
-        )
+        }
       } else if (!is.null(dir)) { # If input is directory
         BiocParallel::bplapply(
           X = files,
