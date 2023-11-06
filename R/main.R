@@ -38,24 +38,38 @@
 #'                scGate.model = models.TME,
 #'                ref.maps = ref.maps,
 #'                ncores = 6)
-annotate_cells <- function(object = NULL, dir = NULL,
+annotate_cells <- function(object = NULL,
+                           dir = NULL,
                            scGate.model = NULL,
                            ref.maps = NULL,
-                           split.by = NULL, remerge = TRUE,
-                           ncores = parallelly::availableCores() - 2, progressbar = TRUE){
-  if (!is.null(object) & !is.null(dir)) {
-    stop(paste("Cannot provide object and dir"))
+                           split.by = NULL,
+                           remerge = TRUE,
+                           additional.signatures = NULL,
+                           ncores = parallelly::availableCores() - 2,
+                           progressbar = TRUE){
+
+  if (is.null(object) & is.null(dir)) {
+    stop("Please provide either a Seurat object or a directory with rds files")
   }
+
+  if (!is.null(object) & !is.null(dir)) {
+    stop("Cannot provide both object and directory")
+  }
+
   if (!is.null(ref.maps)) {
     if (!is.list(ref.maps)) {
       stop("Please provide ref.maps as named list, containing the reference map(s), even if it is just one. The name will be used for the metadata column containing the cell type annotations")
     }
   }
 
+  if (is.null(ref.maps) & is.null(scGate.model)) {
+    stop("Please provide at least either an scGate model or reference map for cell type classification")
+  }
+
   if (!is.null(dir)) {
     files <- list.files(dir)
     if (!all(endsWith(files, '.rds'))) {
-      stop(paste("There are some files not ending on '.rds'"))
+      stop("There are some files not ending on '.rds'")
     }
   }
 
@@ -72,13 +86,29 @@ annotate_cells <- function(object = NULL, dir = NULL,
 
   # Run scGate, if model is provided
   if (!is.null(scGate.model)) {
-    print("Running scGate")
+    message("Running scGate\n")
     if (isS4(object)) { # If input is a single Seurat object
+      <<<<<<< HEAD
       object <- scGate::scGate(object, model=models.TME, ncores = ncores)
     } else if (is.list(object)) { # If input is object list
       for (i in 1:length(object)) {
         object[[i]] <- scGate::scGate(object[[i]], model=models.TME, ncores = ncores)
       }
+      =======
+        object <- scGate::scGate(object,
+                                 model=scGate.model,
+                                 ncores = ncores)
+    } else if (is.list(object)) { # If input is object list
+      object <- BiocParallel::bplapply(
+        X = object,
+        BPPARAM = param,
+        FUN = function(x) {
+          x <- scGate::scGate(x,
+                              model=scGate.model,
+                              ncores = )
+        }
+      )
+      >>>>>>> 38ce0a7 (new messages when empty parameters)
     } else if (!is.null(dir)) { # If input is directory
       BiocParallel::bplapply(
         X = files,
@@ -86,28 +116,39 @@ annotate_cells <- function(object = NULL, dir = NULL,
         FUN = function(file) {
           path <- file.path(dir, file)
           x <- readRDS(path)
+          <<<<<<< HEAD
           x <- scGate::scGate(x, model=models.TME, ncores = 1)
+          =======
+            x <- scGate::scGate(x, model=scGate.model)
+          >>>>>>> 38ce0a7 (new messages when empty parameters)
           saveRDS(x, path)
         }
       )
     }
-    print("Finished scGate")
+    message("Finished scGate\n")
+  } else {
+    message("Not running coarse cell type classification as no scGate model was indicated.\n")
   }
+
 
   # Run ProjecTILs if ref.maps is provided
   if (!is.null(ref.maps)) {
     for (i in 1:length(ref.maps)) {
       ref.map.name <- names(ref.maps)[i]
-      print(paste("Running ProjecTILs with map:  ", ref.map.name))
+      message(paste("Running ProjecTILs with map:  ", ref.map.name, "\n"))
+
       if (isS4(object)) { # If input is a single Seurat object
-        object <- ProjecTILs::ProjecTILs.classifier(object, ref.maps[[i]])
+        object <- ProjecTILs::ProjecTILs.classifier(object,
+                                                    ref.maps[[i]],
+                                                    ncores = ncores)
+
         object@meta.data[[paste0(ref.map.name, "_subtypes")]] <- object@meta.data[["functional.cluster"]]
         object@meta.data[["functional.cluster"]] <- NULL
       } else if (is.list(object)) { # If input is object list
         object <- ProjecTILs::ProjecTILs.classifier(object, ref.maps[[i]], ncores = ncores)
         for (j in 1:length(object)) {
-            object[[j]]@meta.data[[paste0(ref.map.name, "_subtypes")]] <- object[[j]]@meta.data[["functional.cluster"]]
-            object[[j]]@meta.data[["functional.cluster"]] <- NULL
+          object[[j]]@meta.data[[paste0(ref.map.name, "_subtypes")]] <- object[[j]]@meta.data[["functional.cluster"]]
+          object[[j]]@meta.data[["functional.cluster"]] <- NULL
         }
       } else if (!is.null(dir)) { # If input is directory
         BiocParallel::bplapply(
@@ -125,14 +166,22 @@ annotate_cells <- function(object = NULL, dir = NULL,
       }
       print(paste("Finished ProjecTILs with map:  ", ref.map.name))
     }
+  } else {
+    message("Not running reference mapping as no reference maps were indicated.\n")
   }
+
+
   if (!is.null(split.by)) {
     if (remerge) {
       object <- merge(object[[1]],object[2:length(object)])
     }
   }
-  if (!is.null(object)) {return(object)}
+
+  if (!is.null(object)) {
+    return(object)
+  }
 }
+
 
 
 
@@ -356,7 +405,7 @@ save_objs <- function(obj.list,
       sample_name <- unique(x$Sample)
       file_name <- file.path(dir, sprintf("%s.rds", sample_name))
       saveRDS(x, file_name)
-      })
+    })
 }
 
 
@@ -390,7 +439,7 @@ read_objs <- function(dir = NULL,
     BPPARAM =  BiocParallel::MulticoreParam(workers = ncores, progressbar = progressbar),
     FUN = function(x) {
       readRDS(file.path(x))
-      })
+    })
   names(obj.list) <- stringr::str_remove_all(file_names, '.rds')
   return(obj.list)
 }
