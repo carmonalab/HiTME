@@ -75,6 +75,7 @@ annotate_cells <- function(object = NULL,
   # split object into a list if indicated
   if (!is.null(split.by)) {
     object <- Seurat::SplitObject(object, split.by = split.by)
+
   }
 
   if (!is.null(dir)) {
@@ -155,6 +156,9 @@ annotate_cells <- function(object = NULL,
         }
       )
     }
+
+
+
     message("Finished scGate\n")
   } else {
     message("Not running coarse cell type classification as no scGate model was indicated.\n")
@@ -175,9 +179,10 @@ annotate_cells <- function(object = NULL,
         object <- ProjecTILs::ProjecTILs.classifier(object,
                                                     ref.maps[[i]],
                                                     ncores = internal_cores)
-
         object@meta.data[[paste0(ref.map.name, "_subtypes")]] <- object@meta.data[["functional.cluster"]]
         object@meta.data[["functional.cluster"]] <- NULL
+        object@meta.data[[paste0(ref.map.name, "_confidence")]] <- object@meta.data[["functional.cluster.conf"]]
+        object@meta.data[["functional.cluster.conf"]] <- NULL
 
         # If input is object list
       } else if (is.list(object)) {
@@ -193,6 +198,8 @@ annotate_cells <- function(object = NULL,
                                                    ncores = internal_cores)
             x@meta.data[[paste0(ref.map.name, "_subtypes")]] <- x@meta.data[["functional.cluster"]]
             x@meta.data[["functional.cluster"]] <- NULL
+            x@meta.data[[paste0(ref.map.name, "_confidence")]] <- x@meta.data[["functional.cluster.conf"]]
+            x@meta.data[["functional.cluster.conf"]] <- NULL
             saveRDS(x, path)
           }
         )
@@ -208,9 +215,13 @@ annotate_cells <- function(object = NULL,
             if(class(x) != "Seurat"){
               stop("Not Seurat object included, cannot be processed.\n")
             }
-            x <- ProjecTILs::ProjecTILs.classifier(x, ref.maps[[i]])
+            x <- ProjecTILs::ProjecTILs.classifier(x,
+                                                   ref.maps[[i]],
+                                                   ncores = internal_cores)
             x@meta.data[[paste0(ref.map.name, "_subtypes")]] <- x@meta.data[["functional.cluster"]]
             x@meta.data[["functional.cluster"]] <- NULL
+            x@meta.data[[paste0(ref.map.name, "_confidence")]] <- x@meta.data[["functional.cluster.conf"]]
+            x@meta.data[["functional.cluster.conf"]] <- NULL
             saveRDS(x, path)
           }
         )
@@ -231,6 +242,9 @@ annotate_cells <- function(object = NULL,
   if (!is.null(object)) {
     if(return.Seurat){
       return(object)
+    } else {
+
+      return(hit)
     }
   }
 }
@@ -241,7 +255,7 @@ annotate_cells <- function(object = NULL,
 
 #' Calculate cell type composition
 #'
-#' @param object A seurat object or a list of seurat objects
+#' @param object A seurat object or a list of seurat objects with HiTME classification on its metadata
 #' @param dir Directory containing the sample .rds files
 #' @param split.by A Seurat object metadata column to split by (e.g. sample names)
 #' @param annot.cols The Seurat object metadata column(s) containing celltype annotations (provide as character vector, containing the metadata column name(s))
