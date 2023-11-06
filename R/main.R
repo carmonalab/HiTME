@@ -76,8 +76,8 @@ annotate_cells <- function(object = NULL, dir = NULL,
     if (isS4(object)) { # If input is a single Seurat object
       object <- scGate::scGate(object, model=models.TME, ncores = ncores)
     } else if (is.list(object)) { # If input is object list
-      for (x in object) {
-        x <- scGate::scGate(x, model=models.TME, ncores = ncores)
+      for (i in 1:length(object)) {
+        object[[i]] <- scGate::scGate(object[[i]], model=models.TME, ncores = ncores)
       }
     } else if (!is.null(dir)) { # If input is directory
       BiocParallel::bplapply(
@@ -105,9 +105,9 @@ annotate_cells <- function(object = NULL, dir = NULL,
         object@meta.data[["functional.cluster"]] <- NULL
       } else if (is.list(object)) { # If input is object list
         object <- ProjecTILs::ProjecTILs.classifier(object, ref.maps[[i]], ncores = ncores)
-        for (x in object) {
-            x@meta.data[[paste0(ref.map.name, "_subtypes")]] <- x@meta.data[["functional.cluster"]]
-            x@meta.data[["functional.cluster"]] <- NULL
+        for (j in 1:length(object)) {
+            object[[j]]@meta.data[[paste0(ref.map.name, "_subtypes")]] <- object[[j]]@meta.data[["functional.cluster"]]
+            object[[j]]@meta.data[["functional.cluster"]] <- NULL
         }
       } else if (!is.null(dir)) { # If input is directory
         BiocParallel::bplapply(
