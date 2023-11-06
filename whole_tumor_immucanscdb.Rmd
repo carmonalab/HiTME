@@ -33,6 +33,10 @@ for(package in pckgs){
 
 options(timeout=4000) # increase time out for downloading
 
+source("R/utils.R")
+source("R/main.R")
+
+
 my_seed <- 321
 set.seed(my_seed)
 ```
@@ -163,6 +167,25 @@ for(i in names(seu)){
     met <- met %>% mutate(annotation_authors = annotation_major)
   }
   
+    if(any(grepl("sample$", names(met)))){
+        sample.id <- "sample"
+    } else if(any(grepl("sample.id", names(met)))) {
+        sample.id <- grep("sample.id", names(met),
+                           ignore.case = T, value = T)
+        
+    } else if (any(grepl("patient$", names(met)))) {
+          sample.id <- "patient"
+
+    } else if(any(grepl("patient", names(met)))) {
+        sample.id <- grep("patient", names(met),
+                           ignore.case = T, value = T)
+    } else {
+      sample.id <- "orig.ident"
+    }
+  
+  cat(sample.id, "\n" )
+  met$group <- as.character(met[,sample.id])
+  
   wmeta.list[[i]] <-  met
 }
 
@@ -170,6 +193,7 @@ rm(met)
 
 wmeta <- wmeta.list %>% 
           data.table::rbindlist(use.names = T, fill = T)
+rm(wmeta.list)
 ```
 
 Plot
@@ -178,25 +202,86 @@ Plot
 sum.ct <- 
   wmeta %>% 
   # convert variant names
-  mutate(annotation = ifelse(grepl("^B", annotation_authors),
-                             "B cells",
-                             grepl("^T", annotation_authors))) %>% 
-  
-  count(csi_dataset_id, annotation) %>% 
-  group_by(csi_dataset_id) %>% 
+  mutate(annotation = StandardizeCellNames(annotation_authors)) %>% 
+  count(group, annotation) %>% 
+  group_by(group) %>% 
   mutate(Freq = n / sum(n)) 
   
-  
+```
+
+```{r}
   
 ctplot <- 
-  ggplot(aes(annotation, Freq,
-             fill = annotation, color = annotation)) +
-    geom_boxplot() +
-    geom_point() +
-    ggprism::theme_prism()
+  sum.ct %>% 
+  ggplot(aes(annotation, Freq, color = group)) +
+    geom_boxplot(aes(group = annotation, color = group),
+                show.legend = F, outlier.color = NA) +
+    geom_point(show.legend = F, alpha = 0.5) +
+    labs(y = "Relative proportion of authors' cell type\nannotation per sample",
+         x = "Authors` annotation") +
+    ggprism::theme_prism() +
+    theme(legend.position = "bottom",
+          axis.text.x = element_text(angle = 45,
+                                     hjust =1, vjust = 1))
 
+png("figs/authors_props_sample.png", height = 700, width = 1400)
 ctplot
+dev.off()
 ```
+
+
+# Hitme annotation
+play with S4 object
+
+```{r}
+setClass(Class = "HiT object",
+         slots = list(
+           metadata = "dataframe",
+           Predictions = "list",
+           Proportions = "list",
+           Avg.Expression = "list",
+           version = "list"
+           )
+         )
+
+setClass(Class = "scGate results",
+         slots = list(
+           UCell_score = "list",
+           Proportions = "list",
+           Avg.Expression = "list",
+           version = "list"
+           )
+         )
+
+
+hit <- new("HiT",
+          Predictions = list(),
+           Proportions = list(),
+           Avg.Expression = list()
+          )
+```
+
+```{r}
+scGate_models_DB <- scGate::get_scGateDB(branch = "master", force_update = TRUE)
+models.TME <- scGate_models_DB$human$TME_HiRes
+
+path_ref <- "~/Dropbox/CSI/reference_atlases" 
+ref.maps <- list(CD8 = load.reference.map(file.path(path_ref, "CD8T_human_ref_v1.rds")),
+          CD4 = load.reference.map(file.path(path_ref, "CD4T_human_ref_v2.rds")), 
+           DC = load.reference.map(file.path(path_ref, "DC_human_ref_v1.rds")), 
+          MoMac = load.reference.map(file.path(path_ref, "MoMac_human_v1.rds"))) 
+```
+
+
+```{r}
+
+met2 <- annotate_cells(object = met,
+                       scGate.model = models.TME,
+                       ref.maps = ref.maps,
+                       ncores = 9)
+```
+
+
 
 
 
