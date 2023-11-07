@@ -50,7 +50,8 @@ StandardizeCellNames <- function(cell.names,
 
 CreateHiTObject <- function(object,
                             ref.maps = ref.maps,
-                            scGate.model = scGate.model){
+                            scGate.model = scGate.model,
+                            group.by = NULL){
 
   ## Build S4 objects to store data
   setClass(Class = "HiT",
@@ -152,6 +153,41 @@ classificationConsensus <- function(object,
     mutate(Consensus_subtype = pmap(select(., all_of(subtype.cols)),
                                     consensus))
   return(object)
+}
+
+
+### Function to compute average expression
+
+CellAvgExpression <- function(object,
+                              group.by = group.by,
+                              gene.filter = NULL,
+                              assay = "RNA",
+                              slot = "data") {
+  if (is.null(object)) {
+    stop("Please provide either a Seurat object or a directory with rds files")
+    if(class(object) != "Seurat"){
+      stop("Object is not a Seurat object")
+    }
+  }
+
+  if(is.null(group.by)){
+    message("No grouping provided, grouping by consensus of Projectils")
+  } else if (!is.list()) {
+    stop("Please provide one or various grouping variables as a vector")
+  }
+
+  avg.exp <- list()
+
+  # loop over different grouping
+
+  for(i in group.by){
+    avg.exp[[i]] <- list()
+    avg.exp[[i]][["All.genes"]] <-
+      Seurat::AverageExpression(object,
+                                group.by = group.by,
+                                assays = assay,
+                                slot = slot)
+  }
 }
 
 

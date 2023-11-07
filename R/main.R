@@ -231,10 +231,11 @@ annotate_cells <- function(object = NULL,
 
       # Add consensus projectils annotation
       object <- classificationConsensus(object)
+      }
     } else {
       object <- lapply(object, classificationConsensus)
     }
-  }
+
 
   if (!is.null(object)) {
     if(return.Seurat){
@@ -287,7 +288,13 @@ calc_CTcomp <- function(object = NULL,
                         min.cells = 10,
                         useNA = FALSE,
                         rename.Multi.to.NA = TRUE,
-                        ncores = parallelly::availableCores() - 2, progressbar = T) {
+                        ncores = parallelly::availableCores() - 2,
+                        progressbar = T) {
+
+  if (is.null(object) & is.null(dir)) {
+    stop("Please provide either a Seurat object or a directory with rds files")
+  }
+
   if (!is.null(object) & !is.null(dir)) {
     stop(paste("Cannot provide object and dir"))
   }
@@ -311,11 +318,12 @@ calc_CTcomp <- function(object = NULL,
   # - The input is a single Seurat object
   # - The input is a list of Seurat objects
   # - The input is directory containing multiple .rds files (each a single object)
+
   if (isS4(object)) { # Input is a single Seurat object
     celltype.compositions <- list()
     for (i in 1:length(annot.cols)) {
       if (length(object@meta.data[[annot.cols[i]]]) == 0) {
-        stop(paste("Annotation metadata column", annot.cols[i],"could not be found"))
+        stop(paste("Annotation metadata column", annot.cols[i],"could not be found in this Seurat object"))
       }
 
       if (rename.Multi.to.NA) {
@@ -325,15 +333,17 @@ calc_CTcomp <- function(object = NULL,
       if (is.null(split.by)) {
         comp_table <- table(object@meta.data[[annot.cols[i]]],
                             useNA = useNA[i])
-        comp_table_freq <- prop.table(comp_table+1) * 100 # To get percentage
+        comp_table_freq <- prop.table(comp_table) * 100 # To get percentage
+        freq_clr <- prop.table(comp_table + 1) * 100
       } else {
         if (length(object@meta.data[[split.by]]) == 0) {
-          stop(paste("Sample column could not be found"))
+          stop(paste("Split.by column could not be found"))
         }
         comp_table <- table(object@meta.data[[annot.cols[i]]],
                             object@meta.data[[split.by]],
                             useNA = useNA[i])
-        comp_table_freq <- prop.table(comp_table+1, margin = 2) * 100 # To get percentage
+        comp_table_freq <- prop.table(comp_table, margin = 2) * 100 # To get percentage
+        freq_clr <- prop.table(comp_table + 1, margin = 2) * 100
       }
 
       if (sum(comp_table) < min.cells) {
@@ -343,7 +353,7 @@ calc_CTcomp <- function(object = NULL,
       }
 
       ## clr-transform
-      comp_table_clr <- Hotelling::clr(t(comp_table_freq))
+      comp_table_clr <- Hotelling::clr(t(freq_clr))
 
       ## Append
       celltype.compositions[[annot.cols[i]]][["cell_counts"]] <- as.data.frame.matrix(t(comp_table))
