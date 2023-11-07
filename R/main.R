@@ -88,27 +88,18 @@ annotate_cells <- function(object = NULL,
   if (!is.null(scGate.model)) {
     message("Running scGate\n")
     if (isS4(object)) { # If input is a single Seurat object
-      <<<<<<< HEAD
       object <- scGate::scGate(object, model=models.TME, ncores = ncores)
     } else if (is.list(object)) { # If input is object list
       for (i in 1:length(object)) {
         object[[i]] <- scGate::scGate(object[[i]], model=models.TME, ncores = ncores)
       }
-      =======
         object <- scGate::scGate(object,
                                  model=scGate.model,
                                  ncores = ncores)
     } else if (is.list(object)) { # If input is object list
-      object <- BiocParallel::bplapply(
-        X = object,
-        BPPARAM = param,
-        FUN = function(x) {
-          x <- scGate::scGate(x,
-                              model=scGate.model,
-                              ncores = )
-        }
-      )
-      >>>>>>> 38ce0a7 (new messages when empty parameters)
+      for (i in 1:length(object)) {
+        object[[i]] <- scGate::scGate(object[[i]], model=models.TME, ncores = ncores)
+      }
     } else if (!is.null(dir)) { # If input is directory
       BiocParallel::bplapply(
         X = files,
@@ -116,11 +107,7 @@ annotate_cells <- function(object = NULL,
         FUN = function(file) {
           path <- file.path(dir, file)
           x <- readRDS(path)
-          <<<<<<< HEAD
           x <- scGate::scGate(x, model=models.TME, ncores = 1)
-          =======
-            x <- scGate::scGate(x, model=scGate.model)
-          >>>>>>> 38ce0a7 (new messages when empty parameters)
           saveRDS(x, path)
         }
       )
@@ -267,7 +254,7 @@ calc_CTcomp <- function(object = NULL,
         comp_table_freq <- prop.table(comp_table) * 100 # To get percentage
 
         # Impute zeros for clr
-        table(obj$manual.annotation)+sum(table(obj$manual.annotation))*clr_zero_impute_factor
+        comp_table_freq_zero_impute <- comp_table_freq + sum(comp_table_freq) * clr_zero_impute_factor
       } else {
 
         if (length(object@meta.data[[split.by]]) == 0) {
@@ -281,7 +268,7 @@ calc_CTcomp <- function(object = NULL,
         comp_table_freq <- prop.table(comp_table, margin = 2) * 100 # To get percentage
 
         # Impute zeros for clr
-        comp_table_freq_zero_impute <- t(t(comp_table_freq) + colSums(comp_table_freq*clr_zero_impute_factor))
+        comp_table_freq_zero_impute <- t(t(comp_table_freq) + colSums(comp_table_freq) * clr_zero_impute_factor)
       }
 
       if (sum(comp_table) < min.cells) {
