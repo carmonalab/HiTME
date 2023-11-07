@@ -195,6 +195,7 @@ annotate_cells <- function(object = NULL,
 #' @param min.cells Set a minimum threshold for number of cells to calculate relative abundance (e.g. less than 10 cells -> no relative abundnace will be calculated)
 #' @param useNA Whether to include not annotated cells or not (labelled as "NA" in the annot.cols). Can be defined separately for each annot.cols (provide single boolean or vector of booleans)
 #' @param rename.Multi.to.NA Whether to rename cells labelled as "Multi" by scGate to "NA"
+#' @param clr_zero_impute_factor To calculate the clr-transformed relative abundance ("clr_freq"), zero values are not allowed and need to be imputed (e.g. by adding a pseudo cell count). Instead of adding a pseudo cell count of flat +1, here a pseudo cell count of +1% of the total cell count will be added to all cell types, to better take into consideration the relative abundance ratios (e.g. adding +1 cell to a total cell count of 10 cells would have a different, i.e. much larger effect, than adding +1 to 1000 cells).
 #' @param ncores The number of cores to use
 #' @param progressbar Whether to show a progressbar or not
 #'
@@ -223,6 +224,7 @@ calc_CTcomp <- function(object = NULL,
                         min.cells = 10,
                         useNA = FALSE,
                         rename.Multi.to.NA = TRUE,
+                        clr_zero_impute_factor = 0.01,
                         ncores = parallelly::availableCores() - 2, progressbar = T) {
   if (!is.null(object) & !is.null(dir)) {
     stop(paste("Cannot provide object and dir"))
@@ -261,15 +263,25 @@ calc_CTcomp <- function(object = NULL,
       if (is.null(split.by)) {
         comp_table <- table(object@meta.data[[annot.cols[i]]],
                             useNA = useNA[i])
-        comp_table_freq <- prop.table(comp_table+1) * 100 # To get percentage
+
+        comp_table_freq <- prop.table(comp_table) * 100 # To get percentage
+
+        # Impute zeros for clr
+        table(obj$manual.annotation)+sum(table(obj$manual.annotation))*clr_zero_impute_factor
       } else {
+
         if (length(object@meta.data[[split.by]]) == 0) {
           stop(paste("Sample column could not be found"))
         }
+
         comp_table <- table(object@meta.data[[annot.cols[i]]],
                             object@meta.data[[split.by]],
                             useNA = useNA[i])
-        comp_table_freq <- prop.table(comp_table+1, margin = 2) * 100 # To get percentage
+
+        comp_table_freq <- prop.table(comp_table, margin = 2) * 100 # To get percentage
+
+        # Impute zeros for clr
+        comp_table_freq_zero_impute <- t(t(comp_table_freq) + colSums(comp_table_freq*clr_zero_impute_factor))
       }
 
       if (sum(comp_table) < min.cells) {
@@ -279,7 +291,7 @@ calc_CTcomp <- function(object = NULL,
       }
 
       ## clr-transform
-      comp_table_clr <- Hotelling::clr(t(comp_table_freq))
+      comp_table_clr <- Hotelling::clr(t(comp_table_freq_zero_impute))
 
       ## Append
       celltype.compositions[[annot.cols[i]]][["cell_counts"]] <- as.data.frame.matrix(t(comp_table))
