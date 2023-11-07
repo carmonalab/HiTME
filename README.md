@@ -46,6 +46,8 @@ obj.list <- SplitObject(obj, split.by = "Sample")
 # Use helper functions to save/load your object list to/from disk
 save_objs(obj.list, "./output/samples")
 obj.list <- read_objs("./output/samples")
+
+# You can also provide an arbitrary list of sample paths for samples located in different directories
 # my_favourite_samples <- c("/Users/elon_mask/Desktop/HiTME/output/samples/sample1.rds",
 #                           "/Users/beel_gates/Archive/sampleXYZ.rds")
 # obj.list <- read_objs("./output/samples", file.list = my_favourite_samples)
