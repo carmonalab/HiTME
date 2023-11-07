@@ -211,7 +211,7 @@ calc_CTcomp <- function(object = NULL,
                         min.cells = 10,
                         useNA = FALSE,
                         rename.Multi.to.NA = TRUE,
-                        clr_zero_impute_factor = 0.01,
+                        clr_zero_impute_perc = 1,
                         ncores = parallelly::availableCores() - 2, progressbar = T) {
   if (!is.null(object) & !is.null(dir)) {
     stop(paste("Cannot provide object and dir"))
