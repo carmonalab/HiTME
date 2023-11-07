@@ -182,7 +182,7 @@ annotate_cells <- function(object = NULL,
 #' @param min.cells Set a minimum threshold for number of cells to calculate relative abundance (e.g. less than 10 cells -> no relative abundnace will be calculated)
 #' @param useNA Whether to include not annotated cells or not (labelled as "NA" in the annot.cols). Can be defined separately for each annot.cols (provide single boolean or vector of booleans)
 #' @param rename.Multi.to.NA Whether to rename cells labelled as "Multi" by scGate to "NA"
-#' @param clr_zero_impute_factor To calculate the clr-transformed relative abundance ("clr_freq"), zero values are not allowed and need to be imputed (e.g. by adding a pseudo cell count). Instead of adding a pseudo cell count of flat +1, here a pseudo cell count of +1% of the total cell count will be added to all cell types, to better take into consideration the relative abundance ratios (e.g. adding +1 cell to a total cell count of 10 cells would have a different, i.e. much larger effect, than adding +1 to 1000 cells).
+#' @param clr_zero_impute_perc To calculate the clr-transformed relative abundance ("clr_freq"), zero values are not allowed and need to be imputed (e.g. by adding a pseudo cell count). Instead of adding a pseudo cell count of flat +1, here a pseudo cell count of +1% of the total cell count will be added to all cell types, to better take into consideration the relative abundance ratios (e.g. adding +1 cell to a total cell count of 10 cells would have a different, i.e. much larger effect, than adding +1 to 1000 cells).
 #' @param ncores The number of cores to use
 #' @param progressbar Whether to show a progressbar or not
 #'
@@ -232,12 +232,13 @@ calc_CTcomp <- function(object = NULL,
     } else {stop("useNA has not the same length as annot.cols")}
   }
 
+  celltype.compositions <- list()
+
   # Either:
   # - The input is a single Seurat object
   # - The input is a list of Seurat objects
   # - The input is directory containing multiple .rds files (each a single object)
   if (isS4(object)) { # Input is a single Seurat object
-    celltype.compositions <- list()
     for (i in 1:length(annot.cols)) {
       if (length(object@meta.data[[annot.cols[i]]]) == 0) {
         stop(paste("Annotation metadata column", annot.cols[i],"could not be found"))
@@ -250,11 +251,7 @@ calc_CTcomp <- function(object = NULL,
       if (is.null(split.by)) {
         comp_table <- table(object@meta.data[[annot.cols[i]]],
                             useNA = useNA[i])
-
         comp_table_freq <- prop.table(comp_table) * 100 # To get percentage
-
-        # Impute zeros for clr
-        comp_table_freq_zero_impute <- comp_table_freq + sum(comp_table_freq) * clr_zero_impute_factor
       } else {
 
         if (length(object@meta.data[[split.by]]) == 0) {
@@ -266,9 +263,6 @@ calc_CTcomp <- function(object = NULL,
                             useNA = useNA[i])
 
         comp_table_freq <- prop.table(comp_table, margin = 2) * 100 # To get percentage
-
-        # Impute zeros for clr
-        comp_table_freq_zero_impute <- t(t(comp_table_freq) + colSums(comp_table_freq) * clr_zero_impute_factor)
       }
 
       if (sum(comp_table) < min.cells) {
@@ -278,7 +272,7 @@ calc_CTcomp <- function(object = NULL,
       }
 
       ## clr-transform
-      comp_table_clr <- Hotelling::clr(t(comp_table_freq_zero_impute))
+      comp_table_clr <- Hotelling::clr(t(comp_table_freq + clr_zero_impute_perc))
 
       ## Append
       celltype.compositions[[annot.cols[i]]][["cell_counts"]] <- as.data.frame.matrix(t(comp_table))
@@ -286,6 +280,8 @@ calc_CTcomp <- function(object = NULL,
       celltype.compositions[[annot.cols[i]]][["freq_clr"]] <- as.data.frame.matrix(comp_table_clr)
     }
   } else { # Input is a list of Seurat objects or a directory containing multiple .rds files
+    comp_tables <- list()
+
     if (is.list(object)) {
       object_names <- names(object)
     } else if (!is.null(dir)) {
@@ -304,47 +300,35 @@ calc_CTcomp <- function(object = NULL,
         obj <- readRDS(file.path(dir, files[j]))
       }
 
-      if (j == 1) { # For the first sample, create a comp_tables list
-        comp_tables <- list()
-        for (i in 1:length(annot.cols)) {
-          if (rename.Multi.to.NA) {
-            obj@meta.data[[annot.cols[i]]][obj@meta.data[[annot.cols[i]]] == "Multi"] <- NA
-          }
-          if (length(obj@meta.data[[annot.cols[i]]]) == 0) {
-            stop(paste("Annotation metadata column", annot.cols[i],"could not be found in", object_names[j]))
-          }
-          if (is.null(split.by)) {
+      for (i in 1:length(annot.cols)) {
+        if (rename.Multi.to.NA) {
+          obj@meta.data[[annot.cols[i]]][obj@meta.data[[annot.cols[i]]] == "Multi"] <- NA
+        }
+        if (length(obj@meta.data[[annot.cols[i]]]) == 0) {
+          stop(paste("Annotation metadata column", annot.cols[i],"could not be found in", object_names[j]))
+        }
+        if (rename.Multi.to.NA) {
+          obj@meta.data[[annot.cols[i]]][obj@meta.data[[annot.cols[i]]] == "Multi"] <- NA
+        }
+        if (!is.null(split.by)) {
+          stop(paste("Cannot define split.by if multiple objects are provided"))
+        } else {
+          if (j == 1) { # For the first sample, simply add table to list
             comp_tables[[annot.cols[i]]] <- as.data.frame.matrix(t(table(obj@meta.data[[annot.cols[i]]],
                                                                          useNA = useNA[i])))
             rownames(comp_tables[[annot.cols[i]]]) <- object_names[j]
-          } else {
-            stop(paste("Cannot define split.by if multiple objects are provided"))
-          }
-        }
-      } else { # For subsequent samples, append to the comp_tables list
-        for (i in 1:length(annot.cols)) {
-          if (rename.Multi.to.NA) {
-            obj@meta.data[[annot.cols[i]]][obj@meta.data[[annot.cols[i]]] == "Multi"] <- NA
-          }
-          if (length(obj@meta.data[[annot.cols[i]]]) == 0) {
-            stop(paste("Annotation metadata column", annot.cols[i],"could not be found in", object_names[j]))
-          }
-          if (rename.Multi.to.NA) {
-            obj@meta.data[[annot.cols[i]]][obj@meta.data[[annot.cols[i]]] == "Multi"] <- NA
-          }
-          if (is.null(split.by)) {
-            x <- as.data.frame.matrix(t(table(obj@meta.data[[annot.cols[i]]],
-                                              useNA = useNA[i])))
-            rownames(x) <- object_names[j]
-            comp_tables[[annot.cols[i]]] <- as.data.frame.matrix(t(transform(merge(t(x),t(comp_tables[[annot.cols[i]]]),by=0,all=TRUE), row.names=Row.names, Row.names=NULL)))
-          } else {
-            stop(paste("Cannot define split.by if multiple objects are provided"))
+          } else { # For subsequent samples, need to merge tables
+            comp_table_to_append <- as.data.frame.matrix(t(table(obj@meta.data[[annot.cols[i]]],
+                                                                 useNA = useNA[i])))
+            rownames(comp_table_to_append) <- object_names[j]
+            comp_tables_merged <- merge(t(comp_table_to_append),
+                                        t(comp_tables[[annot.cols[i]]]),
+                                        by=0, all=TRUE)
+            comp_tables[[annot.cols[i]]] <- as.data.frame.matrix(t(transform(comp_tables_merged, row.names=Row.names, Row.names=NULL)))
           }
         }
       }
     }
-
-    celltype.compositions <- list()
 
     for (i in 1:length(annot.cols)) {
       comp_table <- comp_tables[[i]]
@@ -352,7 +336,7 @@ calc_CTcomp <- function(object = NULL,
 
       low_count_samples <- rownames(comp_table)[rowSums(comp_table) < min.cells]
 
-      comp_table_freq <- as.data.frame(prop.table(as.matrix(comp_table)+1, margin = 1) * 100) # To get percentage
+      comp_table_freq <- as.data.frame(prop.table(as.matrix(comp_table), margin = 1) * 100) # To get percentage
 
       if (length(low_count_samples) >= 1) {
         warning(paste("There are less than", min.cells, annot.cols[i],
@@ -362,11 +346,9 @@ calc_CTcomp <- function(object = NULL,
       }
 
       ## clr-transform
-      comp_table_clr <- Hotelling::clr(comp_table_freq)
+      comp_table_clr <- as.data.frame.matrix(Hotelling::clr(comp_table_freq_zero_impute + clr_zero_impute_perc))
 
       ## Sort
-      comp_table <- as.data.frame.matrix(comp_table)
-      comp_table_clr <- as.data.frame.matrix(comp_table_clr)
       comp_table <- comp_table[order(row.names(comp_table)), ]
       comp_table_freq <- comp_table_freq[order(row.names(comp_table_freq)), ]
       comp_table_clr <- comp_table_clr[order(row.names(comp_table_clr)), ]
