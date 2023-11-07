@@ -52,6 +52,9 @@ obj.list <- read_objs("./output/samples")
 ```
 
 ```r
+library(scGate)
+library(ProjecTILs)
+
 # Example data
 path_data <- file.path("~/Dropbox/CSI/Standardized_SingleCell_Datasets/ZhangY_2022_34653365/output/samples_subset")
 obj.list <- read_objs(path_data)
