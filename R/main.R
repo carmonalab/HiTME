@@ -346,7 +346,7 @@ calc_CTcomp <- function(object = NULL,
       }
 
       ## clr-transform
-      comp_table_clr <- as.data.frame.matrix(Hotelling::clr(comp_table_freq_zero_impute + clr_zero_impute_perc))
+      comp_table_clr <- as.data.frame.matrix(Hotelling::clr(comp_table_freq + clr_zero_impute_perc))
 
       ## Sort
       comp_table <- comp_table[order(row.names(comp_table)), ]
