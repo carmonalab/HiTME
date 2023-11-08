@@ -72,7 +72,10 @@ We retrieve this dataframe from google drive
 
 ```{r}
 imm.db <- readxl::read_xlsx("data/Standarized_datasets_DB.xlsx")
+```
 
+
+```{r, eval = F}
 # keep whole tumor datasets
 table(imm.db$Enrichment_cell_types)
 
@@ -187,6 +190,9 @@ for(i in names(seu)){
   met$group <- as.character(met[,sample.id])
   
   wmeta.list[[i]] <-  met
+  seu[[i]]@meta.data <- met %>% 
+              mutate(annotation = StandardizeCellNames(annotation_authors))
+  
 }
 
 rm(met)
@@ -198,7 +204,7 @@ rm(wmeta.list)
 
 Plot
 
-```{r}
+```{r, eval = F}
 sum.ct <- 
   wmeta %>% 
   # convert variant names
@@ -209,7 +215,7 @@ sum.ct <-
   
 ```
 
-```{r}
+```{r, eval = F}
   
 ctplot <- 
   sum.ct %>% 
@@ -231,7 +237,6 @@ dev.off()
 
 
 # Hitme annotation
-play with S4 object
 
 
 
@@ -249,55 +254,17 @@ ref.maps <- list(CD8 = load.reference.map(file.path(path_ref, "CD8T_human_ref_v1
 
 ```{r}
 
-met2 <- annotate_cells(object = met,
+met2 <- annotate_cells(object = seu[1:2],
                        scGate.model = models.TME,
                        ref.maps = ref.maps,
-                       ncores = 9)
-
-
-annotate_cells(object = met,
-               dir = "haha")
-```
-
-
-```{r}
-setClass(Class = "HiT",
-         slots = list(
-           metadata = "data.frame",
-           Predictions = "list",
-           Proportions = "list",
-           Avg.Expression = "list",
-           version = "list"
-           )
-         )
-
-setClass(Class = "scGate",
-         slots = list(
-           UCell_score = "data.frame",
-           scGate_is.pure = "data.frame",
-           scGate_multi = "data.frame",
-           additional.signatures = "data.frame"
-           )
-         )
-
-setClass(Class = "map.ref",
-         slots = list(
-            Classifier = "data.frame",
-            map.version = "character"
-           )
-         )
-
-setClass(Class = "Projectils",
-         slots = list(
-           CD8 = "map.ref",
-           CD4 = "map.ref",
-           DC = "map.ref",
-           MoMac = "map.ref"
-           )
-         )
-
+                       remerge = F,
+                       ncores = 9,
+                       return.Seurat = T)
 
 ```
+
+
+
 
 ```{r}
 scgate <- new(Class = "scGate",
@@ -314,6 +281,153 @@ hit <- new(Class = "HiT",
            metadata = met2@meta.data,
            Predictions = list("scGate" = scgate))
 ```
+
+
+
+## average expression'
+```{r}
+assay = "RNA"
+all.genes  <-
+  Seurat::AverageExpression(object,
+                            group.by = "annotation",
+                            assays = assay)[[assay]]
+
+rib <- SignatuR::GetSignature(SignatuR$Hs$Compartments$Ribo)
+
+all.g <- all.genes[rib,]
+```
+
+```{r}
+avg.test <- CellAvgExpression(object,
+                              group.by = "annotation",
+                              gene.filter = list(c("IL10", "BLIMP1", "BCL6")),
+                              GO_accession = "GOHAHA"
+                              )
+```
+
+
+# Hit test w/o proportions
+
+```{r}
+add.sig <- GetSignature(SignatuR$Hs$Programs)
+
+
+hit.dir <- annotate_cells(seu$Lambrechts_2018_29988129,
+                           scGate.model = models.TME,
+                           ref.maps = ref.maps,
+                           return.Seurat = F,
+                           additional.signatures = add.sig,
+                           group.by.avg.expr = "annotation",
+                           ncores = 9)
+```
+
+```{r}
+hit.test <- CreateHiTObject(test,
+                             ref.maps = ref.maps,
+                             scGate.model = models.TME,
+                             group.by = "annotation",
+                            annot.cols.freq = c("scGate_multi",
+                                                "Consensus_subtypes"))
+```
+# test on a list
+
+```{r}
+seu.list <- SplitObject(seu$Lambrechts_2018_29988129,
+                        split.by = "group")
+
+hit.dir <- annotate_cells(seu.list$`6`,
+                           scGate.model = models.TME,
+                           ref.maps = ref.maps,
+                           return.Seurat = F,
+                           additional.signatures = add.sig,
+                           group.by.avg.expr = "annotation",
+                           ncores = 9)
+```
+
+```{r}
+hit.dir <- annotate_cells(seu.list$`1`,
+                           scGate.model = models.TME,
+                           ref.maps = ref.maps,
+                           return.Seurat = T,
+                           additional.signatures = add.sig,
+                           group.by.avg.expr = "annotation",
+                           ncores = 9)
+```
+
+
+
+
+```{r}
+hit.list <- annotate_cells(seu.list[1:2],
+                           remerge = F,
+                           # scGate.model = models.TME,
+                           ref.maps = ref.maps,
+                           return.Seurat = T,
+                           additional.signatures = add.sig,
+                           group.by.avg.expr = c("annotation",
+                                                 "scGate_multi",
+                                                 "Consensus_subtypes"),
+                           ncores = 9)
+
+object <- hit.list$`4`
+hit <- CreateHiTObject(object,
+                       ref.maps = ref.maps,
+                       scGate.model = models.TME,
+                       group.by = c(
+                                         "Consensus_subtype"),
+                            annot.cols.freq = c(
+                                                "Consensus_subtype"))
+
+
+```
+
+```{r}
+gr <- c("annotation","scGate_multi","Consensus_subtypes")
+add.sig <- GetSignature(SignatuR$Hs$Programs)
+
+
+
+hit.list <- annotate_cells(seu.list[1:2],
+                           remerge = F,
+                           scGate.model = models.TME,
+                           ref.maps = ref.maps,
+                           return.Seurat = T,
+                           additional.signatures = add.sig,
+                           group.by.avg.expr = gr,
+                           annot.cols.freq = gr,
+                           ncores = 9)
+
+tt <- CreateHiTObject(hit.list[[2]],
+                      ref.maps = ref.maps,
+                       scGate.model = models.TME,
+                       group.by = gr,
+                      annot.cols.freq = gr,
+                      additional.signatures = add.sig)
+
+
+```
+
+
+
+projectils paralel
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
