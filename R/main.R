@@ -47,11 +47,12 @@ annotate_cells <- function(object = NULL,
                            scGate.model = NULL,
                            ref.maps = NULL,
                            split.by = NULL,
+                           group.by.avg.expr = NULL,
+                           annot.cols.freq = c("scGate_multi", "Consensus_subtypes"),
                            remerge = TRUE,
                            additional.signatures = NULL,
                            return.Seurat = FALSE,
-                           ncores = parallelly::availableCores() - 2,
-                           progressbar = TRUE
+                           ncores = parallelly::availableCores() - 2
                            ){
 
   if (is.null(object) & is.null(dir)) {
@@ -81,34 +82,16 @@ annotate_cells <- function(object = NULL,
   if (!is.null(dir)) {
     files <- list.files(dir,
                         pattern = "[.]rds$")
-    # get ncores per file
-    internal_cores <- floor(ncores / length(files))
-    if(internal_cores == 0){internal_cores <- 1}
-
     # when running from directory only return seurat object
     return.Seurat <- TRUE
 
-  } else if (!is.null(object)){
-    # Define internal ncores for scGate and projectils functions
-    if(is.list(object)){
-      internal_cores <- floor(ncores / length(object))
-      if(internal_cores == 0){internal_cores <- 1}
-    } else {
-      internal_cores <- ncores
-    }
   }
-
-
-
 
 
   # Either:
   # - The input is a single Seurat object
   # - The input is a list of Seurat objects
   # - The input is directory containing multiple .rds files (each a single object)
-
-  param <- BiocParallel::MulticoreParam(workers = ncores, progressbar = progressbar)
-
 
   # Run scGate, if model is provided
   if (!is.null(scGate.model)) {
@@ -121,12 +104,11 @@ annotate_cells <- function(object = NULL,
       object <- scGate::scGate(object,
                                model = scGate.model,
                                additional.signatures = additional.signatures,
-                               ncores = internal_cores)
+                               ncores = ncores)
     # If input is object list
     } else if (is.list(object)) {
-      object <- BiocParallel::bplapply(
+      object <- lapply(
         X = object,
-        BPPARAM = param,
         FUN = function(x) {
           if(class(x) != "Seurat"){
             stop("Not Seurat object included, cannot be processed.\n")
@@ -134,24 +116,22 @@ annotate_cells <- function(object = NULL,
           x <- scGate::scGate(x,
                               model=scGate.model,
                               additional.signatures = additional.signatures,
-                              ncores = internal_cores)
+                              ncores = ncores)
         }
       )
     } else if (!is.null(dir)) { # If input is directory
-      BiocParallel::bplapply(
+      lapply(
         X = files,
-        BPPARAM = param,
         FUN = function(file) {
           path <- file.path(dir, file)
           x <- readRDS(path)
           if(class(x) != "Seurat"){
             stop("Not Seurat object included, cannot be processed.\n")
           }
-          x <- scGate::scGate(x, model=models.TME, ncores = 1)
-            x <- scGate::scGate(x,
-                                model= scGate.model,
-                                additional.signatures = additional.signatures,
-                                ncores = internal_cores)
+          x <- scGate::scGate(x,
+                              model= scGate.model,
+                              additional.signatures = additional.signatures,
+                              ncores = ncores)
           saveRDS(x, path)
         }
       )
@@ -167,6 +147,9 @@ annotate_cells <- function(object = NULL,
 
   # Run ProjecTILs if ref.maps is provided
   if (!is.null(ref.maps)) {
+    # Run each map in paralel
+
+
     for (i in 1:length(ref.maps)) {
       ref.map.name <- names(ref.maps)[i]
       message(paste("Running ProjecTILs with map:  ", ref.map.name, "\n"))
@@ -178,32 +161,29 @@ annotate_cells <- function(object = NULL,
         }
         object <- ProjecTILs::ProjecTILs.classifier(object,
                                                     ref.maps[[i]],
-                                                    ncores = internal_cores)
+                                                    ncores = ncores)
         object <- addProjectilsClassification(object,
                                               ref.map.name = ref.map.name)
 
         # If input is object list
       } else if (is.list(object)) {
-        BiocParallel::bplapply(
+        object <- lapply(
           X = object,
-          BPPARAM = param,
           FUN = function(x) {
             if(class(x) != "Seurat"){
               stop("Not Seurat object included, cannot be processed.\n")
             }
             x <- ProjecTILs::ProjecTILs.classifier(x,
                                                    ref.maps[[i]],
-                                                   ncores = internal_cores)
+                                                   ncores = ncores)
             x <- addProjectilsClassification(x, ref.map.name = ref.map.name)
-            saveRDS(x, path)
           }
         )
 
         # If input is directory
       } else if (!is.null(dir)) {
-        BiocParallel::bplapply(
+        lapply(
           X = files,
-          BPPARAM = param,
           FUN = function(file) {
             path <- file.path(dir, file)
             x <- readRDS(path)
@@ -212,8 +192,9 @@ annotate_cells <- function(object = NULL,
             }
             x <- ProjecTILs::ProjecTILs.classifier(x,
                                                    ref.maps[[i]],
-                                                   ncores = internal_cores)
-            x <- addProjectilsClassification(x, ref.map.name = ref.map.name)
+                                                   ncores = ncores)
+            x <- addProjectilsClassification(x,
+                                             ref.map.name = ref.map.name)
             saveRDS(x, path)
           }
         )
@@ -225,23 +206,36 @@ annotate_cells <- function(object = NULL,
   }
 
 
-  if (!is.null(split.by)) {
+  if (is.list(object)) {
     if (remerge) {
-      object <- merge(object[[1]],object[2:length(object)])
-
-      # Add consensus projectils annotation
-      object <- classificationConsensus(object)
-      }
-    } else {
-      object <- lapply(object, classificationConsensus)
+        object <- merge(object[[1]],object[2:length(object)])
     }
+  }
 
+  if (is.list(object))  {
+      object <- lapply(object, classificationConsensus)
+      if(!return.Seurat){
+        hit <- lapply(object, CreateHiTObject,
+                                 ref.maps = ref.maps,
+                                 scGate.model = scGate.model,
+                                 group.by = group.by.avg.expr,
+                                 annot.cols.freq = annot.cols.freq)
+        }
+    }  else {
+        object <- classificationConsensus(object)
+        if(!return.Seurat){
+          hit <- CreateHiTObject(object,
+                                 ref.maps = ref.maps,
+                                 scGate.model = scGate.model,
+                                 group.by = group.by.avg.expr,
+                                 annot.cols.freq = annot.cols.freq)
+        }
+    }
 
   if (!is.null(object)) {
     if(return.Seurat){
       return(object)
     } else {
-
       return(hit)
     }
   }
@@ -249,17 +243,16 @@ annotate_cells <- function(object = NULL,
 
 
 
-
-
 #' Calculate cell type composition
 #'
-#' @param object A seurat object or a list of seurat objects with HiTME classification on its metadata
+#' @param object A seurat object or a list of seurat objects
 #' @param dir Directory containing the sample .rds files
 #' @param split.by A Seurat object metadata column to split by (e.g. sample names)
 #' @param annot.cols The Seurat object metadata column(s) containing celltype annotations (provide as character vector, containing the metadata column name(s))
 #' @param min.cells Set a minimum threshold for number of cells to calculate relative abundance (e.g. less than 10 cells -> no relative abundnace will be calculated)
 #' @param useNA Whether to include not annotated cells or not (labelled as "NA" in the annot.cols). Can be defined separately for each annot.cols (provide single boolean or vector of booleans)
 #' @param rename.Multi.to.NA Whether to rename cells labelled as "Multi" by scGate to "NA"
+#' @param clr_zero_impute_perc To calculate the clr-transformed relative abundance ("clr_freq"), zero values are not allowed and need to be imputed (e.g. by adding a pseudo cell count). Instead of adding a pseudo cell count of flat +1, here a pseudo cell count of +1% of the total cell count will be added to all cell types, to better take into consideration the relative abundance ratios (e.g. adding +1 cell to a total cell count of 10 cells would have a different, i.e. much larger effect, than adding +1 to 1000 cells).
 #' @param ncores The number of cores to use
 #' @param progressbar Whether to show a progressbar or not
 #'
@@ -288,12 +281,7 @@ calc_CTcomp <- function(object = NULL,
                         min.cells = 10,
                         useNA = FALSE,
                         rename.Multi.to.NA = TRUE,
-                        ncores = parallelly::availableCores() - 2,
-                        progressbar = T) {
-
-  if (is.null(object) & is.null(dir)) {
-    stop("Please provide either a Seurat object or a directory with rds files")
-  }
+                        clr_zero_impute_perc = 1) {
 
   if (!is.null(object) & !is.null(dir)) {
     stop(paste("Cannot provide object and dir"))
@@ -314,36 +302,37 @@ calc_CTcomp <- function(object = NULL,
     } else {stop("useNA has not the same length as annot.cols")}
   }
 
+  celltype.compositions <- list()
+
   # Either:
   # - The input is a single Seurat object
   # - The input is a list of Seurat objects
   # - The input is directory containing multiple .rds files (each a single object)
-
   if (isS4(object)) { # Input is a single Seurat object
-    celltype.compositions <- list()
     for (i in 1:length(annot.cols)) {
       if (length(object@meta.data[[annot.cols[i]]]) == 0) {
-        stop(paste("Annotation metadata column", annot.cols[i],"could not be found in this Seurat object"))
+        stop(paste("Annotation metadata column", annot.cols[i],"could not be found"))
       }
 
       if (rename.Multi.to.NA) {
-        object@meta.data[[annot.cols[i]]][object@meta.data[[annot.cols[i]]] == "Multi"] <- NA
+        object@meta.data[[annot.cols[i]]][grep("Multi", object@meta.data[[annot.cols[i]]], ignore.case = T)] <- NA
       }
 
       if (is.null(split.by)) {
         comp_table <- table(object@meta.data[[annot.cols[i]]],
                             useNA = useNA[i])
         comp_table_freq <- prop.table(comp_table) * 100 # To get percentage
-        freq_clr <- prop.table(comp_table + 1) * 100
       } else {
+
         if (length(object@meta.data[[split.by]]) == 0) {
-          stop(paste("Split.by column could not be found"))
+          stop(paste("Sample column could not be found. If providing multiple columns, indicate a vector."))
         }
+
         comp_table <- table(object@meta.data[[annot.cols[i]]],
                             object@meta.data[[split.by]],
                             useNA = useNA[i])
+
         comp_table_freq <- prop.table(comp_table, margin = 2) * 100 # To get percentage
-        freq_clr <- prop.table(comp_table + 1, margin = 2) * 100
       }
 
       if (sum(comp_table) < min.cells) {
@@ -353,7 +342,7 @@ calc_CTcomp <- function(object = NULL,
       }
 
       ## clr-transform
-      comp_table_clr <- Hotelling::clr(t(freq_clr))
+      comp_table_clr <- Hotelling::clr(t(comp_table_freq + clr_zero_impute_perc))
 
       ## Append
       celltype.compositions[[annot.cols[i]]][["cell_counts"]] <- as.data.frame.matrix(t(comp_table))
@@ -361,11 +350,12 @@ calc_CTcomp <- function(object = NULL,
       celltype.compositions[[annot.cols[i]]][["freq_clr"]] <- as.data.frame.matrix(comp_table_clr)
     }
   } else { # Input is a list of Seurat objects or a directory containing multiple .rds files
+    comp_tables <- list()
+
     if (is.list(object)) {
       object_names <- names(object)
     } else if (!is.null(dir)) {
-      files <- list.files(dir)
-      files <- files[endsWith(files, '.rds')]
+      files <- list.files(dir, pattern = "[.]rds$")
       object_names <- stringr::str_remove_all(files, '.rds')
     }
 
@@ -379,47 +369,35 @@ calc_CTcomp <- function(object = NULL,
         obj <- readRDS(file.path(dir, files[j]))
       }
 
-      if (j == 1) { # For the first sample, create a comp_tables list
-        comp_tables <- list()
-        for (i in 1:length(annot.cols)) {
-          if (rename.Multi.to.NA) {
-            obj@meta.data[[annot.cols[i]]][obj@meta.data[[annot.cols[i]]] == "Multi"] <- NA
-          }
-          if (length(obj@meta.data[[annot.cols[i]]]) == 0) {
-            stop(paste("Annotation metadata column", annot.cols[i],"could not be found in", object_names[j]))
-          }
-          if (is.null(split.by)) {
+      for (i in 1:length(annot.cols)) {
+        if (rename.Multi.to.NA) {
+          obj@meta.data[[annot.cols[i]]][obj@meta.data[[annot.cols[i]]] == "Multi"] <- NA
+        }
+        if (length(obj@meta.data[[annot.cols[i]]]) == 0) {
+          stop(paste("Annotation metadata column", annot.cols[i],"could not be found in", object_names[j]))
+        }
+        if (rename.Multi.to.NA) {
+          obj@meta.data[[annot.cols[i]]][obj@meta.data[[annot.cols[i]]] == "Multi"] <- NA
+        }
+        if (!is.null(split.by)) {
+          stop(paste("Cannot define split.by if multiple objects are provided"))
+        } else {
+          if (j == 1) { # For the first sample, simply add table to list
             comp_tables[[annot.cols[i]]] <- as.data.frame.matrix(t(table(obj@meta.data[[annot.cols[i]]],
                                                                          useNA = useNA[i])))
             rownames(comp_tables[[annot.cols[i]]]) <- object_names[j]
-          } else {
-            stop(paste("Cannot define split.by if multiple objects are provided"))
-          }
-        }
-      } else { # For subsequent samples, append to the comp_tables list
-        for (i in 1:length(annot.cols)) {
-          if (rename.Multi.to.NA) {
-            obj@meta.data[[annot.cols[i]]][obj@meta.data[[annot.cols[i]]] == "Multi"] <- NA
-          }
-          if (length(obj@meta.data[[annot.cols[i]]]) == 0) {
-            stop(paste("Annotation metadata column", annot.cols[i],"could not be found in", object_names[j]))
-          }
-          if (rename.Multi.to.NA) {
-            obj@meta.data[[annot.cols[i]]][obj@meta.data[[annot.cols[i]]] == "Multi"] <- NA
-          }
-          if (is.null(split.by)) {
-            x <- as.data.frame.matrix(t(table(obj@meta.data[[annot.cols[i]]],
-                                              useNA = useNA[i])))
-            rownames(x) <- object_names[j]
-            comp_tables[[annot.cols[i]]] <- as.data.frame.matrix(t(transform(merge(t(x),t(comp_tables[[annot.cols[i]]]),by=0,all=TRUE), row.names=Row.names, Row.names=NULL)))
-          } else {
-            stop(paste("Cannot define split.by if multiple objects are provided"))
+          } else { # For subsequent samples, need to merge tables
+            comp_table_to_append <- as.data.frame.matrix(t(table(obj@meta.data[[annot.cols[i]]],
+                                                                 useNA = useNA[i])))
+            rownames(comp_table_to_append) <- object_names[j]
+            comp_tables_merged <- merge(t(comp_table_to_append),
+                                        t(comp_tables[[annot.cols[i]]]),
+                                        by=0, all=TRUE)
+            comp_tables[[annot.cols[i]]] <- as.data.frame.matrix(t(transform(comp_tables_merged, row.names=Row.names, Row.names=NULL)))
           }
         }
       }
     }
-
-    celltype.compositions <- list()
 
     for (i in 1:length(annot.cols)) {
       comp_table <- comp_tables[[i]]
@@ -427,7 +405,7 @@ calc_CTcomp <- function(object = NULL,
 
       low_count_samples <- rownames(comp_table)[rowSums(comp_table) < min.cells]
 
-      comp_table_freq <- as.data.frame(prop.table(as.matrix(comp_table)+1, margin = 1) * 100) # To get percentage
+      comp_table_freq <- as.data.frame(prop.table(as.matrix(comp_table), margin = 1) * 100) # To get percentage
 
       if (length(low_count_samples) >= 1) {
         warning(paste("There are less than", min.cells, annot.cols[i],
@@ -437,11 +415,9 @@ calc_CTcomp <- function(object = NULL,
       }
 
       ## clr-transform
-      comp_table_clr <- Hotelling::clr(comp_table_freq)
+      comp_table_clr <- as.data.frame.matrix(Hotelling::clr(comp_table_freq + clr_zero_impute_perc))
 
       ## Sort
-      comp_table <- as.data.frame.matrix(comp_table)
-      comp_table_clr <- as.data.frame.matrix(comp_table_clr)
       comp_table <- comp_table[order(row.names(comp_table)), ]
       comp_table_freq <- comp_table_freq[order(row.names(comp_table_freq)), ]
       comp_table_clr <- comp_table_clr[order(row.names(comp_table_clr)), ]
@@ -517,3 +493,13 @@ read_objs <- function(dir = NULL,
   names(obj.list) <- stringr::str_remove_all(file_names, '.rds')
   return(obj.list)
 }
+
+
+
+### function to plot PCA with average expression
+
+# plotPCA.avgexp <- function(avg.expr,
+#                            siloutte = F,
+#                            most.variable.genes = NULL){
+#
+# }
