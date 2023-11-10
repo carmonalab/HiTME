@@ -451,15 +451,15 @@
     },
     "RCurl": {
       "Package": "RCurl",
-      "Version": "1.98-1.12",
+      "Version": "1.98-1.13",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Requirements": [
         "R",
         "bitops",
         "methods"
       ],
-      "Hash": "1d6ed2d006d483f31c6d5531f3a39923"
+      "Hash": "318c7b8d68358b45cbc6115dda23d7db"
     },
     "ROCR": {
       "Package": "ROCR",
@@ -653,7 +653,7 @@
     },
     "Seurat": {
       "Package": "Seurat",
-      "Version": "4.4.0",
+      "Version": "5.0.0",
       "Source": "Repository",
       "Repository": "RSPM",
       "Requirements": [
@@ -664,17 +664,21 @@
         "RANN",
         "RColorBrewer",
         "ROCR",
+        "RSpectra",
         "Rcpp",
         "RcppAnnoy",
         "RcppEigen",
+        "RcppHNSW",
         "RcppProgress",
         "Rtsne",
         "SeuratObject",
         "cluster",
         "cowplot",
+        "fastDummies",
         "fitdistrplus",
         "future",
         "future.apply",
+        "generics",
         "ggplot2",
         "ggrepel",
         "ggridges",
@@ -687,6 +691,7 @@
         "irlba",
         "jsonlite",
         "leiden",
+        "lifecycle",
         "lmtest",
         "matrixStats",
         "methods",
@@ -711,7 +716,7 @@
         "utils",
         "uwot"
       ],
-      "Hash": "622e2dca3e48ed689fd418bffc0dc34e"
+      "Hash": "ace69f00df438366a0870252931beb65"
     },
     "SeuratObject": {
       "Package": "SeuratObject",
@@ -739,6 +744,23 @@
         "utils"
       ],
       "Hash": "d2c4e02ec556af4fe97133c792c5be67"
+    },
+    "SignatuR": {
+      "Package": "SignatuR",
+      "Version": "0.1.2",
+      "Source": "GitHub",
+      "RemoteType": "github",
+      "RemoteHost": "api.github.com",
+      "RemoteRepo": "SignatuR",
+      "RemoteUsername": "carmonalab",
+      "RemoteRef": "HEAD",
+      "RemoteSha": "54bc3e8bf9923d26130e548fa5e129297e5b0249",
+      "Requirements": [
+        "R",
+        "data.tree",
+        "tools"
+      ],
+      "Hash": "0532d0d864341b16184357eb53146014"
     },
     "SingleCellExperiment": {
       "Package": "SingleCellExperiment",
@@ -781,14 +803,14 @@
     },
     "UCell": {
       "Package": "UCell",
-      "Version": "2.7.1",
+      "Version": "2.7.2",
       "Source": "GitHub",
       "RemoteType": "github",
       "RemoteHost": "api.github.com",
       "RemoteRepo": "UCell",
       "RemoteUsername": "carmonalab",
       "RemoteRef": "HEAD",
-      "RemoteSha": "b381b0794305e89f7abba8d3fb2730840e48aa9e",
+      "RemoteSha": "673f41f1f52c2eafd8456d1e5b2dc9c0d3fdeb60",
       "Requirements": [
         "BiocNeighbors",
         "BiocParallel",
@@ -800,7 +822,7 @@
         "methods",
         "stats"
       ],
-      "Hash": "fe7612160e8e6c01e8c2f0d4e58b72d0"
+      "Hash": "d1e861a45313451b9014c949eef37545"
     },
     "XML": {
       "Package": "XML",
@@ -1118,6 +1140,19 @@
       ],
       "Hash": "b4c06e554f33344e044ccd7fdca750a9"
     },
+    "data.tree": {
+      "Package": "data.tree",
+      "Version": "1.0.0",
+      "Source": "Repository",
+      "Repository": "RSPM",
+      "Requirements": [
+        "R",
+        "R6",
+        "methods",
+        "stringi"
+      ],
+      "Hash": "c0ddced80c3f074cb39a7a781698f68a"
+    },
     "dbplyr": {
       "Package": "dbplyr",
       "Version": "2.3.4",
@@ -1255,6 +1290,19 @@
       "Source": "Repository",
       "Repository": "CRAN",
       "Hash": "8106d78941f34855c440ddb946b8f7a5"
+    },
+    "fastDummies": {
+      "Package": "fastDummies",
+      "Version": "1.7.3",
+      "Source": "Repository",
+      "Repository": "RSPM",
+      "Requirements": [
+        "R",
+        "data.table",
+        "stringr",
+        "tibble"
+      ],
+      "Hash": "e0f9c0c051e0e8d89996d7f0c400539f"
     },
     "fastmap": {
       "Package": "fastmap",
@@ -1562,7 +1610,7 @@
     },
     "htmltools": {
       "Package": "htmltools",
-      "Version": "0.5.6.1",
+      "Version": "0.5.7",
       "Source": "Repository",
       "Repository": "RSPM",
       "Requirements": [
@@ -1575,7 +1623,7 @@
         "rlang",
         "utils"
       ],
-      "Hash": "1e12fe667316a76508898839ecfb2d00"
+      "Hash": "2d7b3857980e0e0d0a1fd6f11928ab0f"
     },
     "htmlwidgets": {
       "Package": "htmlwidgets",
@@ -1784,16 +1832,16 @@
     },
     "lifecycle": {
       "Package": "lifecycle",
-      "Version": "1.0.3",
+      "Version": "1.0.4",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Requirements": [
         "R",
         "cli",
         "glue",
         "rlang"
       ],
-      "Hash": "001cecbeac1cff9301bdc3775ee46a86"
+      "Hash": "b8552d117e1b808b09a832f589b79035"
     },
     "listenv": {
       "Package": "listenv",
@@ -1830,13 +1878,13 @@
     },
     "matrixStats": {
       "Package": "matrixStats",
-      "Version": "1.0.0",
+      "Version": "1.1.0",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Requirements": [
         "R"
       ],
-      "Hash": "9143629fd64335aac6a6250d1c1ed82a"
+      "Hash": "68d317093459a3f0852b1dd52d9e1ea6"
     },
     "memoise": {
       "Package": "memoise",
@@ -2237,14 +2285,14 @@
     },
     "rlang": {
       "Package": "rlang",
-      "Version": "1.1.1",
+      "Version": "1.1.2",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Requirements": [
         "R",
         "utils"
       ],
-      "Hash": "a85c767b55f0bf9b7ad16c6d7baee5bb"
+      "Hash": "50a6dbdc522936ca35afc5e2082ea91b"
     },
     "rmarkdown": {
       "Package": "rmarkdown",
@@ -2272,13 +2320,13 @@
     },
     "rprojroot": {
       "Package": "rprojroot",
-      "Version": "2.0.3",
+      "Version": "2.0.4",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Requirements": [
         "R"
       ],
-      "Hash": "1de7ab598047a87bba48434ba35d497d"
+      "Hash": "4c8415e0ec1e29f3f4f6fc108bef0144"
     },
     "sass": {
       "Package": "sass",
@@ -2302,8 +2350,8 @@
       "RemoteHost": "api.github.com",
       "RemoteRepo": "scGate",
       "RemoteUsername": "carmonalab",
-      "RemoteRef": "HEAD",
-      "RemoteSha": "69d2da3c1685095d65089a11b6cf41a2fd6c6724",
+      "RemoteRef": "dev",
+      "RemoteSha": "288d1b983357a2fafcc12122ca13c9c52eab04cf",
       "Requirements": [
         "BiocParallel",
         "R",
@@ -2318,7 +2366,7 @@
         "stats",
         "utils"
       ],
-      "Hash": "f38f93e87919936f770a64c0ecd9158f"
+      "Hash": "4c7625487013a9167cd433568c0d5525"
     },
     "scales": {
       "Package": "scales",
