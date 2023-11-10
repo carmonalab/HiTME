@@ -11,15 +11,19 @@
 #' @param additional.signatures Adding UCell additional signatures to compute on each cell.
 #' @param return.Seurat Whether to return a Hit S4 object or add the data into Seurat object metadata
 #' @param ncores The number of cores to use
+#' @param BPPARAM A [BiocParallel::bpparam()] object that tells scGate
+#'     how to parallelize. If provided, it overrides the `ncores` parameter.
 #' @param progressbar Whether to show a progressbar or not
 #'
 #' @importFrom BiocParallel MulticoreParam bplapply
 #' @importFrom parallelly availableCores
 #' @importFrom scGate scGate
+#' @importFrom SignatuR SignatuR
 #' @importFrom ProjecTILs ProjecTILs.classifier
 #' @importFrom Seurat SplitObject
+#'
 #' @return No return in R. The input files will be overwritten.
-#' @export annotate_cells
+#' @export Run.HiTME
 #'
 #' @examples
 #' library(ProjecTILs)
@@ -36,23 +40,27 @@
 #'                  CD4 = load.reference.map(file.path(path_ref, "CD4T_human_ref_v2.rds")),
 #'                  DC = load.reference.map(file.path(path_ref, "DC_human_ref_v1.rds")),
 #'                  MoMac = load.reference.map(file.path(path_ref, "MoMac_human_v1.rds")))
-#' annotate_cells(dir = path_data,
+#' Run.HiTME(dir = path_data,
 #'                scGate.model = models.TME,
 #'                ref.maps = ref.maps,
 #'                ncores = 6)
 #'
 
-annotate_cells <- function(object = NULL,
+Run.HiTME <- function(object = NULL,
                            dir = NULL,
-                           scGate.model = NULL,
+                           scGate.model = "default",
+                           scGate.model.branch = c("master", "dev"),
                            ref.maps = NULL,
                            split.by = NULL,
                            group.by.avg.expr = NULL,
                            annot.cols.freq = c("scGate_multi", "Consensus_subtypes"),
                            remerge = TRUE,
-                           additional.signatures = NULL,
+                           species = "human",
+                           additional.signatures = "default",
                            return.Seurat = FALSE,
-                           ncores = parallelly::availableCores() - 2
+                           BPPARAM=NULL,
+                           ncores = parallelly::availableCores() - 2,
+                           progressbar = TRUE
                            ){
 
   if (is.null(object) & is.null(dir)) {
@@ -66,6 +74,8 @@ annotate_cells <- function(object = NULL,
   if (!is.null(ref.maps)) {
     if (!is.list(ref.maps)) {
       stop("Please provide ref.maps as named list, containing the reference map(s), even if it is just one. The name will be used for the metadata column containing the cell type annotations")
+    } else if(!all(unlist(lapply(ref.maps, function(x){class(x) == "Seurat"})))) {
+      stop("One or more reference maps are not a Seurat object")
     }
   }
 
@@ -75,6 +85,9 @@ annotate_cells <- function(object = NULL,
 
   # split object into a list if indicated
   if (!is.null(split.by)) {
+    if(!split.by %in% names(object@meta.data)){
+      stop(paste(split.by, "is not a metadata column in this Seurat object"))
+    }
     object <- Seurat::SplitObject(object, split.by = split.by)
 
   }
@@ -82,9 +95,36 @@ annotate_cells <- function(object = NULL,
   if (!is.null(dir)) {
     files <- list.files(dir,
                         pattern = "[.]rds$")
+
     # when running from directory only return seurat object
     return.Seurat <- TRUE
+  }
 
+  # adapt species
+  if(is.null(species)){
+    stop("Please provide human or mouse as species")
+  }
+  species <- tolower(species)
+  if(!species == "human"){
+    if(grepl("homo|sap|huma", species)){
+      species <- "human"
+    }
+  } else if (!species == "mouse"){
+    if(grepl("mice|mus", species)){
+      species <- "mouse"
+    }
+  } else {
+    stop("Only supported species are human and mouse")
+  }
+
+
+  # set paralelization parameters
+  if (is.null(BPPARAM)) {
+    if (ncores>1) {
+      BPPARAM <- BiocParallel::MulticoreParam(workers = ncores, progressbar = progressbar)
+    } else {
+      BPPARAM <- SerialParam()
+    }
   }
 
 
@@ -96,6 +136,31 @@ annotate_cells <- function(object = NULL,
   # Run scGate, if model is provided
   if (!is.null(scGate.model)) {
     message("Running scGate\n")
+
+    # Retrieve default scGate models if default
+    if(tolower(scGate.model) == "default"){
+      if(species == "human"){
+        scGate.model <- scGate::get_scGateDB(branch = scGate.model.branch,
+                                             force_update = T)[[species]][["TME_HiRes"]]
+      } else if(species == "mouse"){
+        scGate.model <- scGate::get_scGateDB(branch = scGate.model.branch,
+                                             force_update = T)[[species]][["generic"]]
+      }
+      message(" - Running scGate model for ", paste(names(scGate.model), collapse = ", "), "\n")
+    }
+
+    # based on species get SignatuR signatures
+    if(tolower(additional.signatures) == "default"){
+      if(species == "human"){
+        sig.species <- "Hs"
+      } else if(species == "mouse"){
+        sig.species <- "Mm"
+      }
+      additional.signatures <- SignatuR::GetSignature(SignatuR[[sig.species]][["Programs"]])
+      message(" - Adding additional signatures: ", paste(names(additional.signatures), collapse = ", "), "\n")
+    }
+
+  ## Run scGate
     # If input is a single Seurat object
     if (isS4(object)) {
       if(class(object) != "Seurat"){
@@ -104,7 +169,7 @@ annotate_cells <- function(object = NULL,
       object <- scGate::scGate(object,
                                model = scGate.model,
                                additional.signatures = additional.signatures,
-                               ncores = ncores)
+                               BPPARAM = BPPARAM)
     # If input is object list
     } else if (is.list(object)) {
       object <- lapply(
@@ -116,7 +181,7 @@ annotate_cells <- function(object = NULL,
           x <- scGate::scGate(x,
                               model=scGate.model,
                               additional.signatures = additional.signatures,
-                              ncores = ncores)
+                              BPPARAM = BPPARAM)
         }
       )
     } else if (!is.null(dir)) { # If input is directory
@@ -131,7 +196,7 @@ annotate_cells <- function(object = NULL,
           x <- scGate::scGate(x,
                               model= scGate.model,
                               additional.signatures = additional.signatures,
-                              ncores = ncores)
+                              BPPARAM = BPPARAM)
           saveRDS(x, path)
         }
       )
@@ -149,21 +214,14 @@ annotate_cells <- function(object = NULL,
   if (!is.null(ref.maps)) {
     # Run each map in paralel
 
-
-    for (i in 1:length(ref.maps)) {
-      ref.map.name <- names(ref.maps)[i]
-      message(paste("Running ProjecTILs with map:  ", ref.map.name, "\n"))
-
       # If input is a single Seurat object
       if (isS4(object)) {
         if(class(object) != "Seurat"){
           stop("Not Seurat object included, cannot be processed.\n")
         }
-        object <- ProjecTILs::ProjecTILs.classifier(object,
-                                                    ref.maps[[i]],
-                                                    ncores = ncores)
-        object <- addProjectilsClassification(object,
-                                              ref.map.name = ref.map.name)
+        object <- ProjecTILs.classifier.multi(object,
+                                              ref.maps = ref.maps,
+                                              BPPARAM = BPPARAM)
 
         # If input is object list
       } else if (is.list(object)) {
@@ -173,10 +231,9 @@ annotate_cells <- function(object = NULL,
             if(class(x) != "Seurat"){
               stop("Not Seurat object included, cannot be processed.\n")
             }
-            x <- ProjecTILs::ProjecTILs.classifier(x,
-                                                   ref.maps[[i]],
-                                                   ncores = ncores)
-            x <- addProjectilsClassification(x, ref.map.name = ref.map.name)
+            x <- ProjecTILs.classifier.multi(x,
+                                             ref.maps = ref.maps,
+                                             BPPARAM = BPPARAM)
           }
         )
 
@@ -190,17 +247,14 @@ annotate_cells <- function(object = NULL,
             if(class(x) != "Seurat"){
               stop("Not Seurat object included, cannot be processed.\n")
             }
-            x <- ProjecTILs::ProjecTILs.classifier(x,
-                                                   ref.maps[[i]],
-                                                   ncores = ncores)
-            x <- addProjectilsClassification(x,
-                                             ref.map.name = ref.map.name)
+            x <- ProjecTILs.classifier.multi(x,
+                                             ref.maps = ref.maps,
+                                             BPPARAM = BPPARAM)
             saveRDS(x, path)
           }
         )
       }
-      print(paste("Finished ProjecTILs with map:  ", ref.map.name))
-    }
+
   } else {
     message("Not running reference mapping as no reference maps were indicated.\n")
   }
@@ -212,25 +266,22 @@ annotate_cells <- function(object = NULL,
     }
   }
 
-  if (is.list(object))  {
-      object <- lapply(object, classificationConsensus)
-      if(!return.Seurat){
-        hit <- lapply(object, CreateHiTObject,
-                                 ref.maps = ref.maps,
-                                 scGate.model = scGate.model,
-                                 group.by = group.by.avg.expr,
-                                 annot.cols.freq = annot.cols.freq)
+  if(!return.Seurat){
+    if (is.list(object)){
+      hit <- lapply(object, get.HiTObject,
+                             ref.maps = ref.maps,
+                             scGate.model = scGate.model,
+                             group.by = group.by.avg.expr,
+                             annot.cols.freq = annot.cols.freq)
         }
-    }  else {
-        object <- classificationConsensus(object)
-        if(!return.Seurat){
-          hit <- CreateHiTObject(object,
-                                 ref.maps = ref.maps,
-                                 scGate.model = scGate.model,
-                                 group.by = group.by.avg.expr,
-                                 annot.cols.freq = annot.cols.freq)
-        }
-    }
+      else {
+      hit <- get.HiTObject(object,
+                           ref.maps = ref.maps,
+                           scGate.model = scGate.model,
+                           group.by = group.by.avg.expr,
+                           annot.cols.freq = annot.cols.freq)
+      }
+  }
 
   if (!is.null(object)) {
     if(return.Seurat){
@@ -260,7 +311,7 @@ annotate_cells <- function(object = NULL,
 #' @importFrom parallelly availableCores
 #' @importFrom stringr str_remove_all
 #' @return Cell type compositions as a list of data.frames containing cell counts, relative abundance (freq) and clr-transformed freq (freq_clr), respectively.
-#' @export calc_CTcomp
+#' @export get.celltype.composition
 #'
 #' @examples
 #' devtools::install_github('satijalab/seurat-data')
@@ -270,18 +321,18 @@ annotate_cells <- function(object = NULL,
 #' data("panc8")
 #' panc8 = UpdateSeuratObject(object = panc8)
 #' # Calculate overall composition
-#' celltype.compositions.overall <- calc_CTcomp(object = panc8, annot.cols = "celltype")
+#' celltype.compositions.overall <- get.celltype.composition(object = panc8, annot.cols = "celltype")
 #'
 #' # Calculate sample-wise composition
-#' celltype.compositions.sample_wise <- calc_CTcomp(object = panc8, annot.cols = "celltype", split.by = "orig.ident")
-calc_CTcomp <- function(object = NULL,
-                        dir = NULL,
-                        split.by = NULL,
-                        annot.cols = "scGate_multi",
-                        min.cells = 10,
-                        useNA = FALSE,
-                        rename.Multi.to.NA = TRUE,
-                        clr_zero_impute_perc = 1) {
+#' celltype.compositions.sample_wise <- get.celltype.composition(object = panc8, annot.cols = "celltype", split.by = "orig.ident")
+get.celltype.composition <- function(object = NULL,
+                              dir = NULL,
+                              split.by = NULL,
+                              annot.cols = "scGate_multi",
+                              min.cells = 10,
+                              useNA = FALSE,
+                              rename.Multi.to.NA = TRUE,
+                              clr_zero_impute_perc = 1) {
 
   if (!is.null(object) & !is.null(dir)) {
     stop(paste("Cannot provide object and dir"))
@@ -496,10 +547,4 @@ read_objs <- function(dir = NULL,
 
 
 
-### function to plot PCA with average expression
 
-# plotPCA.avgexp <- function(avg.expr,
-#                            siloutte = F,
-#                            most.variable.genes = NULL){
-#
-# }

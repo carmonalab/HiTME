@@ -1,3 +1,66 @@
+# projectils on multiple reference maps
+ProjecTILs.classifier.multi <- function(object,
+                                        ref.maps,
+                                        BPPARAM = BPPARAM,
+                                        layer1 = "scGate_multi"){
+
+  # count how many cells are found by scGate for each map reference
+  if(layer1 %in% names(object@meta.data)){
+    filter.cells <- F
+  map.celltypes <- lapply(ref.maps,
+                          function(x){
+                            ct <- x@misc$scGate_link
+                            nrow(object@meta.data[object@meta.data[[layer1]] %in% ct,])
+                            })
+  present <- names(ref.maps[map.celltypes > 0])
+  no.present <- names(ref.maps)[!names(ref.maps) %in% present]
+
+  message("Performing Projectils classification for ", paste(present, collapse = ", "))
+
+  if(length(ref.maps) != length(map.celltypes)){
+    message("Not doing mapping for ", paste(no.present, collapse = ", ") )
+    ref.maps <- ref.maps[present]
+  }
+  } else {
+    filter.cells <- T
+
+    message("Not scGate classification found in this object\n",
+            "Running default scGate (or layer1 classification) filtering within Projectils)")
+  }
+
+  functional.clusters <-
+    BiocParallel::bplapply(
+      X = ref.maps,
+      BPPARAM = BPPARAM,
+      FUN = function(ref.map){
+        map.celltype <- ref.map@misc$scGate_link
+        subset.object <- object[,object[[layer1]] %in% map.celltype]
+
+        if(ncol(subset.object)>0){
+          message("Running Projectils for", paste(map.celltype, collapse = ", "), " celltypes")
+          subset.object <- ProjecTILs::ProjecTILs.classifier(subset.object,
+                                                             ref = ref.map,
+                                                              filter.cells = filter.cells)
+          fc <- subset.object@meta.data[,c("functional.cluster", "functional.cluster.conf")]
+
+        } else {
+          message("Not Running Projectils classifier for reference map",
+                  paste(map.celltype, collapse = ", "), ". No cells found")
+        }
+      }
+    )
+
+  functional.clusters <- data.table::rbindlist(functional.clusters)
+  object@meta.data <- merge(object@meta.data, functional.clusters, by = 0) %>%
+                        tibble::column_to_rownames("Row.names")
+
+  return(object)
+
+}
+
+
+
+
 
 
 # function to standarize the cell type names across studies
@@ -48,10 +111,10 @@ StandardizeCellNames <- function(cell.names,
 
 
 
-CreateHiTObject <- function(object,
+get.HiTObject <- function(object,
                             ref.maps = ref.maps,
                             scGate.model = scGate.model,
-                            group.by = c("scGate_multi",
+                            group.by.avg.expr = c("scGate_multi",
                                          "Consensus_subtypes"),
                             annot.cols.freq = c("scGate_multi",
                                                 "Consensus_subtypes"),
@@ -125,12 +188,12 @@ CreateHiTObject <- function(object,
   }
 
   # Compute proportions
-  comp.prop <- calc_CTcomp(object,
+  comp.prop <- get.celltype.composition(object,
                            annot.cols = annot.cols.freq
                             )
   # Compute avg expressoin
-  avg.expr <- CellAvgExpression(object,
-                                group.by = "annotation")
+  avg.expr <- get.aggregated.profile(object,
+                                group.by.avg.expr = "annotation")
 
 
   hit <- new("HiT",
@@ -151,7 +214,7 @@ CreateHiTObject <- function(object,
 
 
 ### Change names of added projectils classification
-addProjectilsClassification <- function(object,
+add.ProjectilsClassification <- function(object,
                                         ref.map.name){
   object@meta.data[[paste0(ref.map.name, "_subtypes")]] <- object@meta.data[["functional.cluster"]]
   object@meta.data[["functional.cluster"]] <- NULL
@@ -190,8 +253,8 @@ classificationConsensus <- function(object,
 
 ### Function to compute average expression
 
-CellAvgExpression <- function(object,
-                              group.by = group.by,
+get.aggregated.profile <- function(object,
+                              group.by.avg.expr = group.by.avg.expr,
                               gene.filter = NULL,
                               GO_accession = NULL,
                               assay = "RNA",
@@ -203,19 +266,19 @@ CellAvgExpression <- function(object,
     }
   }
 
-  if(is.null(group.by)){
+  if(is.null(group.by.avg.expr)){
     message("No grouping provided, grouping by consensus of Projectils\n")
-    group.by <- "Consensus_subtypes"
-  } else if (!is.vector(group.by)) {
+    group.by.avg.expr <- "Consensus_subtypes"
+  } else if (!is.vector(group.by.avg.expr)) {
     stop("Please provide one or various grouping variables as a vector")
   } else {
-    group.by <- unique(c(group.by, "Consensus_subtypes"))
+    group.by.avg.expr <- unique(c(group.by.avg.expr, "Consensus_subtypes"))
   }
 
-  if(any(!group.by %in% names(object@meta.data))){
-    g.missing <- group.by[!group.by %in% names(object@meta.data)]
+  if(any(!group.by.avg.expr %in% names(object@meta.data))){
+    g.missing <- group.by.avg.expr[!group.by.avg.expr %in% names(object@meta.data)]
     warning(paste(g.missing, "not in object metadata, it is not computed for average expression.\n"))
-    group.by <- group.by[group.by %in% names(object@meta.data)]
+    group.by.avg.expr <- group.by.avg.expr[group.by.avg.expr %in% names(object@meta.data)]
   }
 
   if(!is.null(gene.filter)){
@@ -251,7 +314,7 @@ CellAvgExpression <- function(object,
 
   # loop over different grouping
 
-  for(i in group.by){
+  for(i in group.by.avg.expr){
     avg.exp[[i]] <- list()
     # only return avg expression for existing groups
 
