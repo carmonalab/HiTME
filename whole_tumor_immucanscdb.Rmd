@@ -11,7 +11,7 @@ knit: (function(input_file, encoding) {
 
 # Prepare packages and environtment
 ```{r load_packages_functions, message=F, warning=F}
-renv::restore()
+#renv::restore()
 
 # load packages
 pckgs <- c("tidyverse", "Seurat", "scGate", 
@@ -241,7 +241,7 @@ dev.off()
 
 
 ```{r}
-scGate_models_DB <- scGate::get_scGateDB(branch = "master", force_update = TRUE)
+scGate_models_DB <- scGate::get_scGateDB(branch = "dev", force_update = F)
 models.TME <- scGate_models_DB$human$TME_HiRes
 
 path_ref <- "~/Dropbox/CSI/reference_atlases" 
@@ -249,167 +249,113 @@ ref.maps <- list(CD8 = load.reference.map(file.path(path_ref, "CD8T_human_ref_v1
           CD4 = load.reference.map(file.path(path_ref, "CD4T_human_ref_v2.rds")), 
            DC = load.reference.map(file.path(path_ref, "DC_human_ref_v1.rds")), 
           MoMac = load.reference.map(file.path(path_ref, "MoMac_human_v1.rds"))) 
+
+# add scGate_link to ref.maps
+scGate.links <- list("CD8" = "CD8T",
+                  "CD4" = "CD4T",
+                  "DC" = "panDC",
+                  "MoMac" = c("Monocyte", "Macrophage")
+                  )
+for(a in names(ref.maps)){
+  ref.maps[[a]]@misc$scGate_link <- scGate.links[[a]]
+}
 ```
 
-
-```{r}
-
-met2 <- annotate_cells(object = seu[1:2],
-                       scGate.model = models.TME,
-                       ref.maps = ref.maps,
-                       remerge = F,
-                       ncores = 9,
-                       return.Seurat = T)
-
-```
-
-
-
-
-```{r}
-scgate <- new(Class = "scGate",
-              UCell_score = met2@meta.data[,grep("_UCell$", names(met2@meta.data))],
-              scGate_is.pure = met2@meta.data[,grep("^is.pure_", names(met2@meta.data))],
-              scGate_multi = met2@meta.data[,grep("scGate_multi", names(met2@meta.data)), drop = F]
-              )
-
-
-
-
-
-hit <- new(Class = "HiT",
-           metadata = met2@meta.data,
-           Predictions = list("scGate" = scgate))
-```
-
-
-
-## average expression'
-```{r}
-assay = "RNA"
-all.genes  <-
-  Seurat::AverageExpression(object,
-                            group.by = "annotation",
-                            assays = assay)[[assay]]
-
-rib <- SignatuR::GetSignature(SignatuR$Hs$Compartments$Ribo)
-
-all.g <- all.genes[rib,]
-```
-
-```{r}
-avg.test <- CellAvgExpression(object,
-                              group.by = "annotation",
-                              gene.filter = list(c("IL10", "BLIMP1", "BCL6")),
-                              GO_accession = "GOHAHA"
-                              )
-```
-
-
-# Hit test w/o proportions
-
-```{r}
-add.sig <- GetSignature(SignatuR$Hs$Programs)
-
-
-hit.dir <- annotate_cells(seu$Lambrechts_2018_29988129,
-                           scGate.model = models.TME,
-                           ref.maps = ref.maps,
-                           return.Seurat = F,
-                           additional.signatures = add.sig,
-                           group.by.avg.expr = "annotation",
-                           ncores = 9)
-```
-
-```{r}
-hit.test <- CreateHiTObject(test,
-                             ref.maps = ref.maps,
-                             scGate.model = models.TME,
-                             group.by = "annotation",
-                            annot.cols.freq = c("scGate_multi",
-                                                "Consensus_subtypes"))
-```
-# test on a list
-
-```{r}
-seu.list <- SplitObject(seu$Lambrechts_2018_29988129,
-                        split.by = "group")
-
-hit.dir <- annotate_cells(seu.list$`6`,
-                           scGate.model = models.TME,
-                           ref.maps = ref.maps,
-                           return.Seurat = F,
-                           additional.signatures = add.sig,
-                           group.by.avg.expr = "annotation",
-                           ncores = 9)
-```
-
-```{r}
-hit.dir <- annotate_cells(seu.list$`1`,
-                           scGate.model = models.TME,
-                           ref.maps = ref.maps,
-                           return.Seurat = T,
-                           additional.signatures = add.sig,
-                           group.by.avg.expr = "annotation",
-                           ncores = 9)
-```
-
-
-
-
-```{r}
-hit.list <- annotate_cells(seu.list[1:2],
-                           remerge = F,
-                           # scGate.model = models.TME,
-                           ref.maps = ref.maps,
-                           return.Seurat = T,
-                           additional.signatures = add.sig,
-                           group.by.avg.expr = c("annotation",
-                                                 "scGate_multi",
-                                                 "Consensus_subtypes"),
-                           ncores = 9)
-
-object <- hit.list$`4`
-hit <- CreateHiTObject(object,
-                       ref.maps = ref.maps,
-                       scGate.model = models.TME,
-                       group.by = c(
-                                         "Consensus_subtype"),
-                            annot.cols.freq = c(
-                                                "Consensus_subtype"))
-
-
-```
-
+# Loop for all samples
 ```{r}
 gr <- c("annotation","scGate_multi","Consensus_subtypes")
 add.sig <- GetSignature(SignatuR$Hs$Programs)
 
+seu.list <- list()
+hit.list <- list()
 
-
-hit.list <- annotate_cells(seu.list[1:2],
-                           remerge = F,
+for(a in names(seu)){
+  # split into samples/patients
+  if(!all(unique(seu[[a]]$group) %in% names(hit.list))){
+  dataset.list <- SplitObject(seu[[a]], split.by = "group")
+  
+  for(b in names(dataset.list)){
+    if(!b %in% names(seu.list)){
+      
+    # Run annotate cells
+    tryCatch(
+      {
+      message("Running Run.HiTME dataset", a, ". Sample: ", b)
+        
+      seu.list[[b]] <- Run.HiTME(dataset.list[[b]],
+                             remerge = F,
+                             scGate.model = models.TME,
+                             ref.maps = ref.maps,
+                             return.Seurat = T,
+                             additional.signatures = add.sig,
+                             group.by.avg.expr = gr,
+                             annot.cols.freq = gr,
+                             ncores = 8)
+    
+    # Get Hit object
+    message("Creating Hit Object dataset", a, ". Sample: ", b)
+    hit.list[[a]] <- get.HiTObject(seu.list[[b]],
+                          ref.maps = ref.maps,
                            scGate.model = models.TME,
-                           ref.maps = ref.maps,
-                           return.Seurat = T,
-                           additional.signatures = add.sig,
-                           group.by.avg.expr = gr,
-                           annot.cols.freq = gr,
-                           ncores = 9)
-
-tt <- CreateHiTObject(hit.list[[2]],
-                      ref.maps = ref.maps,
-                       scGate.model = models.TME,
-                       group.by = gr,
-                      annot.cols.freq = gr,
-                      additional.signatures = add.sig)
-
+                           group.by = gr,
+                          annot.cols.freq = gr,
+                          additional.signatures = add.sig)
+      },
+    error = function(e){
+      message(e)
+      message("Processing not possible for ", a, ". Dataset ", b)
+      print(unique(seu.list[[b]]$annotation))
+    })
+    } else {
+      message(b, " already done! :). For dataset", a)
+    }
+  }
+  } else {
+    message(a, " dataset already done! :)")
+  }
+}
 
 ```
 
 
+```{r}
+saveRDS(seu.list, "cache/20datasets_annotated.rds")
+saveRDS(hit.list, "cache/20hit_annotated.rds")
+```
 
-projectils paralel
+
+
+## Test new version
+```{r}
+test <- Run.HiTME(seu$Lambrechts_2018_29988129[,1:500],
+                  ref.maps = ref.maps,
+                  return.Seurat = F,
+                  ncores = 9)
+```
+
+```{r}
+BPPARAM <- BiocParallel::MulticoreParam(workers = 9, progressbar = T)
+ptest <- ProjecTILs.classifier.multi(object,
+                                     ref.maps = ref.maps,
+                                     BPPARAM = BPPARAM)
+```
+
+```{r}
+object <- scGate(seu$Peng_2019_31273297, model = models.TME, ncores = 9, verbose = T)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
