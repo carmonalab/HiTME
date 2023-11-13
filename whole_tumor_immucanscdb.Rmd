@@ -11,7 +11,9 @@ knit: (function(input_file, encoding) {
 
 # Prepare packages and environtment
 ```{r load_packages_functions, message=F, warning=F}
-#renv::restore()
+renv::restore()
+
+#remotes::install_github("carmonalab/scGate", ref="dev")
 
 # load packages
 pckgs <- c("tidyverse", "Seurat", "scGate", 
@@ -39,6 +41,7 @@ source("R/main.R")
 
 my_seed <- 321
 set.seed(my_seed)
+
 ```
 
 Also, increase memory parameters to allocate large vectors, otherwise R might crash
@@ -115,7 +118,7 @@ rds <- imm.db %>%
         # get only whole tumor
         filter(Enrichment_cell_types == "unbiased") %>% 
         # get only datasets with >+ 10 samples/patients
-        filter(N_samples_light >= 10) %>% 
+        filter(N_samples_light < 15) %>% 
         select(RDS_id, CSI_Dataset_id) %>% 
         as.data.frame()
 
@@ -140,6 +143,8 @@ for(a in 1:nrow(rds)){
   # add missing metadata for CSI_Dataset_id
   tmp$CSI_Dataset_id <- rds[a,2]
   
+  tmp[["RNA"]]@meta.features <- data.frame(row.names = rownames(tmp))
+  
   # add to list
   seu[[rds[a,2]]] <- tmp
 }
@@ -149,7 +154,7 @@ gc()
 ```
 
 ## Load also Joanito dataset
-```{r}
+```{r, eval = F}
 seu[["JoaI_2022_35773407"]] <- 
   readRDS("~/Dropbox/CSI/Standardized_SingleCell_Datasets/JoaI_2022_35773407/output/JoaI_2022_35773407_Nofilt_Downsampled_light.rds")
 
@@ -327,21 +332,55 @@ saveRDS(hit.list, "cache/20hit_annotated.rds")
 
 ## Test new version
 ```{r}
-test <- Run.HiTME(seu$Lambrechts_2018_29988129[,1:500],
+sys.Yuan <- system.time(
+test <- Run.HiTME(seu$Yuan_2018_30041684,
                   ref.maps = ref.maps,
-                  return.Seurat = F,
+                  return.Seurat = T,
                   ncores = 9)
+)
+
+#.bpstop_impl(param)
 ```
 
 ```{r}
-BPPARAM <- BiocParallel::MulticoreParam(workers = 9, progressbar = T)
+
+```
+
+
+```{r}
+ncores = 9
+progressbar = TRUE
+BPPARAM <- BiocParallel::MulticoreParam(workers = ncores,
+                                        progressbar = progressbar)
+
+# BPPARAM <- BiocParallel::SnowParam(workers = ncores,
+#                                    progressbar = progressbar,
+#                                    type =  "SOCK"
+#                                    )
+(st <- Sys.time())
 ptest <- ProjecTILs.classifier.multi(object,
                                      ref.maps = ref.maps,
-                                     BPPARAM = BPPARAM)
+                                     param = BPPARAM)
+(en <- Sys.time())
+time <- (en - st) / 60
+time
+
+
 ```
 
+
+
 ```{r}
-object <- scGate(seu$Peng_2019_31273297, model = models.TME, ncores = 9, verbose = T)
+object <- scGate(seu$Yuan_2018_30041684,
+                 model = models.TME,
+                 ncores = 9,
+                 verbose = T)
+
+lapply(ref.maps,
+                function(x){
+                  ct <- x@misc$scGate_link
+                  nrow(object@meta.data[object@meta.data[[layer1]] %in% ct,])
+                              })
 ```
 
 
