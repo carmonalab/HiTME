@@ -2238,6 +2238,20 @@
       "Repository": "CRAN",
       "Hash": "cbff1b666c6fa6d21202f07e2318d4f1"
     },
+    "remotes": {
+      "Package": "remotes",
+      "Version": "2.4.2.1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "methods",
+        "stats",
+        "tools",
+        "utils"
+      ],
+      "Hash": "63d15047eb239f95160112bcadc4fcb9"
+    },
     "renv": {
       "Package": "renv",
       "Version": "1.0.3",
@@ -2351,7 +2365,7 @@
       "RemoteRepo": "scGate",
       "RemoteUsername": "carmonalab",
       "RemoteRef": "dev",
-      "RemoteSha": "288d1b983357a2fafcc12122ca13c9c52eab04cf",
+      "RemoteSha": "2cdd776ed49c294a3ad5135735c71e1162564add",
       "Requirements": [
         "BiocParallel",
         "R",
@@ -2366,7 +2380,7 @@
         "stats",
         "utils"
       ],
-      "Hash": "4c7625487013a9167cd433568c0d5525"
+      "Hash": "e793bbd0ffe2dd672d806c5a8c13a035"
     },
     "scales": {
       "Package": "scales",
