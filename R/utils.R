@@ -66,6 +66,10 @@ ProjecTILs.classifier.multi <- function(object,
   object@meta.data <- merge(object@meta.data, functional.clusters, by = 0, all.x = T) %>%
                         tibble::column_to_rownames("Row.names")
 
+  # save names of reference maps run
+  object@misc[["Projectils_param"]] <- names(ref.maps)
+
+
   return(object)
 
 }
@@ -126,10 +130,27 @@ StandardizeCellNames <- function(cell.names,
 get.HiTObject <- function(object,
                             group.by = c("layer1",
                                          "layer2"),
-                            group.by.aggregated = c("layer1",
-                                                  "layer2"),
-                            group.by.composition = c("layer1",
-                                                "layer2")){
+                            group.by.aggregated = NULL,
+                            group.by.composition = NULL){
+
+
+  if (is.null(object)) {
+    stop("Please provide either a Seurat object")
+  } else if(class(object) != "Seurat"){
+    stop("Not Seurat object included, cannot be processed.\n")
+  }
+
+  if(is.null(group.by.aggregated)){
+    group.by.aggregated <- group.by
+  }
+
+  if(is.null(group.by.composition)){
+    group.by.composition <- group.by
+  }
+
+  if(is.null(c(group.by.aggregated, group.by.composition))){
+    stop("Please provide at least one grouping variable")
+  }
 
   ## Build S4 objects to store data
   setClass(Class = "HiT",
@@ -153,63 +174,57 @@ get.HiTObject <- function(object,
   )
 
 
-  setClass(Class = "Projectils",
-           slots = setNames(rep("list", length(ref.maps)), names(ref.maps))
+  setClass(Class = "layer2",
+           slots = list(
+             functional.cluster = "data.frame"
+           )
            )
 
-  if(is.null(additional.signatures)){
-    ucell_score <- object@meta.data[,grep("_UCell$", names(object@meta.data))]
-    add.sig = NA
-  } else{
-    all.ucell <- object@meta.data[,grep("_UCell$", names(object@meta.data))]
-    sig <- grep(paste(names(additional.signatures), collapse = "|"),
-                names(all.ucell), value = T)
-    ucell <- grep(paste(names(additional.signatures), collapse = "|"),
-                  names(all.ucell), value = T, invert = T)
+  # extract values from misc slot from object
+  additional.signatures <- object@misc$scGate_param$scGate_additional.signatures
+  scgate.models <- object@misc$scGate_param$scGate_models
 
-    ucell_score <- all.ucell[,ucell]
-    add.sig <- all.ucell[,sig]
-  }
+    sig <- grep(paste(additional.signatures, collapse = "|"),
+                names(object@meta.data), value = T)
+    sig.df <- object@meta.data[, sig]
+    scgate <- grep(paste(scgate.models, collapse = "|"),
+                  names(object@meta.data), value = T)
+    scgate.df <- object@meta.data[, scgate]
+
+    ucell <- names(object@meta.data)[!names(object@meta.data) %in% c(sig, scgate)] %>%
+                grep("_UCell$", ., value = T)
+
+    ucell.df <- object@meta.data[, ucell]
+
+
 
 
   # build scgate S4 object
-  scgate.s4 <- new(Class = "scGate",
-                   UCell_score = ucell_score,
-                   scGate_is.pure = object@meta.data[,grep("^is.pure_", names(object@meta.data))],
+  layer1.s4 <- new(Class = "layer1",
+                   UCell_score = ucell.df,
+                   scGate_is.pure = scgate.df,
                    scGate_multi = object@meta.data[,grep("scGate_multi", names(object@meta.data)), drop = F],
-                   additional.signatures = add.sig
+                   additional.signatures = sig.df
                    )
 
   # Create empty s4 object to fill next
-  projectils.s4 <- new(Class = "Projectils")
+  layer2.s4 <- new(Class = "layer2",
+                       functional.cluster = object@meta.data[,grep("functional.cluster", names(object@meta.data)), drop = F])
 
-  slots <- names(ref.maps)
-
-  for(i in slots){
-    if(!is.na(ref.maps[[i]])){
-    version <- ref.maps[[i]]@misc$projecTILs
-  } else {
-    version <- NA
-  }
-    li <- list(Classification = object@meta.data[,grep(paste0(i,".*(_subtypes$|_confidence$])"),
-                                                   names(object@meta.data)), drop = F],
-           version = version)
-    slot(projectils.s4, i) <- li
-  }
 
   # Compute proportions
   comp.prop <- get.celltype.composition(object,
-                           annot.cols = group.by.composition
-                            )
+                                       group.by.composition = group.by.composition
+                                      )
   # Compute avg expressoin
   avg.expr <- get.aggregated.profile(object,
-                                group.by.aggregated = "annotation")
+                                group.by.aggregated = group.by.aggregated)
 
 
   hit <- new("HiT",
              metadata = object@meta.data,
-             predictions = list("scGate" = scgate.s4,
-                                "Projectils" = projectils.s4),
+             predictions = list("layer1" = layer1.s4,
+                                "layer2" = layer2.s4),
              aggregated_profile = avg.expr,
              composition = comp.prop
              )

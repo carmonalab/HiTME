@@ -46,21 +46,20 @@
 #'
 
 Run.HiTME <- function(object = NULL,
-                           dir = NULL,
-                           scGate.model = "default",
-                           scGate.model.branch = c("master", "dev"),
-                           ref.maps = NULL,
-                           split.by = NULL,
-                           group.by.avg.expr = NULL,
-                           annot.cols.freq = c("scGate_multi", "Consensus_subtypes"),
-                           remerge = TRUE,
-                           species = "human",
-                           additional.signatures = "default",
-                           return.Seurat = FALSE,
-                           BPPARAM=NULL,
-                           ncores = parallelly::availableCores() - 2,
-                           progressbar = TRUE
-                           ){
+                       dir = NULL,
+                       scGate.model = "default",
+                       scGate.model.branch = c("master", "dev"),
+                       ref.maps = NULL,
+                       split.by = NULL,
+                       group.by = c("layer1","layer2"),
+                       remerge = TRUE,
+                       species = "human",
+                       additional.signatures = "default",
+                       return.Seurat = FALSE,
+                       BPPARAM=NULL,
+                       ncores = parallelly::availableCores() - 2,
+                       progressbar = TRUE
+                       ){
 
   if (is.null(object) & is.null(dir)) {
     stop("Please provide either a Seurat object or a directory with rds files")
@@ -76,10 +75,6 @@ Run.HiTME <- function(object = NULL,
     } else if(!all(unlist(lapply(ref.maps, function(x){class(x) == "Seurat"})))) {
       stop("One or more reference maps are not a Seurat object")
     }
-  }
-
-  if (is.null(ref.maps) & is.null(scGate.model)) {
-    stop("Please provide at least either an scGate model or reference map for cell type classification")
   }
 
   # split object into a list if indicated
@@ -129,6 +124,12 @@ Run.HiTME <- function(object = NULL,
   }
 
 
+  # if object is unique turn into a list
+  if(!is.list(object)){
+    object <- list(object)
+  }
+
+
 
   # Either:
   # - The input is a single Seurat object
@@ -163,17 +164,7 @@ Run.HiTME <- function(object = NULL,
     }
 
   ## Run scGate
-    # If input is a single Seurat object
-    if (isS4(object)) {
-      if(class(object) != "Seurat"){
-        stop("Not Seurat object included, cannot be processed.\n")
-      }
-      object <- scGate::scGate(object,
-                               model = scGate.model,
-                               additional.signatures = additional.signatures,
-                               BPPARAM = param)
-    # If input is object list
-    } else if (is.list(object)) {
+  if (is.list(object)) {
       object <- lapply(
         X = object,
         FUN = function(x) {
@@ -184,6 +175,10 @@ Run.HiTME <- function(object = NULL,
                               model=scGate.model,
                               additional.signatures = additional.signatures,
                               BPPARAM = param)
+          x@misc[["scGate_param"]] <- list()
+          x@misc[["scGate_param"]][["scGate_models"]] <- names(scGate.model)
+          x@misc[["scGate_param"]][["scGate_additional.signatures"]] <- names(additional.signatures)
+          return(x)
         }
       )
     } else if (!is.null(dir)) { # If input is directory
@@ -199,6 +194,12 @@ Run.HiTME <- function(object = NULL,
                               model= scGate.model,
                               additional.signatures = additional.signatures,
                               BPPARAM = param)
+
+          x@misc[["scGate_param"]] <- list()
+          x@misc[["scGate_param"]][["scGate_models"]] <- names(scGate.model)
+          x@misc[["scGate_param"]][["scGate_additional.signatures"]] <- names(additional.signatures)
+          return(x)
+
           saveRDS(x, path)
         }
       )
@@ -216,17 +217,7 @@ Run.HiTME <- function(object = NULL,
   if (!is.null(ref.maps)) {
     # Run each map in paralel
 
-      # If input is a single Seurat object
-      if (isS4(object)) {
-        if(class(object) != "Seurat"){
-          stop("Not Seurat object included, cannot be processed.\n")
-        }
-        object <- ProjecTILs.classifier.multi(object,
-                                              ref.maps = ref.maps,
-                                              param = param)
-
-        # If input is object list
-      } else if (is.list(object)) {
+      if (is.list(object)) {
         object <- lapply(
           X = object,
           FUN = function(x) {
@@ -236,6 +227,7 @@ Run.HiTME <- function(object = NULL,
             x <- ProjecTILs.classifier.multi(x,
                                              ref.maps = ref.maps,
                                              param = param)
+            return(x)
           }
         )
 
@@ -263,32 +255,33 @@ Run.HiTME <- function(object = NULL,
 
 
   if (is.list(object)) {
-    if (remerge) {
+    if (remerge && length(object)>1) {
         object <- merge(object[[1]],object[2:length(object)])
     }
+  } else {
+    object <- list(object)
   }
 
   if(!return.Seurat){
-    if (is.list(object)){
       hit <- lapply(object, get.HiTObject,
-                             ref.maps = ref.maps,
-                             scGate.model = scGate.model,
-                             group.by = group.by.avg.expr,
-                             annot.cols.freq = annot.cols.freq)
-        }
-      else {
-      hit <- get.HiTObject(object,
-                           ref.maps = ref.maps,
-                           scGate.model = scGate.model,
-                           group.by = group.by.avg.expr,
-                           annot.cols.freq = annot.cols.freq)
-      }
+                            group.by = c("scGate_multi", "functional.cluster"))
+  }
+
+  # if list is of 1, return object not list
+  if(length(object)==1){
+    object <- object[[1]]
   }
 
   if (!is.null(object)) {
     if(return.Seurat){
+      if(length(object)==1){
+        object <- object[[1]]
+      }
       return(object)
     } else {
+      if(length(hit)==1){
+        hit <- hit[[1]]
+      }
       return(hit)
     }
   }
@@ -302,9 +295,9 @@ Run.HiTME <- function(object = NULL,
 #' @param object A seurat object or a list of seurat objects
 #' @param dir Directory containing the sample .rds files
 #' @param split.by A Seurat object metadata column to split by (e.g. sample names)
-#' @param annot.cols The Seurat object metadata column(s) containing celltype annotations (provide as character vector, containing the metadata column name(s))
+#' @param group.by.composition The Seurat object metadata column(s) containing celltype annotations (provide as character vector, containing the metadata column name(s))
 #' @param min.cells Set a minimum threshold for number of cells to calculate relative abundance (e.g. less than 10 cells -> no relative abundnace will be calculated)
-#' @param useNA Whether to include not annotated cells or not (labelled as "NA" in the annot.cols). Can be defined separately for each annot.cols (provide single boolean or vector of booleans)
+#' @param useNA Whether to include not annotated cells or not (labelled as "NA" in the group.by.composition). Can be defined separately for each group.by.composition (provide single boolean or vector of booleans)
 #' @param rename.Multi.to.NA Whether to rename cells labelled as "Multi" by scGate to "NA"
 #' @param clr_zero_impute_perc To calculate the clr-transformed relative abundance ("clr_freq"), zero values are not allowed and need to be imputed (e.g. by adding a pseudo cell count). Instead of adding a pseudo cell count of flat +1, here a pseudo cell count of +1% of the total cell count will be added to all cell types, to better take into consideration the relative abundance ratios (e.g. adding +1 cell to a total cell count of 10 cells would have a different, i.e. much larger effect, than adding +1 to 1000 cells).
 #' @param ncores The number of cores to use
@@ -324,14 +317,14 @@ Run.HiTME <- function(object = NULL,
 #' data("panc8")
 #' panc8 = UpdateSeuratObject(object = panc8)
 #' # Calculate overall composition
-#' celltype.compositions.overall <- get.celltype.composition(object = panc8, annot.cols = "celltype")
+#' celltype.compositions.overall <- get.celltype.composition(object = panc8, group.by.composition = "celltype")
 #'
 #' # Calculate sample-wise composition
-#' celltype.compositions.sample_wise <- get.celltype.composition(object = panc8, annot.cols = "celltype", split.by = "orig.ident")
+#' celltype.compositions.sample_wise <- get.celltype.composition(object = panc8, group.by.composition = "celltype", split.by = "orig.ident")
 get.celltype.composition <- function(object = NULL,
                               dir = NULL,
                               split.by = NULL,
-                              annot.cols = "scGate_multi",
+                              group.by.composition = "scGate_multi",
                               min.cells = 10,
                               useNA = FALSE,
                               rename.Multi.to.NA = TRUE,
@@ -341,19 +334,19 @@ get.celltype.composition <- function(object = NULL,
     stop(paste("Cannot provide object and dir"))
   }
 
-  if (length(annot.cols) == 1) {
+  if (length(group.by.composition) == 1) {
     useNA <- ifelse(useNA == TRUE, "ifany", "no")
   } else {
     if (length(useNA) == 1) {
       useNA <- ifelse(useNA == TRUE, "ifany", "no")
-      useNA <- rep(useNA, length(annot.cols))
-    } else if (length(useNA) == length(annot.cols)) {
+      useNA <- rep(useNA, length(group.by.composition))
+    } else if (length(useNA) == length(group.by.composition)) {
       x <- c()
       for (i in useNA) {
         x <- c(x, ifelse(useNA == TRUE, "ifany", "no"))
       }
       useNA <- x
-    } else {stop("useNA has not the same length as annot.cols")}
+    } else {stop("useNA has not the same length as group.by.composition")}
   }
 
   celltype.compositions <- list()
@@ -363,17 +356,17 @@ get.celltype.composition <- function(object = NULL,
   # - The input is a list of Seurat objects
   # - The input is directory containing multiple .rds files (each a single object)
   if (isS4(object)) { # Input is a single Seurat object
-    for (i in 1:length(annot.cols)) {
-      if (length(object@meta.data[[annot.cols[i]]]) == 0) {
-        stop(paste("Annotation metadata column", annot.cols[i],"could not be found"))
+    for (i in 1:length(group.by.composition)) {
+      if (length(object@meta.data[[group.by.composition[i]]]) == 0) {
+        stop(paste("Annotation metadata column", group.by.composition[i],"could not be found"))
       }
 
       if (rename.Multi.to.NA) {
-        object@meta.data[[annot.cols[i]]][grep("Multi", object@meta.data[[annot.cols[i]]], ignore.case = T)] <- NA
+        object@meta.data[[group.by.composition[i]]][grep("Multi", object@meta.data[[group.by.composition[i]]], ignore.case = T)] <- NA
       }
 
       if (is.null(split.by)) {
-        comp_table <- table(object@meta.data[[annot.cols[i]]],
+        comp_table <- table(object@meta.data[[group.by.composition[i]]],
                             useNA = useNA[i])
         comp_table_freq <- prop.table(comp_table) * 100 # To get percentage
       } else {
@@ -382,7 +375,7 @@ get.celltype.composition <- function(object = NULL,
           stop(paste("Sample column could not be found. If providing multiple columns, indicate a vector."))
         }
 
-        comp_table <- table(object@meta.data[[annot.cols[i]]],
+        comp_table <- table(object@meta.data[[group.by.composition[i]]],
                             object@meta.data[[split.by]],
                             useNA = useNA[i])
 
@@ -399,9 +392,9 @@ get.celltype.composition <- function(object = NULL,
       comp_table_clr <- Hotelling::clr(t(comp_table_freq + clr_zero_impute_perc))
 
       ## Append
-      celltype.compositions[[annot.cols[i]]][["cell_counts"]] <- as.data.frame.matrix(t(comp_table))
-      celltype.compositions[[annot.cols[i]]][["freq"]] <- as.data.frame.matrix(t(comp_table_freq))
-      celltype.compositions[[annot.cols[i]]][["freq_clr"]] <- as.data.frame.matrix(comp_table_clr)
+      celltype.compositions[[group.by.composition[i]]][["cell_counts"]] <- as.data.frame.matrix(t(comp_table))
+      celltype.compositions[[group.by.composition[i]]][["freq"]] <- as.data.frame.matrix(t(comp_table_freq))
+      celltype.compositions[[group.by.composition[i]]][["freq_clr"]] <- as.data.frame.matrix(comp_table_clr)
     }
   } else { # Input is a list of Seurat objects or a directory containing multiple .rds files
     comp_tables <- list()
@@ -423,37 +416,37 @@ get.celltype.composition <- function(object = NULL,
         obj <- readRDS(file.path(dir, files[j]))
       }
 
-      for (i in 1:length(annot.cols)) {
+      for (i in 1:length(group.by.composition)) {
         if (rename.Multi.to.NA) {
-          obj@meta.data[[annot.cols[i]]][obj@meta.data[[annot.cols[i]]] == "Multi"] <- NA
+          obj@meta.data[[group.by.composition[i]]][obj@meta.data[[group.by.composition[i]]] == "Multi"] <- NA
         }
-        if (length(obj@meta.data[[annot.cols[i]]]) == 0) {
-          stop(paste("Annotation metadata column", annot.cols[i],"could not be found in", object_names[j]))
+        if (length(obj@meta.data[[group.by.composition[i]]]) == 0) {
+          stop(paste("Annotation metadata column", group.by.composition[i],"could not be found in", object_names[j]))
         }
         if (rename.Multi.to.NA) {
-          obj@meta.data[[annot.cols[i]]][obj@meta.data[[annot.cols[i]]] == "Multi"] <- NA
+          obj@meta.data[[group.by.composition[i]]][obj@meta.data[[group.by.composition[i]]] == "Multi"] <- NA
         }
         if (!is.null(split.by)) {
           stop(paste("Cannot define split.by if multiple objects are provided"))
         } else {
           if (j == 1) { # For the first sample, simply add table to list
-            comp_tables[[annot.cols[i]]] <- as.data.frame.matrix(t(table(obj@meta.data[[annot.cols[i]]],
+            comp_tables[[group.by.composition[i]]] <- as.data.frame.matrix(t(table(obj@meta.data[[group.by.composition[i]]],
                                                                          useNA = useNA[i])))
-            rownames(comp_tables[[annot.cols[i]]]) <- object_names[j]
+            rownames(comp_tables[[group.by.composition[i]]]) <- object_names[j]
           } else { # For subsequent samples, need to merge tables
-            comp_table_to_append <- as.data.frame.matrix(t(table(obj@meta.data[[annot.cols[i]]],
+            comp_table_to_append <- as.data.frame.matrix(t(table(obj@meta.data[[group.by.composition[i]]],
                                                                  useNA = useNA[i])))
             rownames(comp_table_to_append) <- object_names[j]
             comp_tables_merged <- merge(t(comp_table_to_append),
-                                        t(comp_tables[[annot.cols[i]]]),
+                                        t(comp_tables[[group.by.composition[i]]]),
                                         by=0, all=TRUE)
-            comp_tables[[annot.cols[i]]] <- as.data.frame.matrix(t(transform(comp_tables_merged, row.names=Row.names, Row.names=NULL)))
+            comp_tables[[group.by.composition[i]]] <- as.data.frame.matrix(t(transform(comp_tables_merged, row.names=Row.names, Row.names=NULL)))
           }
         }
       }
     }
 
-    for (i in 1:length(annot.cols)) {
+    for (i in 1:length(group.by.composition)) {
       comp_table <- comp_tables[[i]]
       comp_table[is.na(comp_table)] <- 0
 
@@ -462,7 +455,7 @@ get.celltype.composition <- function(object = NULL,
       comp_table_freq <- as.data.frame(prop.table(as.matrix(comp_table), margin = 1) * 100) # To get percentage
 
       if (length(low_count_samples) >= 1) {
-        warning(paste("There are less than", min.cells, annot.cols[i],
+        warning(paste("There are less than", min.cells, group.by.composition[i],
                       "cells detected in sample(s)", low_count_samples,
                       ". For this sample(s), no celltype composition was calculated. If needed, set parameter min.cells = 0.\n"))
         comp_table_freq <- comp_table_freq[!rownames(comp_table_freq) %in% low_count_samples, ]
@@ -477,9 +470,9 @@ get.celltype.composition <- function(object = NULL,
       comp_table_clr <- comp_table_clr[order(row.names(comp_table_clr)), ]
 
       ## Append
-      celltype.compositions[[annot.cols[i]]][["cell_counts"]] <- comp_table
-      celltype.compositions[[annot.cols[i]]][["freq"]] <- comp_table_freq
-      celltype.compositions[[annot.cols[i]]][["freq_clr"]] <- comp_table_clr
+      celltype.compositions[[group.by.composition[i]]][["cell_counts"]] <- comp_table
+      celltype.compositions[[group.by.composition[i]]][["freq"]] <- comp_table_freq
+      celltype.compositions[[group.by.composition[i]]][["freq_clr"]] <- comp_table_clr
     }
   }
   return(celltype.compositions)
