@@ -11,8 +11,7 @@
 #' @param additional.signatures Adding UCell additional signatures to compute on each cell.
 #' @param return.Seurat Whether to return a Hit S4 object or add the data into Seurat object metadata
 #' @param ncores The number of cores to use
-#' @param BPPARAM A [BiocParallel::bpparam()] object that tells scGate
-#'     how to parallelize. If provided, it overrides the `ncores` parameter.
+#' @param BPPARAM A [BiocParallel::bpparam()] object that tells Run.HiTME how to parallelize. If provided, it overrides the `ncores` parameter.
 #' @param progressbar Whether to show a progressbar or not
 #'
 #' @importFrom BiocParallel MulticoreParam bplapply
@@ -118,14 +117,17 @@ Run.HiTME <- function(object = NULL,
   }
 
 
-  # set paralelization parameters
+  # set paralelization parameters for scGate
   if (is.null(BPPARAM)) {
     if (ncores>1) {
-      BPPARAM <- BiocParallel::MulticoreParam(workers = ncores, progressbar = progressbar)
+      param <- BiocParallel::MulticoreParam(workers =  ncores, progressbar = progressbar)
     } else {
-      BPPARAM <- SerialParam()
+      param <- SerialParam()
     }
+  } else {
+    param <- BPPARAM
   }
+
 
 
   # Either:
@@ -169,7 +171,7 @@ Run.HiTME <- function(object = NULL,
       object <- scGate::scGate(object,
                                model = scGate.model,
                                additional.signatures = additional.signatures,
-                               BPPARAM = BPPARAM)
+                               BPPARAM = param)
     # If input is object list
     } else if (is.list(object)) {
       object <- lapply(
@@ -181,7 +183,7 @@ Run.HiTME <- function(object = NULL,
           x <- scGate::scGate(x,
                               model=scGate.model,
                               additional.signatures = additional.signatures,
-                              BPPARAM = BPPARAM)
+                              BPPARAM = param)
         }
       )
     } else if (!is.null(dir)) { # If input is directory
@@ -196,7 +198,7 @@ Run.HiTME <- function(object = NULL,
           x <- scGate::scGate(x,
                               model= scGate.model,
                               additional.signatures = additional.signatures,
-                              BPPARAM = BPPARAM)
+                              BPPARAM = param)
           saveRDS(x, path)
         }
       )
@@ -204,7 +206,7 @@ Run.HiTME <- function(object = NULL,
 
 
 
-    message("Finished scGate\n")
+    message("Finished scGate\n####################################################\n")
   } else {
     message("Not running coarse cell type classification as no scGate model was indicated.\n")
   }
@@ -221,7 +223,7 @@ Run.HiTME <- function(object = NULL,
         }
         object <- ProjecTILs.classifier.multi(object,
                                               ref.maps = ref.maps,
-                                              BPPARAM = BPPARAM)
+                                              param = param)
 
         # If input is object list
       } else if (is.list(object)) {
@@ -233,7 +235,7 @@ Run.HiTME <- function(object = NULL,
             }
             x <- ProjecTILs.classifier.multi(x,
                                              ref.maps = ref.maps,
-                                             BPPARAM = BPPARAM)
+                                             param = param)
           }
         )
 
@@ -249,12 +251,12 @@ Run.HiTME <- function(object = NULL,
             }
             x <- ProjecTILs.classifier.multi(x,
                                              ref.maps = ref.maps,
-                                             BPPARAM = BPPARAM)
+                                             param = param)
             saveRDS(x, path)
           }
         )
       }
-
+    message("Finished Projectils\n####################################################\n")
   } else {
     message("Not running reference mapping as no reference maps were indicated.\n")
   }
@@ -290,6 +292,7 @@ Run.HiTME <- function(object = NULL,
       return(hit)
     }
   }
+
 }
 
 

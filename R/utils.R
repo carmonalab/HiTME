@@ -1,26 +1,26 @@
 # projectils on multiple reference maps
 ProjecTILs.classifier.multi <- function(object,
                                         ref.maps,
-                                        BPPARAM = BPPARAM,
+                                        param = param,
                                         layer1 = "scGate_multi"){
 
   # count how many cells are found by scGate for each map reference
   if(layer1 %in% names(object@meta.data)){
     filter.cells <- F
-  map.celltypes <- lapply(ref.maps,
-                          function(x){
-                            ct <- x@misc$scGate_link
-                            nrow(object@meta.data[object@meta.data[[layer1]] %in% ct,])
-                            })
-  present <- names(ref.maps[map.celltypes > 0])
-  no.present <- names(ref.maps)[!names(ref.maps) %in% present]
+    map.celltypes <- lapply(ref.maps,
+                            function(x){
+                              ct <- x@misc$scGate_link
+                              nrow(object@meta.data[object@meta.data[[layer1]] %in% ct,])
+                              })
+    present <- names(ref.maps[map.celltypes > 0])
+    no.present <- names(ref.maps)[!names(ref.maps) %in% present]
 
-  message("Performing Projectils classification for ", paste(present, collapse = ", "))
+    message("Performing Projectils classification for ", paste(present, collapse = ", "))
 
-  if(length(ref.maps) != length(map.celltypes)){
-    message("Not doing mapping for ", paste(no.present, collapse = ", ") )
-    ref.maps <- ref.maps[present]
-  }
+    if(length(ref.maps) != length(present)){
+      message("Not doing mapping for ", paste(no.present, collapse = ", ") )
+      ref.maps <- ref.maps[present]
+    }
   } else {
     filter.cells <- T
 
@@ -28,30 +28,42 @@ ProjecTILs.classifier.multi <- function(object,
             "Running default scGate (or layer1 classification) filtering within Projectils)")
   }
 
+  if(length(ref.maps) == 0){
+    stop(paste("No cells linked to reference maps found by", layer1, ". Not running Projectils."))
+  }
+
   functional.clusters <-
     BiocParallel::bplapply(
-      X = ref.maps,
-      BPPARAM = BPPARAM,
-      FUN = function(ref.map){
-        map.celltype <- ref.map@misc$scGate_link
-        subset.object <- object[,object[[layer1]] %in% map.celltype]
+      X = names(ref.maps),
+      BPPARAM = param,
+      FUN = function(m){
+        map.celltype <- ref.maps[[m]]@misc$scGate_link
+        subset.object <- object[,object@meta.data[[layer1]] %in% map.celltype]
 
         if(ncol(subset.object)>0){
-          message("Running Projectils for", paste(map.celltype, collapse = ", "), " celltypes")
-          subset.object <- ProjecTILs::ProjecTILs.classifier(subset.object,
-                                                             ref = ref.map,
-                                                              filter.cells = filter.cells)
-          fc <- subset.object@meta.data[,c("functional.cluster", "functional.cluster.conf")]
+          message("\nRunning Projectils for", paste(map.celltype, collapse = ", "), " celltypes")
+
+          data("Hs2Mm.convert.table")
+          # it is mandatory to make run in serial (ncores = 1 and BPPARAM SerialParam)
+          subset.object.pred <- ProjecTILs:::classifier.singleobject(subset.object,
+                                                             ref = ref.maps[[m]],
+                                                              filter.cells = filter.cells,
+                                                             ncores = 1)
+
+          return(subset.object.pred)
 
         } else {
           message("Not Running Projectils classifier for reference map",
                   paste(map.celltype, collapse = ", "), ". No cells found")
         }
       }
-    )
+  )
 
-  functional.clusters <- data.table::rbindlist(functional.clusters)
-  object@meta.data <- merge(object@meta.data, functional.clusters, by = 0) %>%
+
+  functional.clusters <- data.table::rbindlist(lapply(functional.clusters,
+                                          setDT, keep.rownames = TRUE)) %>%
+                          tibble::column_to_rownames("rn")
+  object@meta.data <- merge(object@meta.data, functional.clusters, by = 0, all.x = T) %>%
                         tibble::column_to_rownames("Row.names")
 
   return(object)
@@ -112,27 +124,26 @@ StandardizeCellNames <- function(cell.names,
 
 
 get.HiTObject <- function(object,
-                            ref.maps = ref.maps,
-                            scGate.model = scGate.model,
-                            group.by.avg.expr = c("scGate_multi",
-                                         "Consensus_subtypes"),
-                            annot.cols.freq = c("scGate_multi",
-                                                "Consensus_subtypes"),
-                            additional.signatures = NULL){
+                            group.by = c("layer1",
+                                         "layer2"),
+                            group.by.aggregated = c("layer1",
+                                                  "layer2"),
+                            group.by.composition = c("layer1",
+                                                "layer2")){
 
   ## Build S4 objects to store data
   setClass(Class = "HiT",
            slots = list(
              metadata = "data.frame",
-             Predictions = "list",
-             Proportions = "list",
-             Avg.Expression = "list",
+             predictions = "list",
+             composition = "list",
+             aggregated_profile = "list",
              version = "list"
            )
   )
 
 
-  setClass(Class = "scGate",
+  setClass(Class = "layer1",
            slots = list(
              UCell_score = "data.frame",
              scGate_is.pure = "data.frame",
@@ -141,8 +152,7 @@ get.HiTObject <- function(object,
            )
   )
 
-  # add slot for consensus
-  ref.maps[["Consensus"]] <- NA
+
   setClass(Class = "Projectils",
            slots = setNames(rep("list", length(ref.maps)), names(ref.maps))
            )
@@ -189,19 +199,19 @@ get.HiTObject <- function(object,
 
   # Compute proportions
   comp.prop <- get.celltype.composition(object,
-                           annot.cols = annot.cols.freq
+                           annot.cols = group.by.composition
                             )
   # Compute avg expressoin
   avg.expr <- get.aggregated.profile(object,
-                                group.by.avg.expr = "annotation")
+                                group.by.aggregated = "annotation")
 
 
   hit <- new("HiT",
              metadata = object@meta.data,
-             Predictions = list("scGate" = scgate.s4,
+             predictions = list("scGate" = scgate.s4,
                                 "Projectils" = projectils.s4),
-             Avg.Expression = avg.expr,
-             Proportions = comp.prop
+             aggregated_profile = avg.expr,
+             composition = comp.prop
              )
 
 
@@ -212,49 +222,10 @@ get.HiTObject <- function(object,
 
 
 
-
-### Change names of added projectils classification
-add.ProjectilsClassification <- function(object,
-                                        ref.map.name){
-  object@meta.data[[paste0(ref.map.name, "_subtypes")]] <- object@meta.data[["functional.cluster"]]
-  object@meta.data[["functional.cluster"]] <- NULL
-  object@meta.data[[paste0(ref.map.name, "_confidence")]] <- object@meta.data[["functional.cluster.conf"]]
-  object@meta.data[["functional.cluster.conf"]] <- NULL
-
-  return(object)
-}
-
-
-### Create consensus from the various projectils classification maps
-
-# Define the custom logic function
-consensus <- function(...) {
-  if (all(is.na(c(...)))) {
-    return(NA)
-  } else if (sum(!is.na(c(...))) == 1) {
-    return(c(...)[!is.na(c(...))])
-  } else {
-    return("Multiple")
-  }
-}
-
-classificationConsensus <- function(object,
-                                    pattern = "_subtypes") {
-  subtype.cols <- grep(pattern, names(object@meta.data), value = T)
-  object@meta.data <- object@meta.data %>%
-    mutate(Consensus_subtypes = pmap(select(., all_of(subtype.cols)),
-                                    consensus),
-           Consensus_subtypes = sapply(Consensus_subtypes, function(x){
-                                        unname(unlist(x))
-           }))
-  return(object)
-}
-
-
 ### Function to compute average expression
 
 get.aggregated.profile <- function(object,
-                              group.by.avg.expr = group.by.avg.expr,
+                              group.by.aggregated = NULL,
                               gene.filter = NULL,
                               GO_accession = NULL,
                               assay = "RNA",
@@ -266,19 +237,19 @@ get.aggregated.profile <- function(object,
     }
   }
 
-  if(is.null(group.by.avg.expr)){
+  if(is.null(group.by.aggregated)){
     message("No grouping provided, grouping by consensus of Projectils\n")
-    group.by.avg.expr <- "Consensus_subtypes"
-  } else if (!is.vector(group.by.avg.expr)) {
+    group.by.aggregated <- "functional.cluster"
+  } else if (!is.vector(group.by.aggregated)) {
     stop("Please provide one or various grouping variables as a vector")
   } else {
-    group.by.avg.expr <- unique(c(group.by.avg.expr, "Consensus_subtypes"))
+    group.by.aggregated <- unique(c(group.by.aggregated, "functional.cluster"))
   }
 
-  if(any(!group.by.avg.expr %in% names(object@meta.data))){
-    g.missing <- group.by.avg.expr[!group.by.avg.expr %in% names(object@meta.data)]
+  if(any(!group.by.aggregated %in% names(object@meta.data))){
+    g.missing <- group.by.aggregated[!group.by.aggregated %in% names(object@meta.data)]
     warning(paste(g.missing, "not in object metadata, it is not computed for average expression.\n"))
-    group.by.avg.expr <- group.by.avg.expr[group.by.avg.expr %in% names(object@meta.data)]
+    group.by.aggregated <- group.by.aggregated[group.by.aggregated %in% names(object@meta.data)]
   }
 
   if(!is.null(gene.filter)){
@@ -314,7 +285,7 @@ get.aggregated.profile <- function(object,
 
   # loop over different grouping
 
-  for(i in group.by.avg.expr){
+  for(i in group.by.aggregated){
     avg.exp[[i]] <- list()
     # only return avg expression for existing groups
 
