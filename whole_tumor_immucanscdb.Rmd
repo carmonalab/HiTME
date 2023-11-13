@@ -333,13 +333,23 @@ saveRDS(hit.list, "cache/20hit_annotated.rds")
 ## Test new version
 ```{r}
 sys.Yuan <- system.time(
-test <- Run.HiTME(seu$Yuan_2018_30041684,
+test <- Run.HiTME(seu$Bi_2021_33711272,
                   ref.maps = ref.maps,
-                  return.Seurat = T,
+                  return.Seurat = F,
                   ncores = 9)
 )
 
 #.bpstop_impl(param)
+
+hit <- get.HiTObject(object,
+                     group.by = c("scGate_multi", "functional.cluster")
+                     )
+
+avg <- get.aggregated.profile(object,
+                                group.by.aggregated = c("scGate_multi", "functional.cluster"))
+
+prop <- get.celltype.composition(object,
+                                 group.by.composition = c("scGate_multi", "functional.cluster"))
 ```
 
 ```{r}
@@ -347,41 +357,9 @@ test <- Run.HiTME(seu$Yuan_2018_30041684,
 ```
 
 
-```{r}
-ncores = 9
-progressbar = TRUE
-BPPARAM <- BiocParallel::MulticoreParam(workers = ncores,
-                                        progressbar = progressbar)
-
-# BPPARAM <- BiocParallel::SnowParam(workers = ncores,
-#                                    progressbar = progressbar,
-#                                    type =  "SOCK"
-#                                    )
-(st <- Sys.time())
-ptest <- ProjecTILs.classifier.multi(object,
-                                     ref.maps = ref.maps,
-                                     param = BPPARAM)
-(en <- Sys.time())
-time <- (en - st) / 60
-time
-
-
-```
 
 
 
-```{r}
-object <- scGate(seu$Yuan_2018_30041684,
-                 model = models.TME,
-                 ncores = 9,
-                 verbose = T)
-
-lapply(ref.maps,
-                function(x){
-                  ct <- x@misc$scGate_link
-                  nrow(object@meta.data[object@meta.data[[layer1]] %in% ct,])
-                              })
-```
 
 
 
