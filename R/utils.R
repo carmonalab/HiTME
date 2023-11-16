@@ -124,217 +124,11 @@ StandardizeCellNames <- function(cell.names,
 }
 
 
-
-###############################################################
-
-
-
-get.HiTObject <- function(object,
-                            group.by = c("layer1",
-                                         "layer2"),
-                            group.by.aggregated = NULL,
-                            group.by.composition = NULL){
-
-
-  if (is.null(object)) {
-    stop("Please provide either a Seurat object")
-  } else if(class(object) != "Seurat"){
-    stop("Not Seurat object included, cannot be processed.\n")
-  }
-
-  if(is.null(group.by.aggregated)){
-    group.by.aggregated <- group.by
-  }
-
-  if(is.null(group.by.composition)){
-    group.by.composition <- group.by
-  }
-
-  if(is.null(c(group.by.aggregated, group.by.composition))){
-    stop("Please provide at least one grouping variable")
-  }
-
-  ## Build S4 objects to store data
-  setClass(Class = "HiT",
-           slots = list(
-             metadata = "data.frame",
-             predictions = "list",
-             composition = "list",
-             aggregated_profile = "list",
-             version = "list"
-           )
-  )
-
-
-  setClass(Class = "layer1",
-           slots = list(
-             UCell_score = "data.frame",
-             layer1_is.pure = "data.frame",
-             layer1_multi = "data.frame",
-             additional.signatures = "ANY"
-           )
-  )
-
-
-  setClass(Class = "layer2",
-           slots = list(
-             layer2_functional.cluster = "data.frame"
-           )
-           )
-
-  # extract values from misc slot from object
-  additional.signatures <- object@misc$layer1_param$additional.signatures
-  scgate.models <- object@misc$layer1_param$layer1_models
-
-    sig <- grep(paste(additional.signatures, collapse = "|"),
-                names(object@meta.data), value = T)
-    sig.df <- object@meta.data[, sig]
-    scgate <- grep(paste(scgate.models, collapse = "$|"),
-                  names(object@meta.data), value = T)
-    scgate.df <- object@meta.data[, scgate]
-
-    ucell <- names(object@meta.data)[!names(object@meta.data) %in% c(sig, scgate)] %>%
-                grep("_UCell$", ., value = T)
-
-    ucell.df <- object@meta.data[, ucell]
-
-
-
-
-  # build scgate S4 object
-  layer1.s4 <- new(Class = "layer1",
-                   UCell_score = ucell.df,
-                   layer1_is.pure = scgate.df,
-                   layer1_multi = object@meta.data[,grep(group.by[1], names(object@meta.data)), drop = F],
-                   additional.signatures = sig.df
-                   )
-
-  # Create empty s4 object to fill next
-  layer2.s4 <- new(Class = "layer2",
-                       layer2_functional.cluster = object@meta.data[,grep(group.by[2], names(object@meta.data)), drop = F])
-
-
-  # Compute proportions
-  comp.prop <- get.celltype.composition(object,
-                                       group.by.composition = group.by.composition
-                                      )
-  # Compute avg expressoin
-  avg.expr <- get.aggregated.profile(object,
-                                group.by.aggregated = group.by.aggregated)
-
-  aggr.signature <- get.aggregated.signature(object,
-                                             group.by.aggregated = group.by.aggregated)
-
-
-  hit <- new("HiT",
-             metadata = object@meta.data,
-             predictions = list("layer1" = layer1.s4,
-                                "layer2" = layer2.s4),
-             aggregated_profile = list("Gene expression" = avg.expr,
-                                       "Signatures" = aggr.signature),
-             composition = comp.prop
-             )
-
-
-  return(hit)
-
-
-}
-
-
-
-### Function to compute average expression
-
-get.aggregated.profile <- function(object,
-                              group.by.aggregated = NULL,
-                              gene.filter = NULL,
-                              GO_accession = NULL,
-                              assay = "RNA",
-                              slot = "data") {
-  if (is.null(object)) {
-    stop("Please provide a Seurat object")
-    if(class(object) != "Seurat"){
-      stop("Please provide a Seurat object")
-    }
-  }
-
-  if(is.null(group.by.aggregated)){
-    message("No grouping provided, grouping by consensus of Projectils\n")
-    group.by.aggregated <- "functional.cluster"
-  } else if (!is.vector(group.by.aggregated)) {
-    stop("Please provide one or various grouping variables as a vector")
-  } else {
-    group.by.aggregated <- unique(c(group.by.aggregated, "functional.cluster"))
-  }
-
-  if(any(!group.by.aggregated %in% names(object@meta.data))){
-    g.missing <- group.by.aggregated[!group.by.aggregated %in% names(object@meta.data)]
-    warning(paste(g.missing, "not in object metadata, it is not computed for average expression.\n"))
-    group.by.aggregated <- group.by.aggregated[group.by.aggregated %in% names(object@meta.data)]
-  }
-
-  if(!is.null(gene.filter)){
-    if(!is.list(gene.filter)){
-      stop("Please add additional subsetting list of genes as a named list format")
-    }}
-
-
-    gene.filter.list <- list()
-
-    # Dorothea transcription factors
-    # data("entire_database", package = "dorothea")
-    # gene.filter.list[["Dorothea_Transcription_Factors"]] <- entire_database$tf %>% unique()
-
-    # Ribosomal genes
-    gene.filter.list[["Ribosomal"]] <- SignatuR::GetSignature(SignatuR$Hs$Compartments$Ribo)
-
-  # Add list genes from GEO accessions
-    gene.filter.list <- c(gene.filter.list, GetGOList(GO_accession))
-
-  # Add defined list of genes to filter
-    for(a in seq_along(gene.filter)){
-      if(is.null(names(gene.filter[[a]]))){
-        i.name <- paste0("GeneList_", a)
-      } else {
-        i.name <- names(gene.filter[[a]])
-      }
-      gene.filter.list[[i.name]] <- gene.filter[[a]]
-    }
-
-
-  avg.exp <- list()
-
-  # loop over different grouping
-
-  for(i in group.by.aggregated){
-    avg.exp[[i]] <- list()
-    # only return avg expression for existing groups
-
-    all.genes  <-
-      Seurat::AverageExpression(object,
-                                group.by = i,
-                                assays = assay,
-                                slot = slot)[[assay]]
-
-    avg.exp[[i]][["All.genes"]] <- all.genes
-
-    for(e in names(gene.filter.list)){
-      keep <- gene.filter.list[[e]][gene.filter.list[[e]] %in% rownames(all.genes)]
-      avg.exp[[i]][[e]] <- all.genes[keep,]
-    }
-
-
-  }
-
-  return(avg.exp)
-}
-
-
 ### Function to get the list of certain genes
 GetGOList <- function(GO_accession = NULL,
                       species = "Human",
                       host = "https://dec2021.archive.ensembl.org/"
-                      ){
+){
 
   GO_acc <- c(
     "DNA-binding transcription factor activity" = "GO:0003700",
@@ -342,7 +136,7 @@ GetGOList <- function(GO_accession = NULL,
     "cytokine receptor activity" = "GO:0004896",
     "chemokine activity" = "GO:0008009",
     "chemokine receptor activity" = "GO:0004950"
-    )
+  )
 
   if(!is.null(GO_accession)){
     if(length(names(GO_accession)) == 0){
@@ -351,72 +145,43 @@ GetGOList <- function(GO_accession = NULL,
     GO_acc <- c(GO_acc, GO_accession)
   }
 
-    species <- tolower(species)
+  species <- tolower(species)
 
-    if(species == "human") {
+
+  # adapt species
+  if(is.null(species)){
+    stop("Please provide human or mouse as species")
+  }
+  species <- tolower(species)
+  if(grepl("homo|sapi|huma", species)){
       dataset <- "hsapiens_gene_ensembl"
-    } else if(species == "mouse"){
+  } else if (grepl("mice|mus", species)){
       dataset <- "mmusculus_gene_ensembl"
-    }
+  } else {
+    stop("Only supported species are human and mouse")
+  }
 
-    # Retrieve genes for each GO
-    ensembl = biomaRt::useMart("ensembl",
-                      dataset = dataset)
+  # Retrieve genes for each GO
+  ensembl = biomaRt::useMart("ensembl",
+                             dataset = dataset)
 
-    gene.data.bm <- biomaRt::getBM(attributes=c('hgnc_symbol',
-                                             'go_id'),
-                                filters = 'go',
-                                values = GO_acc,
-                                mart = ensembl)
-    gene.data <- gene.data.bm %>%
-      filter(go_id %in% GO_acc) %>%
-      filter(hgnc_symbol != "") %>%
-      split(., as.factor(.$go_id)) %>%
-      lapply(., function(x) x[,1])
+  gene.data.bm <- biomaRt::getBM(attributes=c('hgnc_symbol',
+                                              'go_id'),
+                                 filters = 'go',
+                                 values = GO_acc,
+                                 mart = ensembl)
+  gene.data <- gene.data.bm %>%
+    filter(go_id %in% GO_acc) %>%
+    filter(hgnc_symbol != "") %>%
+    split(., as.factor(.$go_id)) %>%
+    lapply(., function(x) x[,1])
 
-    if(length(names(gene.data)) != length(GO_acc)){
-      warning("Additional GO accession provided not found in GO database")
-    }
-    names(gene.data) <- paste0(names(gene.data), "_", names(GO_acc)[GO_acc %in% names(gene.data)])
+  if(length(names(gene.data)) != length(GO_acc)){
+    warning("Additional GO accession provided not found in GO database")
+  }
+  names(gene.data) <- paste0(names(gene.data), "_", names(GO_acc)[GO_acc %in% names(gene.data)])
 
 
   return(gene.data)
-
-}
-
-
-get.aggregated.signature <- function(object,
-                                     group.by.aggregated = NULL,
-                                     additional.signatures = NULL){
-
-  if(is.null(group.by.aggregated)){
-    stop("Please provide groping variable for aggregation")
-  }
-
-  if(is.null(additional.signatures)){
-  additional.signatures <- object@misc$layer1_param$additional.signatures
-  }
-
-  if(is.null(additional.signatures)){
-    stop("Please provide additional signatures")
-  }
-
-  if(!any(grepl(paste(additional.signatures, collapse = "|"),
-                names(object@meta.data)))){
-    stop("No additional signatures found in this object metadata")
-  }
-
-  add.sig.cols <- grep(paste(additional.signatures, collapse = "|"),
-                        names(object@meta.data), value = T)
-
-  aggr.sig <- list()
-
-  for(e in group.by.aggregated){
-    aggr.sig[[e]] <- object@meta.data %>%
-      group_by(.data[[e]]) %>%
-      summarize_at(add.sig.cols, mean, na.rm = T)
-  }
-
-  return(aggr.sig)
 
 }
