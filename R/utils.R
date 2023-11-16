@@ -79,30 +79,29 @@ ProjecTILs.classifier.multi <- function(object,
 
 
 
-
-
-
-# function to standarize the cell type names across studies
-dict <- c("^T|CTL" = "T cell",
-          "^B|B$" = "B cell",
-          "^NK" = "NK",
-          "Mono" = "Monocyte-like",
-          "^Fibro" = "Fibroblast",
-          "^Malig|cancer|tumo[u]r" = "Malignant",
-          "Myeloid" = "Myeloid",
-          "HSC" = "HSC",
-          "DC|Dendri" = "DC",
-          "^Epi|^EC" = "Epithelial",
-          "Mast" = "Mastocyte",
-          "Macroph" = "Macrophage",
-          "^Endo" = "Endothelial",
-          "Neutro" = "Neutrophil",
-          "Strom" = "Stromal"
-          )
-
 # function to match words with grep
 match_dictionary <- function(cell_type,
-                             dict) {
+                             dict = NULL) {
+
+  if(is.null(dict)){
+    dict <- c("^T|CTL" = "T cell",
+              "^B|B$" = "B cell",
+              "^NK" = "NK",
+              "Mono" = "Monocyte-like",
+              "^Fibro" = "Fibroblast",
+              "^Malig|cancer|tumo[u]r" = "Malignant",
+              "Myeloid" = "Myeloid",
+              "HSC" = "HSC",
+              "DC|Dendri" = "DC",
+              "^Epi|^EC" = "Epithelial",
+              "Mast" = "Mastocyte",
+              "Macroph" = "Macrophage",
+              "^Endo" = "Endothelial",
+              "Neutro" = "Neutrophil",
+              "Strom" = "Stromal"
+    )
+  }
+
   for (keyword in names(dict)) {
     if (grepl(keyword, cell_type, ignore.case = TRUE)) {
       cell_type <- dict[[keyword]]
