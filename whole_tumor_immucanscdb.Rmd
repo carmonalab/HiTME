@@ -20,7 +20,7 @@ pckgs <- c("tidyverse", "Seurat", "scGate",
            "Matrix", "patchwork",
            "data.table", "STACAS",
            "SignatuR", "ProjecTILs",
-           "scCustomize", "UCell")
+           "scCustomize", "UCell", "ProjecTILs")
 for(package in pckgs){
   tryCatch(
     {
@@ -114,11 +114,11 @@ sd <- imm.db %>%
 Now we will load the light (no small samples and downsampled) rds file for this corresponding files
 
 ```{r}
-rds <- imm.db %>% 
+rds <- imm.db %>%
         # get only whole tumor
         filter(Enrichment_cell_types == "unbiased") %>% 
         # get only datasets with >+ 10 samples/patients
-        filter(N_samples_light < 15) %>% 
+        filter(N_samples_light > 9) %>% 
         select(RDS_id, CSI_Dataset_id) %>% 
         as.data.frame()
 
@@ -246,8 +246,8 @@ dev.off()
 
 
 ```{r}
-scGate_models_DB <- scGate::get_scGateDB(branch = "dev", force_update = F)
-models.TME <- scGate_models_DB$human$TME_HiRes
+# scGate_models_DB <- scGate::get_scGateDB(branch = "dev", force_update = F)
+# models.TME <- scGate_models_DB$human$TME_HiRes
 
 path_ref <- "~/Dropbox/CSI/reference_atlases" 
 ref.maps <- list(CD8 = load.reference.map(file.path(path_ref, "CD8T_human_ref_v1.rds")),
@@ -256,23 +256,29 @@ ref.maps <- list(CD8 = load.reference.map(file.path(path_ref, "CD8T_human_ref_v1
           MoMac = load.reference.map(file.path(path_ref, "MoMac_human_v1.rds"))) 
 
 # add scGate_link to ref.maps
-scGate.links <- list("CD8" = "CD8T",
+layer1.links <- list("CD8" = "CD8T",
                   "CD4" = "CD4T",
                   "DC" = "panDC",
                   "MoMac" = c("Monocyte", "Macrophage")
                   )
 for(a in names(ref.maps)){
-  ref.maps[[a]]@misc$scGate_link <- scGate.links[[a]]
+  ref.maps[[a]]@misc$layer1_link <- layer1.links[[a]]
 }
 ```
 
 # Loop for all samples
 ```{r}
-gr <- c("annotation","scGate_multi","Consensus_subtypes")
-add.sig <- GetSignature(SignatuR$Hs$Programs)
-
 seu.list <- list()
 hit.list <- list()
+
+stime <- data.frame(matrix(nrow=0, ncol=9))
+names(stime) <- c("Dataset", "Sample", "N_cells", "ncores", "user.self",
+                  "sys.self","elapsed", "user.child", "sys.child" )
+```
+
+
+```{r}
+ncores = 8
 
 for(a in names(seu)){
   # split into samples/patients
@@ -286,30 +292,36 @@ for(a in names(seu)){
     tryCatch(
       {
       message("Running Run.HiTME dataset", a, ". Sample: ", b)
+      
+      time <- system.time(
         
       seu.list[[b]] <- Run.HiTME(dataset.list[[b]],
-                             remerge = F,
-                             scGate.model = models.TME,
                              ref.maps = ref.maps,
-                             return.Seurat = T,
-                             additional.signatures = add.sig,
-                             group.by.avg.expr = gr,
-                             annot.cols.freq = gr,
-                             ncores = 8)
+                            return.Seurat = T,
+                            ncores = ncores)
+        
+      )
+      
+      time <- time %>% as.data.frame() %>%
+              t() %>% as.data.frame() %>%
+              remove_rownames() %>% 
+              mutate(Dataset = a,
+                     Sample = b,
+                     N_cells = ncol(seu.list[[b]]),
+                     ncores = ncores)
+      print(time)
+      
+      stime <- rbind(stime, time)
     
     # Get Hit object
     message("Creating Hit Object dataset", a, ". Sample: ", b)
-    hit.list[[a]] <- get.HiTObject(seu.list[[b]],
-                          ref.maps = ref.maps,
-                           scGate.model = models.TME,
-                           group.by = gr,
-                          annot.cols.freq = gr,
-                          additional.signatures = add.sig)
+    hit.list[[b]] <- get.HiTObject(seu.list[[b]],
+                          group.by = c("scGate_multi", "functional.cluster"))
       },
     error = function(e){
       message(e)
       message("Processing not possible for ", a, ". Dataset ", b)
-      print(unique(seu.list[[b]]$annotation))
+      
     })
     } else {
       message(b, " already done! :). For dataset", a)
@@ -333,15 +345,16 @@ saveRDS(hit.list, "cache/20hit_annotated.rds")
 ## Test new version
 ```{r}
 sys.Yuan <- system.time(
-test <- Run.HiTME(seu$Bi_2021_33711272,
+test <- Run.HiTME(seu$Galen_2019_30827681,
                   ref.maps = ref.maps,
                   return.Seurat = F,
+                  group.by = c("scGate_multi", "functional.cluster"),
                   ncores = 9)
 )
 
 #.bpstop_impl(param)
 
-hit <- get.HiTObject(object,
+hit <- get.HiTObject(test,
                      group.by = c("scGate_multi", "functional.cluster")
                      )
 
@@ -352,9 +365,7 @@ prop <- get.celltype.composition(object,
                                  group.by.composition = c("scGate_multi", "functional.cluster"))
 ```
 
-```{r}
 
-```
 
 
 
