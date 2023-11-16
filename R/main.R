@@ -223,9 +223,9 @@ Run.HiTME <- function(object = NULL,
         }
       )
     }
+    # close paralel cores
+    BiocParallel::bpstop(param)
 
-  # close paralel cores
-  BiocParallel::bpstop()
 
 
     message("Finished scGate\n####################################################\n")
@@ -269,13 +269,14 @@ Run.HiTME <- function(object = NULL,
           }
         )
       }
+    # close paralel cores
+    BiocParallel::bpstop(param)
     message("Finished Projectils\n####################################################\n")
   } else {
     message("Not running reference mapping as no reference maps were indicated.\n")
   }
 
-  # close paralel cores
-  BiocParallel::bpstop()
+
 
 
   if (is.list(object)) {
