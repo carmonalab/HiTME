@@ -1,6 +1,6 @@
 
 
-#' Annotate cell types in parallel
+#' Run HitME: classify cells
 #'
 #' @param object A seurat object or a list of seurat objects
 #' @param dir The directory where your sample .rds files(seurat objects) are located
@@ -313,6 +313,148 @@ Run.HiTME <- function(object = NULL,
 
 
 
+# Function get.HiTObject
+#' Get a HiT object summarizing cell type classification and aggregating profiles.
+#'
+#'
+#'
+#' @param object A seurat object
+#' @param group.by List with one or multiple Seurat object metadata columns with cell type predictions to group by (e.g. layer 1 cell type classification)
+#' @param name.additional.signatures Names of additional signatures as found in object metadata to take into account
+#' @param ... Additional parameters for \link{get.aggregated.profile}, \link{get.celltype.composition}, and \link{get.aggregated.signature} functions.
+#' @import Seurat
+#' @import SeuratObject
+#' @return HiT object summarizing cell type classification and aggregating profiles.
+#' @export get.HiTObject
+#'
+
+
+get.HiTObject <- function(object,
+                          group.by = list("layer1" = c("scGate_multi"),
+                                          "layer2" = c("funciontal.cluster")
+                                          ),
+                          name.additional.signatures = NULL,
+                          ...){
+
+
+  if (is.null(object)) {
+    stop("Please provide either a Seurat object")
+  } else if(class(object) != "Seurat"){
+    stop("Not Seurat object included, cannot be processed.\n")
+  }
+
+  for(v in seq_along(group.by)){
+    if(is.null(names(group.by[v]))){
+      names(group.by[v]) <- paste0("layer", v)
+    }
+  }
+
+  # if only group.by is indicated use the same for aggregation and composition
+  if(!exists("group.by.aggregated")){
+    group.by.aggregated <- group.by
+  }
+
+  if(!exists("group.by.composition")){
+    group.by.composition <- group.by
+  }
+
+  if(is.null(c(group.by.aggregated, group.by.composition))){
+    stop("Please provide at least one grouping variable")
+  }
+
+  ## Build S4 objects to store data
+  setClass(Class = "HiT",
+           slots = list(
+             metadata = "data.frame",
+             predictions = "list",
+             composition = "list",
+             aggregated_profile = "list",
+             version = "list"
+           )
+  )
+
+    # make list of list for layers for predictions slot
+  pred.list <- list()
+  for(a in names(group.by)){
+    pred.list[[a]] <- list()
+    pred.list[[a]] <- object@meta.data[,group.by[[a]], drop = F]
+  }
+
+
+
+  #run extended if object got scGate info
+  # extract values from misc slot from object
+  if(any(group.by == "scGate_multi")){
+    layer.scgate <- names(group.by[group.by == "scGate_multi"])
+    if(is.null(name.additional.signatures)){
+      name.additional.signatures <- object@misc$layer1_param$additional.signatures
+    }
+  scgate.models <- object@misc$layer1_param$layer1_models
+
+
+  if(!is.null(name.additional.signatures)){
+  sig <- grep(paste(additional.signatures, collapse = "|"),
+              names(object@meta.data), value = T)
+  sig.df <- object@meta.data[, sig]
+  pred.list[[layer.scgate]][["additional_signatures"]] <- sig.df
+  }
+
+  if(!is.null(scgate.models)){
+  scgate <- grep(paste(scgate.models, collapse = "$|"),
+                 names(object@meta.data), value = T)
+  scgate.df <- object@meta.data[, scgate]
+  pred.list[[layer.scgate]][["scGate_is.pure"]] <- scgate.df
+  }
+
+  if(!is.null(name.additional.signatures) && !is.null(scgate.models)){
+  ucell <- names(object@meta.data)[!names(object@meta.data) %in% c(sig, scgate)] %>%
+            grep("_UCell$", ., value = T)
+
+  ucell.df <- object@meta.data[, ucell]
+
+  pred.list[[layer.scgate]][["UCell_scores"]] <- ucell.df
+  }
+  }
+
+  #run extended if object got projectils info
+  # extract values from misc slot from object
+  if(any(group.by == "functional.cluster")){
+    layer.pt <- names(group.by[group.by == "functional.cluster"])
+    pred.list[[layer.pt]][["functional.cluster"]] <- object@meta.data[,"functional.cluster", drop = F]
+    pred.list[[layer.pt]][["functional.cluster.conf"]] <- object@meta.data[,"functional.cluster.conf", drop = F]
+
+  }
+
+
+  # Compute proportions
+  comp.prop <- get.celltype.composition(object,
+                                        group.by.composition = group.by.composition,
+                                        ...)
+  # Compute avg expression
+  avg.expr <- get.aggregated.profile(object,
+                                     group.by.aggregated = group.by.aggregated,
+                                     ...)
+
+  aggr.signature <- get.aggregated.signature(object,
+                                             group.by.aggregated = group.by.aggregated,
+                                             ...)
+
+
+  hit <- new("HiT",
+             metadata = object@meta.data,
+             predictions = pred.list,
+             aggregated_profile = list("Gene expression" = avg.expr,
+                                       "Signatures" = aggr.signature),
+             composition = comp.prop
+  )
+
+
+  return(hit)
+
+
+}
+
+
 #' Calculate cell type composition
 #'
 #' @param object A seurat object or a list of seurat objects
@@ -321,7 +463,6 @@ Run.HiTME <- function(object = NULL,
 #' @param group.by.composition The Seurat object metadata column(s) containing celltype annotations (provide as character vector, containing the metadata column name(s))
 #' @param min.cells Set a minimum threshold for number of cells to calculate relative abundance (e.g. less than 10 cells -> no relative abundnace will be calculated)
 #' @param useNA Whether to include not annotated cells or not (labelled as "NA" in the group.by.composition). Can be defined separately for each group.by.composition (provide single boolean or vector of booleans)
-#' @param rename.Multi.to.NA Whether to rename cells labelled as "Multi" by scGate to "NA"
 #' @param clr_zero_impute_perc To calculate the clr-transformed relative abundance ("clr_freq"), zero values are not allowed and need to be imputed (e.g. by adding a pseudo cell count). Instead of adding a pseudo cell count of flat +1, here a pseudo cell count of +1% of the total cell count will be added to all cell types, to better take into consideration the relative abundance ratios (e.g. adding +1 cell to a total cell count of 10 cells would have a different, i.e. much larger effect, than adding +1 to 1000 cells).
 #' @param ncores The number of cores to use
 #' @param progressbar Whether to show a progressbar or not
@@ -345,13 +486,12 @@ Run.HiTME <- function(object = NULL,
 #' # Calculate sample-wise composition
 #' celltype.compositions.sample_wise <- get.celltype.composition(object = panc8, group.by.composition = "celltype", split.by = "orig.ident")
 get.celltype.composition <- function(object = NULL,
-                              dir = NULL,
-                              split.by = NULL,
-                              group.by.composition = NULL,
-                              min.cells = 10,
-                              useNA = FALSE,
-                              rename.Multi.to.NA = TRUE,
-                              clr_zero_impute_perc = 1) {
+                                     dir = NULL,
+                                     split.by = NULL,
+                                     group.by.composition = NULL,
+                                     min.cells = 10,
+                                     useNA = FALSE,
+                                     clr_zero_impute_perc = 1) {
 
   if (!is.null(object) & !is.null(dir)) {
     stop(paste("Cannot provide object and dir"))
@@ -380,16 +520,12 @@ get.celltype.composition <- function(object = NULL,
   # - The input is directory containing multiple .rds files (each a single object)
   if (isS4(object)) { # Input is a single Seurat object
     for (i in 1:length(group.by.composition)) {
-      if (length(object@meta.data[[group.by.composition[i]]]) == 0) {
-        stop(paste("Annotation metadata column", group.by.composition[i],"could not be found"))
-      }
-
-      if (rename.Multi.to.NA) {
-        object@meta.data[[group.by.composition[i]]][grep("Multi", object@meta.data[[group.by.composition[i]]], ignore.case = T)] <- NA
+      if (length(object@meta.data[[group.by.composition[[i]]]]) == 0) {
+        stop(paste("Annotation metadata column", group.by.composition[[i]],"could not be found"))
       }
 
       if (is.null(split.by)) {
-        comp_table <- table(object@meta.data[[group.by.composition[i]]],
+        comp_table <- table(object@meta.data[[group.by.composition[[i]]]],
                             useNA = useNA[i])
         comp_table_freq <- prop.table(comp_table) * 100 # To get percentage
       } else {
@@ -398,7 +534,7 @@ get.celltype.composition <- function(object = NULL,
           stop(paste("Sample column could not be found. If providing multiple columns, indicate a vector."))
         }
 
-        comp_table <- table(object@meta.data[[group.by.composition[i]]],
+        comp_table <- table(object@meta.data[[group.by.composition[[i]]]],
                             object@meta.data[[split.by]],
                             useNA = useNA[i])
 
@@ -415,9 +551,9 @@ get.celltype.composition <- function(object = NULL,
       comp_table_clr <- Hotelling::clr(t(comp_table_freq + clr_zero_impute_perc))
 
       ## Append
-      celltype.compositions[[group.by.composition[i]]][["cell_counts"]] <- as.data.frame.matrix(t(comp_table))
-      celltype.compositions[[group.by.composition[i]]][["freq"]] <- as.data.frame.matrix(t(comp_table_freq))
-      celltype.compositions[[group.by.composition[i]]][["freq_clr"]] <- as.data.frame.matrix(comp_table_clr)
+      celltype.compositions[[group.by.composition[[i]]]][["cell_counts"]] <- as.data.frame.matrix(t(comp_table))
+      celltype.compositions[[group.by.composition[[i]]]][["freq"]] <- as.data.frame.matrix(t(comp_table_freq))
+      celltype.compositions[[group.by.composition[[i]]]][["freq_clr"]] <- as.data.frame.matrix(comp_table_clr)
     }
   } else { # Input is a list of Seurat objects or a directory containing multiple .rds files
     comp_tables <- list()
@@ -441,29 +577,29 @@ get.celltype.composition <- function(object = NULL,
 
       for (i in 1:length(group.by.composition)) {
         if (rename.Multi.to.NA) {
-          obj@meta.data[[group.by.composition[i]]][obj@meta.data[[group.by.composition[i]]] == "Multi"] <- NA
+          obj@meta.data[[group.by.composition[[i]]]][obj@meta.data[[group.by.composition[[i]]]] == "Multi"] <- NA
         }
-        if (length(obj@meta.data[[group.by.composition[i]]]) == 0) {
-          stop(paste("Annotation metadata column", group.by.composition[i],"could not be found in", object_names[j]))
+        if (length(obj@meta.data[[group.by.composition[[i]]]]) == 0) {
+          stop(paste("Annotation metadata column", group.by.composition[[i]],"could not be found in", object_names[j]))
         }
         if (rename.Multi.to.NA) {
-          obj@meta.data[[group.by.composition[i]]][obj@meta.data[[group.by.composition[i]]] == "Multi"] <- NA
+          obj@meta.data[[group.by.composition[[i]]]][obj@meta.data[[group.by.composition[[i]]]] == "Multi"] <- NA
         }
         if (!is.null(split.by)) {
           stop(paste("Cannot define split.by if multiple objects are provided"))
         } else {
           if (j == 1) { # For the first sample, simply add table to list
-            comp_tables[[group.by.composition[i]]] <- as.data.frame.matrix(t(table(obj@meta.data[[group.by.composition[i]]],
-                                                                         useNA = useNA[i])))
-            rownames(comp_tables[[group.by.composition[i]]]) <- object_names[j]
+            comp_tables[[group.by.composition[[i]]]] <- as.data.frame.matrix(t(table(obj@meta.data[[group.by.composition[[i]]]],
+                                                                                   useNA = useNA[i])))
+            rownames(comp_tables[[group.by.composition[[i]]]]) <- object_names[j]
           } else { # For subsequent samples, need to merge tables
-            comp_table_to_append <- as.data.frame.matrix(t(table(obj@meta.data[[group.by.composition[i]]],
+            comp_table_to_append <- as.data.frame.matrix(t(table(obj@meta.data[[group.by.composition[[i]]]],
                                                                  useNA = useNA[i])))
             rownames(comp_table_to_append) <- object_names[j]
             comp_tables_merged <- merge(t(comp_table_to_append),
-                                        t(comp_tables[[group.by.composition[i]]]),
+                                        t(comp_tables[[group.by.composition[[i]]]]),
                                         by=0, all=TRUE)
-            comp_tables[[group.by.composition[i]]] <- as.data.frame.matrix(t(transform(comp_tables_merged, row.names=Row.names, Row.names=NULL)))
+            comp_tables[[group.by.composition[[i]]]] <- as.data.frame.matrix(t(transform(comp_tables_merged, row.names=Row.names, Row.names=NULL)))
           }
         }
       }
@@ -478,7 +614,7 @@ get.celltype.composition <- function(object = NULL,
       comp_table_freq <- as.data.frame(prop.table(as.matrix(comp_table), margin = 1) * 100) # To get percentage
 
       if (length(low_count_samples) >= 1) {
-        warning(paste("There are less than", min.cells, group.by.composition[i],
+        warning(paste("There are less than", min.cells, group.by.composition[[i]],
                       "cells detected in sample(s)", low_count_samples,
                       ". For this sample(s), no celltype composition was calculated. If needed, set parameter min.cells = 0.\n"))
         comp_table_freq <- comp_table_freq[!rownames(comp_table_freq) %in% low_count_samples, ]
@@ -493,13 +629,143 @@ get.celltype.composition <- function(object = NULL,
       comp_table_clr <- comp_table_clr[order(row.names(comp_table_clr)), ]
 
       ## Append
-      celltype.compositions[[group.by.composition[i]]][["cell_counts"]] <- comp_table
-      celltype.compositions[[group.by.composition[i]]][["freq"]] <- comp_table_freq
-      celltype.compositions[[group.by.composition[i]]][["freq_clr"]] <- comp_table_clr
+      celltype.compositions[[group.by.composition[[i]]]][["cell_counts"]] <- comp_table
+      celltype.compositions[[group.by.composition[[i]]]][["freq"]] <- comp_table_freq
+      celltype.compositions[[group.by.composition[[i]]]][["freq_clr"]] <- comp_table_clr
     }
   }
   return(celltype.compositions)
 }
+
+### Function to compute average expression
+
+get.aggregated.profile <- function(object,
+                                   group.by.aggregated = NULL,
+                                   gene.filter = NULL,
+                                   GO_accession = NULL,
+                                   assay = "RNA",
+                                   slot = "data") {
+  if (is.null(object)) {
+    stop("Please provide a Seurat object")
+    if(class(object) != "Seurat"){
+      stop("Please provide a Seurat object")
+    }
+  }
+
+  if(is.null(group.by.aggregated)){
+    message("No grouping provided, grouping by consensus of Projectils\n")
+    group.by.aggregated <- "functional.cluster"
+  } else if (!is.vector(group.by.aggregated)) {
+    stop("Please provide one or various grouping variables as a vector")
+  } else {
+    group.by.aggregated <- unique(c(group.by.aggregated, "functional.cluster"))
+  }
+
+  if(any(!group.by.aggregated %in% names(object@meta.data))){
+    g.missing <- group.by.aggregated[!group.by.aggregated %in% names(object@meta.data)]
+    warning(paste(g.missing, "not in object metadata, it is not computed for average expression.\n"))
+    group.by.aggregated <- group.by.aggregated[group.by.aggregated %in% names(object@meta.data)]
+  }
+
+  if(!is.null(gene.filter)){
+    if(!is.list(gene.filter)){
+      stop("Please add additional subsetting list of genes as a named list format")
+    }}
+
+
+  gene.filter.list <- list()
+
+  # Dorothea transcription factors
+  # data("entire_database", package = "dorothea")
+  # gene.filter.list[["Dorothea_Transcription_Factors"]] <- entire_database$tf %>% unique()
+
+  # Ribosomal genes
+  gene.filter.list[["Ribosomal"]] <- SignatuR::GetSignature(SignatuR$Hs$Compartments$Ribo)
+
+  # Add list genes from GEO accessions
+  gene.filter.list <- c(gene.filter.list, GetGOList(GO_accession))
+
+  # Add defined list of genes to filter
+  for(a in seq_along(gene.filter)){
+    if(is.null(names(gene.filter[[a]]))){
+      i.name <- paste0("GeneList_", a)
+    } else {
+      i.name <- names(gene.filter[[a]])
+    }
+    gene.filter.list[[i.name]] <- gene.filter[[a]]
+  }
+
+
+  avg.exp <- list()
+
+  # loop over different grouping
+
+  for(i in group.by.aggregated){
+    avg.exp[[i]] <- list()
+    # only return avg expression for existing groups
+
+    all.genes  <-
+      Seurat::AverageExpression(object,
+                                group.by = i,
+                                assays = assay,
+                                slot = slot)[[assay]]
+
+    avg.exp[[i]][["All.genes"]] <- all.genes
+
+    for(e in names(gene.filter.list)){
+      keep <- gene.filter.list[[e]][gene.filter.list[[e]] %in% rownames(all.genes)]
+      avg.exp[[i]][[e]] <- all.genes[keep,]
+    }
+
+
+  }
+
+  return(avg.exp)
+}
+
+
+
+
+
+get.aggregated.signature <- function(object,
+                                     group.by.aggregated = NULL,
+                                     name.additional.signatures = NULL){
+
+  if(is.null(group.by.aggregated)){
+    stop("Please provide groping variable for aggregation")
+  }
+
+  if(is.null(name.additional.signatures)){
+    name.additional.signatures <- object@misc$layer1_param$additional.signatures
+  }
+
+  if(is.null(name.additional.signatures)){
+    stop("Please provide additional signatures")
+  }
+
+  if(!any(grepl(paste(name.additional.signatures, collapse = "|"),
+                names(object@meta.data)))){
+    stop("No additional signatures found in this object metadata")
+  }
+
+  add.sig.cols <- grep(paste(name.additional.signatures, collapse = "|"),
+                       names(object@meta.data), value = T)
+
+  aggr.sig <- list()
+
+  for(e in group.by.aggregated){
+    aggr.sig[[e]] <- object@meta.data %>%
+      group_by(.data[[e]]) %>%
+      summarize_at(add.sig.cols, mean, na.rm = T)
+  }
+
+  return(aggr.sig)
+
+}
+
+
+
+
 
 #' Save object list to disk, in parallel
 #'
