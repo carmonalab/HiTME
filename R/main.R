@@ -11,7 +11,7 @@
 #' @param additional.signatures Adding UCell additional signatures to compute on each cell.
 #' @param return.Seurat Whether to return a Hit S4 object or add the data into Seurat object metadata
 #' @param ncores The number of cores to use
-#' @param BPPARAM A [BiocParallel::bpparam()] object that tells Run.HiTME how to parallelize. If provided, it overrides the `ncores` parameter.
+#' @param bparam A [BiocParallel::bpparam()] object that tells Run.HiTME how to parallelize. If provided, it overrides the `ncores` parameter.
 #' @param progressbar Whether to show a progressbar or not
 #'
 #' @importFrom BiocParallel MulticoreParam bplapply
@@ -56,10 +56,10 @@ Run.HiTME <- function(object = NULL,
                        species = "human",
                        additional.signatures = "default",
                        return.Seurat = FALSE,
-                       BPPARAM=NULL,
+                       bparam = NULL,
                        ncores = parallelly::availableCores() - 2,
-                       progressbar = TRUE
-                       ){
+                       progressbar = TRUE,
+                       ...){
 
   if (is.null(object) & is.null(dir)) {
     stop("Please provide either a Seurat object or a directory with rds files")
@@ -111,23 +111,33 @@ Run.HiTME <- function(object = NULL,
     stop("Only supported species are human and mouse")
   }
 
+  # if object is unique turn into a list
+  if(!is.list(object)){
+    object <- list(object)
+  }
+
+  if(ncores >= parallelly::availableCores()){
+    ncores <- parallelly::availableCores() - 1
+    message("Using all or more cores available in this computer, reducing number of cores to ", ncores)
+  }
+
+  # Reduce number of cores if file is huge
+  if(sum(unlist(lapply(object, ncol)))>=30000){
+    ncores <- 2
+    message("Huge Seurat object, reducing number of cores to avoid memory issues to", ncores)
+  }
 
   # set paralelization parameters for scGate
-  if (is.null(BPPARAM)) {
+  if (is.null(bparam)) {
     if (ncores>1) {
       param <- BiocParallel::MulticoreParam(workers =  ncores, progressbar = progressbar)
     } else {
       param <- SerialParam()
     }
   } else {
-    param <- BPPARAM
+    param <- bparam
   }
 
-
-  # if object is unique turn into a list
-  if(!is.list(object)){
-    object <- list(object)
-  }
 
 
 
@@ -141,7 +151,7 @@ Run.HiTME <- function(object = NULL,
     message("Running scGate\n")
 
     # Retrieve default scGate models if default
-    if(tolower(scGate.model) == "default"){
+    if(!is.list(scGate.model) && tolower(scGate.model) == "default"){
       if(species == "human"){
         scGate.model <- scGate::get_scGateDB(branch = scGate.model.branch,
                                              force_update = T)[[species]][["TME_HiRes"]]
@@ -153,7 +163,7 @@ Run.HiTME <- function(object = NULL,
     }
 
     # based on species get SignatuR signatures
-    if(tolower(additional.signatures) == "default"){
+    if(!is.list(additional.signatures) && tolower(additional.signatures) == "default"){
       if(species == "human"){
         sig.species <- "Hs"
       } else if(species == "mouse"){
@@ -175,9 +185,14 @@ Run.HiTME <- function(object = NULL,
                               model=scGate.model,
                               additional.signatures = additional.signatures,
                               BPPARAM = param)
-          x@misc[["scGate_param"]] <- list()
-          x@misc[["scGate_param"]][["scGate_models"]] <- names(scGate.model)
-          x@misc[["scGate_param"]][["scGate_additional.signatures"]] <- names(additional.signatures)
+          # convert multi to NA
+          x@meta.data <-
+            x@meta.data %>% dplyr::mutate(scGate_multi = ifelse(scGate_multi == "Multi",
+                                                            NA, scGate_multi))
+
+          x@misc[["layer1_param"]] <- list()
+          x@misc[["layer1_param"]][["layer1_models"]] <- names(scGate.model)
+          x@misc[["layer1_param"]][["additional.signatures"]] <- names(additional.signatures)
           return(x)
         }
       )
@@ -195,9 +210,14 @@ Run.HiTME <- function(object = NULL,
                               additional.signatures = additional.signatures,
                               BPPARAM = param)
 
-          x@misc[["scGate_param"]] <- list()
-          x@misc[["scGate_param"]][["scGate_models"]] <- names(scGate.model)
-          x@misc[["scGate_param"]][["scGate_additional.signatures"]] <- names(additional.signatures)
+          # convert multi to NA
+          x@meta.data <-
+            x@meta.data %>% dplyr::mutate(scGate_multi = ifelse(scGate_multi == "Multi",
+                                                            NA, scGate_multi))
+
+          x@misc[["layer1_param"]] <- list()
+          x@misc[["layer1_param"]][["layer1_models"]] <- names(scGate.model)
+          x@misc[["layer1_param"]][["additional.signatures"]] <- names(additional.signatures)
           return(x)
 
           saveRDS(x, path)
@@ -257,6 +277,7 @@ Run.HiTME <- function(object = NULL,
   if (is.list(object)) {
     if (remerge && length(object)>1) {
         object <- merge(object[[1]],object[2:length(object)])
+        object <- list(object)
     }
   } else {
     object <- list(object)
@@ -264,13 +285,10 @@ Run.HiTME <- function(object = NULL,
 
   if(!return.Seurat){
       hit <- lapply(object, get.HiTObject,
-                            group.by = c("scGate_multi", "functional.cluster"))
+                            group.by = group.by)
   }
 
   # if list is of 1, return object not list
-  if(length(object)==1){
-    object <- object[[1]]
-  }
 
   if (!is.null(object)) {
     if(return.Seurat){
@@ -324,7 +342,7 @@ Run.HiTME <- function(object = NULL,
 get.celltype.composition <- function(object = NULL,
                               dir = NULL,
                               split.by = NULL,
-                              group.by.composition = "scGate_multi",
+                              group.by.composition = NULL,
                               min.cells = 10,
                               useNA = FALSE,
                               rename.Multi.to.NA = TRUE,
