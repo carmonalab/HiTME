@@ -9,7 +9,7 @@ ProjecTILs.classifier.multi <- function(object,
     filter.cells <- F
     map.celltypes <- lapply(ref.maps,
                             function(x){
-                              ct <- x@misc$scGate_link
+                              ct <- x@misc$layer1_link
                               nrow(object@meta.data[object@meta.data[[layer1]] %in% ct,])
                               })
     present <- names(ref.maps[map.celltypes > 0])
@@ -26,18 +26,19 @@ ProjecTILs.classifier.multi <- function(object,
 
     message("Not scGate classification found in this object\n",
             "Running default scGate (or layer1 classification) filtering within Projectils)")
+    present <- "default"
   }
 
-  if(length(ref.maps) == 0){
-    stop(paste("No cells linked to reference maps found by", layer1, ". Not running Projectils."))
-  }
+  if(length(present) == 0){
+    warning(paste("No cells linked to reference maps found by", layer1, ". Not running Projectils."))
+  } else {
 
   functional.clusters <-
     BiocParallel::bplapply(
       X = names(ref.maps),
       BPPARAM = param,
       FUN = function(m){
-        map.celltype <- ref.maps[[m]]@misc$scGate_link
+        map.celltype <- ref.maps[[m]]@misc$layer1_link
         subset.object <- object[,object@meta.data[[layer1]] %in% map.celltype]
 
         if(ncol(subset.object)>0){
@@ -68,6 +69,7 @@ ProjecTILs.classifier.multi <- function(object,
 
   # save names of reference maps run
   object@misc[["Projectils_param"]] <- names(ref.maps)
+  }
 
 
   return(object)
@@ -167,8 +169,8 @@ get.HiTObject <- function(object,
   setClass(Class = "layer1",
            slots = list(
              UCell_score = "data.frame",
-             scGate_is.pure = "data.frame",
-             scGate_multi = "data.frame",
+             layer1_is.pure = "data.frame",
+             layer1_multi = "data.frame",
              additional.signatures = "ANY"
            )
   )
@@ -176,18 +178,18 @@ get.HiTObject <- function(object,
 
   setClass(Class = "layer2",
            slots = list(
-             functional.cluster = "data.frame"
+             layer2_functional.cluster = "data.frame"
            )
            )
 
   # extract values from misc slot from object
-  additional.signatures <- object@misc$scGate_param$scGate_additional.signatures
-  scgate.models <- object@misc$scGate_param$scGate_models
+  additional.signatures <- object@misc$layer1_param$additional.signatures
+  scgate.models <- object@misc$layer1_param$layer1_models
 
     sig <- grep(paste(additional.signatures, collapse = "|"),
                 names(object@meta.data), value = T)
     sig.df <- object@meta.data[, sig]
-    scgate <- grep(paste(scgate.models, collapse = "|"),
+    scgate <- grep(paste(scgate.models, collapse = "$|"),
                   names(object@meta.data), value = T)
     scgate.df <- object@meta.data[, scgate]
 
@@ -202,14 +204,14 @@ get.HiTObject <- function(object,
   # build scgate S4 object
   layer1.s4 <- new(Class = "layer1",
                    UCell_score = ucell.df,
-                   scGate_is.pure = scgate.df,
-                   scGate_multi = object@meta.data[,grep("scGate_multi", names(object@meta.data)), drop = F],
+                   layer1_is.pure = scgate.df,
+                   layer1_multi = object@meta.data[,grep(group.by[1], names(object@meta.data)), drop = F],
                    additional.signatures = sig.df
                    )
 
   # Create empty s4 object to fill next
   layer2.s4 <- new(Class = "layer2",
-                       functional.cluster = object@meta.data[,grep("functional.cluster", names(object@meta.data)), drop = F])
+                       layer2_functional.cluster = object@meta.data[,grep(group.by[2], names(object@meta.data)), drop = F])
 
 
   # Compute proportions
@@ -220,12 +222,16 @@ get.HiTObject <- function(object,
   avg.expr <- get.aggregated.profile(object,
                                 group.by.aggregated = group.by.aggregated)
 
+  aggr.signature <- get.aggregated.signature(object,
+                                             group.by.aggregated = group.by.aggregated)
+
 
   hit <- new("HiT",
              metadata = object@meta.data,
              predictions = list("layer1" = layer1.s4,
                                 "layer2" = layer2.s4),
-             aggregated_profile = avg.expr,
+             aggregated_profile = list("Gene expression" = avg.expr,
+                                       "Signatures" = aggr.signature),
              composition = comp.prop
              )
 
@@ -379,3 +385,38 @@ GetGOList <- function(GO_accession = NULL,
 }
 
 
+get.aggregated.signature <- function(object,
+                                     group.by.aggregated = NULL,
+                                     additional.signatures = NULL){
+
+  if(is.null(group.by.aggregated)){
+    stop("Please provide groping variable for aggregation")
+  }
+
+  if(is.null(additional.signatures)){
+  additional.signatures <- object@misc$layer1_param$additional.signatures
+  }
+
+  if(is.null(additional.signatures)){
+    stop("Please provide additional signatures")
+  }
+
+  if(!any(grepl(paste(additional.signatures, collapse = "|"),
+                names(object@meta.data)))){
+    stop("No additional signatures found in this object metadata")
+  }
+
+  add.sig.cols <- grep(paste(additional.signatures, collapse = "|"),
+                        names(object@meta.data), value = T)
+
+  aggr.sig <- list()
+
+  for(e in group.by.aggregated){
+    aggr.sig[[e]] <- object@meta.data %>%
+      group_by(.data[[e]]) %>%
+      summarize_at(add.sig.cols, mean, na.rm = T)
+  }
+
+  return(aggr.sig)
+
+}
