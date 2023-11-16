@@ -127,7 +127,8 @@ Run.HiTME <- function(object = NULL,
     message("Huge Seurat object, reducing number of cores to avoid memory issues to", ncores)
   }
 
-  # set paralelization parameters for scGate
+
+  # set paralelization parameters
   if (is.null(bparam)) {
     if (ncores>1) {
       param <- BiocParallel::MulticoreParam(workers =  ncores, progressbar = progressbar)
@@ -138,9 +139,6 @@ Run.HiTME <- function(object = NULL,
     param <- bparam
   }
 
-
-
-
   # Either:
   # - The input is a single Seurat object
   # - The input is a list of Seurat objects
@@ -149,6 +147,7 @@ Run.HiTME <- function(object = NULL,
   # Run scGate, if model is provided
   if (!is.null(scGate.model)) {
     message("Running scGate\n")
+
 
     # Retrieve default scGate models if default
     if(!is.list(scGate.model) && tolower(scGate.model) == "default"){
@@ -225,6 +224,8 @@ Run.HiTME <- function(object = NULL,
       )
     }
 
+  # close paralel cores
+  BiocParallel::bpstop()
 
 
     message("Finished scGate\n####################################################\n")
@@ -246,7 +247,7 @@ Run.HiTME <- function(object = NULL,
             }
             x <- ProjecTILs.classifier.multi(x,
                                              ref.maps = ref.maps,
-                                             param = param)
+                                             bparam = param)
             return(x)
           }
         )
@@ -263,7 +264,7 @@ Run.HiTME <- function(object = NULL,
             }
             x <- ProjecTILs.classifier.multi(x,
                                              ref.maps = ref.maps,
-                                             param = param)
+                                             bparam = param)
             saveRDS(x, path)
           }
         )
@@ -272,6 +273,9 @@ Run.HiTME <- function(object = NULL,
   } else {
     message("Not running reference mapping as no reference maps were indicated.\n")
   }
+
+  # close paralel cores
+  BiocParallel::bpstop()
 
 
   if (is.list(object)) {

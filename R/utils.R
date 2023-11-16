@@ -1,7 +1,7 @@
 # projectils on multiple reference maps
 ProjecTILs.classifier.multi <- function(object,
                                         ref.maps,
-                                        param = param,
+                                        bparam = NULL,
                                         layer1 = "scGate_multi"){
 
   # count how many cells are found by scGate for each map reference
@@ -33,10 +33,11 @@ ProjecTILs.classifier.multi <- function(object,
     warning(paste("No cells linked to reference maps found by", layer1, ". Not running Projectils."))
   } else {
 
+
   functional.clusters <-
     BiocParallel::bplapply(
       X = names(ref.maps),
-      BPPARAM = param,
+      BPPARAM = bparam,
       FUN = function(m){
         map.celltype <- ref.maps[[m]]@misc$layer1_link
         subset.object <- object[,object@meta.data[[layer1]] %in% map.celltype]
