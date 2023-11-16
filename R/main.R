@@ -3,7 +3,6 @@
 #' Run HitME: classify cells
 #'
 #' @param object A seurat object or a list of seurat objects
-#' @param dir The directory where your sample .rds files(seurat objects) are located
 #' @param scGate.model The scGate model to use (use get_scGateDB() to get a list of available models)
 #' @param ref.maps A named list of the ProjecTILs reference maps to use
 #' @param split.by A Seurat object metadata column to split by (e.g. sample names)
@@ -16,6 +15,7 @@
 #'
 #' @importFrom BiocParallel MulticoreParam bplapply
 #' @importFrom parallelly availableCores
+#' @importFrom dplyr mutate %>%
 #' @importFrom scGate scGate
 #' @importFrom SignatuR SignatuR
 #' @importFrom ProjecTILs ProjecTILs.classifier
@@ -39,14 +39,13 @@
 #'                  CD4 = load.reference.map(file.path(path_ref, "CD4T_human_ref_v2.rds")),
 #'                  DC = load.reference.map(file.path(path_ref, "DC_human_ref_v1.rds")),
 #'                  MoMac = load.reference.map(file.path(path_ref, "MoMac_human_v1.rds")))
-#' Run.HiTME(dir = path_data,
-#'                scGate.model = models.TME,
-#'                ref.maps = ref.maps,
-#'                ncores = 6)
+#' Run.HiTME(object = seurat.object,
+#'           scGate.model = models.TME,
+#'           ref.maps = ref.maps,
+#'           ncores = 6)
 #'
 
 Run.HiTME <- function(object = NULL,
-                       dir = NULL,
                        scGate.model = "default",
                        scGate.model.branch = c("master", "dev"),
                        ref.maps = NULL,
@@ -58,15 +57,12 @@ Run.HiTME <- function(object = NULL,
                        return.Seurat = FALSE,
                        bparam = NULL,
                        ncores = parallelly::availableCores() - 2,
+                       paralelize.list = FALSE,
                        progressbar = TRUE,
                        ...){
 
-  if (is.null(object) & is.null(dir)) {
-    stop("Please provide either a Seurat object or a directory with rds files")
-  }
-
-  if (!is.null(object) & !is.null(dir)) {
-    stop("Cannot provide both object and directory")
+  if (is.null(object)) {
+    stop("Please provide a Seurat object or a list of them")
   }
 
   if (!is.null(ref.maps)) {
@@ -84,14 +80,6 @@ Run.HiTME <- function(object = NULL,
     }
     object <- Seurat::SplitObject(object, split.by = split.by)
 
-  }
-
-  if (!is.null(dir)) {
-    files <- list.files(dir,
-                        pattern = "[.]rds$")
-
-    # when running from directory only return seurat object
-    return.Seurat <- TRUE
   }
 
   # adapt species
@@ -116,6 +104,10 @@ Run.HiTME <- function(object = NULL,
     object <- list(object)
   }
 
+  if(is.null(ncores)){
+    ncores <- 1
+  }
+
   if(ncores >= parallelly::availableCores()){
     ncores <- parallelly::availableCores() - 1
     message("Using all or more cores available in this computer, reducing number of cores to ", ncores)
@@ -128,41 +120,51 @@ Run.HiTME <- function(object = NULL,
   }
 
 
-  # set paralelization parameters
+  ## set paralelization parameters
+  # Run scGate and projectils internally in paralel if the number of objects is lower than the number of reference maps
+  # if otherwise, run each object in paralel with setting serial internally.
+
   if (is.null(bparam)) {
-    if (ncores>1) {
-      param <- BiocParallel::MulticoreParam(workers =  ncores, progressbar = progressbar)
+    bparam <- BiocParallel::MulticoreParam(workers =  ncores, progressbar = progressbar)
+  }
+
+  if (ncores>1) {
+    if(paralelize.list){
+      param <- BiocParallel::SerialParam()
+      list.param <- bparam
     } else {
-      param <- SerialParam()
+      param <- bparam
+      list.param <- BiocParallel::SerialParam()
     }
   } else {
-    param <- bparam
-  }
+    list.param <- BiocParallel::SerialParam()
+    param <- BiocParallel::SerialParam()
+    }
+
 
   # Either:
   # - The input is a single Seurat object
   # - The input is a list of Seurat objects
-  # - The input is directory containing multiple .rds files (each a single object)
 
   # Run scGate, if model is provided
-  if (!is.null(scGate.model)) {
-    message("Running scGate\n")
+  if(!is.null(scGate.model)) {
+    message("## Running scGate\n")
 
 
     # Retrieve default scGate models if default
-    if(!is.list(scGate.model) && tolower(scGate.model) == "default"){
+    if(is.character(scGate.model) && tolower(scGate.model) == "default"){
       if(species == "human"){
         scGate.model <- scGate::get_scGateDB(branch = scGate.model.branch,
-                                             force_update = T)[[species]][["TME_HiRes"]]
+                                             force_update = T)[[species]][["HiTME"]]
       } else if(species == "mouse"){
         scGate.model <- scGate::get_scGateDB(branch = scGate.model.branch,
-                                             force_update = T)[[species]][["generic"]]
+                                             force_update = T)[[species]][["HiTME"]]
       }
       message(" - Running scGate model for ", paste(names(scGate.model), collapse = ", "), "\n")
     }
 
     # based on species get SignatuR signatures
-    if(!is.list(additional.signatures) && tolower(additional.signatures) == "default"){
+    if(is.character(additional.signatures) && tolower(additional.signatures) == "default"){
       if(species == "human"){
         sig.species <- "Hs"
       } else if(species == "mouse"){
@@ -173,60 +175,31 @@ Run.HiTME <- function(object = NULL,
     }
 
   ## Run scGate
-  if (is.list(object)) {
-      object <- lapply(
-        X = object,
-        FUN = function(x) {
-          if(class(x) != "Seurat"){
-            stop("Not Seurat object included, cannot be processed.\n")
-          }
-          x <- scGate::scGate(x,
-                              model=scGate.model,
-                              additional.signatures = additional.signatures,
-                              BPPARAM = param)
-          # convert multi to NA
-          x@meta.data <-
-            x@meta.data %>% dplyr::mutate(scGate_multi = ifelse(scGate_multi == "Multi",
-                                                            NA, scGate_multi))
+    object <- BiocParallel::bplapply(
+              X = object,
+              BPPARAM = list.param,
+              FUN = function(x) {
+                    if(class(x) != "Seurat"){
+                      stop("Not Seurat object included, cannot be processed.\n")
+                    }
+                    x <- scGate::scGate(x,
+                                        model=scGate.model,
+                                        additional.signatures = additional.signatures,
+                                        BPPARAM = param)
 
-          x@misc[["layer1_param"]] <- list()
-          x@misc[["layer1_param"]][["layer1_models"]] <- names(scGate.model)
-          x@misc[["layer1_param"]][["additional.signatures"]] <- names(additional.signatures)
-          return(x)
-        }
-      )
-    } else if (!is.null(dir)) { # If input is directory
-      lapply(
-        X = files,
-        FUN = function(file) {
-          path <- file.path(dir, file)
-          x <- readRDS(path)
-          if(class(x) != "Seurat"){
-            stop("Not Seurat object included, cannot be processed.\n")
-          }
-          x <- scGate::scGate(x,
-                              model= scGate.model,
-                              additional.signatures = additional.signatures,
-                              BPPARAM = param)
+                    # convert multi to NA
+                    x@meta.data <-
+                      x@meta.data %>% dplyr::mutate(scGate_multi = ifelse(scGate_multi == "Multi",
+                                                                          NA,
+                                                                          scGate_multi))
 
-          # convert multi to NA
-          x@meta.data <-
-            x@meta.data %>% dplyr::mutate(scGate_multi = ifelse(scGate_multi == "Multi",
-                                                            NA, scGate_multi))
+                    x@misc[["layer1_param"]] <- list()
+                    x@misc[["layer1_param"]][["layer1_models"]] <- names(scGate.model)
+                    x@misc[["layer1_param"]][["additional.signatures"]] <- names(additional.signatures)
 
-          x@misc[["layer1_param"]] <- list()
-          x@misc[["layer1_param"]][["layer1_models"]] <- names(scGate.model)
-          x@misc[["layer1_param"]][["additional.signatures"]] <- names(additional.signatures)
-          return(x)
-
-          saveRDS(x, path)
-        }
-      )
-    }
-    # close paralel cores
-    BiocParallel::bpstop(param)
-
-
+                    return(x)
+              }
+    )
 
     message("Finished scGate\n####################################################\n")
   } else {
@@ -234,49 +207,29 @@ Run.HiTME <- function(object = NULL,
   }
 
 
+
   # Run ProjecTILs if ref.maps is provided
   if (!is.null(ref.maps)) {
-    # Run each map in paralel
+      message("## Running Projectils\n")
 
-      if (is.list(object)) {
-        object <- lapply(
-          X = object,
-          FUN = function(x) {
-            if(class(x) != "Seurat"){
-              stop("Not Seurat object included, cannot be processed.\n")
-            }
-            x <- ProjecTILs.classifier.multi(x,
-                                             ref.maps = ref.maps,
-                                             bparam = param)
-            return(x)
-          }
+        object <- BiocParallel::bplapply(
+                  X = object,
+                  BPPARAM = list.param,
+                  FUN = function(x) {
+                    if(class(x) != "Seurat"){
+                      stop("Not Seurat object included, cannot be processed.\n")
+                    }
+                    x <- ProjecTILs.classifier.multi(x,
+                                                     ref.maps = ref.maps,
+                                                     bparam = param)
+                    return(x)
+                  }
         )
 
-        # If input is directory
-      } else if (!is.null(dir)) {
-        lapply(
-          X = files,
-          FUN = function(file) {
-            path <- file.path(dir, file)
-            x <- readRDS(path)
-            if(class(x) != "Seurat"){
-              stop("Not Seurat object included, cannot be processed.\n")
-            }
-            x <- ProjecTILs.classifier.multi(x,
-                                             ref.maps = ref.maps,
-                                             bparam = param)
-            saveRDS(x, path)
-          }
-        )
-      }
-    # close paralel cores
-    BiocParallel::bpstop(param)
     message("Finished Projectils\n####################################################\n")
   } else {
     message("Not running reference mapping as no reference maps were indicated.\n")
   }
-
-
 
 
   if (is.list(object)) {
@@ -289,8 +242,14 @@ Run.HiTME <- function(object = NULL,
   }
 
   if(!return.Seurat){
-      hit <- lapply(object, get.HiTObject,
-                            group.by = group.by)
+      hit <- BiocParallel::bplapply(
+              X = object,
+              BPPARAM = list.param,
+              FUN = function(x) {
+                x <- get.HiTObject(x,
+                                   group.by = group.by)
+                }
+        )
   }
 
   # if list is of 1, return object not list
@@ -458,7 +417,6 @@ get.HiTObject <- function(object,
 #' Calculate cell type composition
 #'
 #' @param object A seurat object or a list of seurat objects
-#' @param dir Directory containing the sample .rds files
 #' @param split.by A Seurat object metadata column to split by (e.g. sample names)
 #' @param group.by.composition The Seurat object metadata column(s) containing celltype annotations (provide as character vector, containing the metadata column name(s))
 #' @param min.cells Set a minimum threshold for number of cells to calculate relative abundance (e.g. less than 10 cells -> no relative abundnace will be calculated)
@@ -486,15 +444,14 @@ get.HiTObject <- function(object,
 #' # Calculate sample-wise composition
 #' celltype.compositions.sample_wise <- get.celltype.composition(object = panc8, group.by.composition = "celltype", split.by = "orig.ident")
 get.celltype.composition <- function(object = NULL,
-                                     dir = NULL,
                                      split.by = NULL,
                                      group.by.composition = NULL,
                                      min.cells = 10,
                                      useNA = FALSE,
                                      clr_zero_impute_perc = 1) {
 
-  if (!is.null(object) & !is.null(dir)) {
-    stop(paste("Cannot provide object and dir"))
+  if (is.null(object)) {
+    stop("Please provide a Seurat object or a list of them")
   }
 
   if (length(group.by.composition) == 1) {
@@ -517,7 +474,7 @@ get.celltype.composition <- function(object = NULL,
   # Either:
   # - The input is a single Seurat object
   # - The input is a list of Seurat objects
-  # - The input is directory containing multiple .rds files (each a single object)
+
   if (isS4(object)) { # Input is a single Seurat object
     for (i in 1:length(group.by.composition)) {
       if (length(object@meta.data[[group.by.composition[[i]]]]) == 0) {
@@ -560,10 +517,7 @@ get.celltype.composition <- function(object = NULL,
 
     if (is.list(object)) {
       object_names <- names(object)
-    } else if (!is.null(dir)) {
-      files <- list.files(dir, pattern = "[.]rds$")
-      object_names <- stringr::str_remove_all(files, '.rds')
-    }
+
 
     # For each object calculate the comp_table (cell_counts) for each celltype (annot.col)
     # This is done per sample in order to load every sample only once, if a directory is provided as input
@@ -635,6 +589,7 @@ get.celltype.composition <- function(object = NULL,
     }
   }
   return(celltype.compositions)
+  }
 }
 
 ### Function to compute average expression
