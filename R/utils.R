@@ -99,7 +99,7 @@ match_dictionary <- function(cell_type,
               "^Endo" = "Endothelial",
               "Neutro" = "Neutrophil",
               "Strom" = "Stromal"
-    )
+            )
   }
 
   for (keyword in names(dict)) {
@@ -112,8 +112,7 @@ match_dictionary <- function(cell_type,
 }
 
 # complete function applying previous function with sapply to all vector
-StandardizeCellNames <- function(cell.names,
-                                 dictionary = dict){
+StandardizeCellNames <- function(cell.names, dict = NULL){
 
   standarized_cellnames <- sapply(cell.names,
                                   match_dictionary,
