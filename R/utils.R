@@ -2,16 +2,19 @@
 ProjecTILs.classifier.multi <- function(object,
                                         ref.maps,
                                         bparam = NULL,
-                                        layer1 = "scGate_multi"){
+                                        layer1_link = "CellOntology_ID"){
 
   # count how many cells are found by scGate for each map reference
-  if(layer1 %in% names(object@meta.data)){
+  if(layer1_link %in% names(object@meta.data)){
     filter.cells <- F
     map.celltypes <- lapply(ref.maps,
                             function(x){
                               ct <- x@misc$layer1_link
-                              nrow(object@meta.data[object@meta.data[[layer1]] %in% ct,])
-                              })
+                              # collpase if multiple cell types, such as MoMac
+                              if(length(ct)>1){ct <- paste(ct, collapse = "_")}
+
+                              nrow(object@meta.data[object@meta.data[[layer1_link]] %in% ct,])
+                            })
     present <- names(ref.maps[map.celltypes > 0])
     no.present <- names(ref.maps)[!names(ref.maps) %in% present]
 
@@ -30,46 +33,46 @@ ProjecTILs.classifier.multi <- function(object,
   }
 
   if(length(present) == 0){
-    warning(paste("No cells linked to reference maps found by", layer1, ". Not running Projectils."))
+    warning(paste("No cells linked to reference maps found by", layer1_link, ". Not running Projectils."))
   } else {
 
 
-  functional.clusters <-
-    BiocParallel::bplapply(
-      X = names(ref.maps),
-      BPPARAM = bparam,
-      FUN = function(m){
-        map.celltype <- ref.maps[[m]]@misc$layer1_link
-        subset.object <- object[,object@meta.data[[layer1]] %in% map.celltype]
+    functional.clusters <-
+      BiocParallel::bplapply(
+        X = names(ref.maps),
+        BPPARAM = bparam,
+        FUN = function(m){
+          map.celltype <- ref.maps[[m]]@misc$layer1_link
+          subset.object <- object[,object@meta.data[[layer1_link]] %in% map.celltype]
 
-        if(ncol(subset.object)>0){
-          message("\nRunning Projectils for", paste(map.celltype, collapse = ", "), " celltypes")
+          if(ncol(subset.object)>0){
+            message("\nRunning Projectils for", paste(map.celltype, collapse = ", "), " celltypes")
 
-          data("Hs2Mm.convert.table")
-          # it is mandatory to make run in serial (ncores = 1 and BPPARAM SerialParam)
-          subset.object.pred <- ProjecTILs:::classifier.singleobject(subset.object,
-                                                             ref = ref.maps[[m]],
-                                                              filter.cells = filter.cells,
-                                                             ncores = 1)
+            data("Hs2Mm.convert.table")
+            # it is mandatory to make run in serial (ncores = 1 and BPPARAM SerialParam)
+            subset.object.pred <- ProjecTILs:::classifier.singleobject(subset.object,
+                                                                       ref = ref.maps[[m]],
+                                                                       filter.cells = filter.cells,
+                                                                       ncores = 1)
 
-          return(subset.object.pred)
+            return(subset.object.pred)
 
-        } else {
-          message("Not Running Projectils classifier for reference map",
-                  paste(map.celltype, collapse = ", "), ". No cells found")
+          } else {
+            message("Not Running Projectils classifier for reference map",
+                    paste(map.celltype, collapse = ", "), ". No cells found")
+          }
         }
-      }
-  )
+      )
 
 
-  functional.clusters <- data.table::rbindlist(lapply(functional.clusters,
-                                          setDT, keep.rownames = TRUE)) %>%
-                          tibble::column_to_rownames("rn")
-  object@meta.data <- merge(object@meta.data, functional.clusters, by = 0, all.x = T) %>%
+    functional.clusters <- data.table::rbindlist(lapply(functional.clusters,
+                                                        setDT, keep.rownames = TRUE)) %>%
+      tibble::column_to_rownames("rn")
+    object@meta.data <- merge(object@meta.data, functional.clusters, by = 0, all.x = T) %>%
                         tibble::column_to_rownames("Row.names")
 
-  # save names of reference maps run
-  object@misc[["Projectils_param"]] <- names(ref.maps)
+    # save names of reference maps run
+    object@misc[["Projectils_param"]] <- names(ref.maps)
   }
 
 
@@ -81,9 +84,9 @@ ProjecTILs.classifier.multi <- function(object,
 
 # function to match words with grep
 match_dictionary <- function(cell_type,
-                             dict = NULL) {
+                             dictionary = NULL) {
 
-  if(is.null(dict)){
+  if(is.null(dictionary)){
     dict <- c("^T|CTL" = "T cell",
               "^B|B$" = "B cell",
               "^NK" = "NK",
@@ -99,7 +102,7 @@ match_dictionary <- function(cell_type,
               "^Endo" = "Endothelial",
               "Neutro" = "Neutrophil",
               "Strom" = "Stromal"
-            )
+    )
   }
 
   for (keyword in names(dict)) {
@@ -112,11 +115,11 @@ match_dictionary <- function(cell_type,
 }
 
 # complete function applying previous function with sapply to all vector
-StandardizeCellNames <- function(cell.names, dict = NULL){
+StandardizeCellNames <- function(cell.names, dictionary = NULL){
 
   standarized_cellnames <- sapply(cell.names,
                                   match_dictionary,
-                                  dict)
+                                  dictionary)
   standarized_cellnames <- unname(standarized_cellnames)
   return(standarized_cellnames)
 
@@ -153,9 +156,9 @@ GetGOList <- function(GO_accession = NULL,
   }
   species <- tolower(species)
   if(grepl("homo|sapi|huma", species)){
-      dataset <- "hsapiens_gene_ensembl"
+    dataset <- "hsapiens_gene_ensembl"
   } else if (grepl("mice|mus", species)){
-      dataset <- "mmusculus_gene_ensembl"
+    dataset <- "mmusculus_gene_ensembl"
   } else {
     stop("Only supported species are human and mouse")
   }
