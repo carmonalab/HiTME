@@ -256,10 +256,10 @@ ref.maps <- list(CD8 = load.reference.map(file.path(path_ref, "CD8T_human_ref_v1
           MoMac = load.reference.map(file.path(path_ref, "MoMac_human_v1.rds"))) 
 
 # add scGate_link to ref.maps
-layer1.links <- list("CD8" = "CD8T",
-                  "CD4" = "CD4T",
-                  "DC" = "panDC",
-                  "MoMac" = c("Monocyte", "Macrophage")
+layer1.links <- list("CD8" = "CL:0000625",
+                  "CD4" = "CL:0000624",
+                  "DC" = "CL:0000451",
+                  "MoMac" = c("CL:0000576_CL:0000235")
                   )
 for(a in names(ref.maps)){
   ref.maps[[a]]@misc$layer1_link <- layer1.links[[a]]
@@ -345,72 +345,32 @@ saveRDS(hit.list, "cache/20hit_annotated.rds")
 ## Test new version
 ```{r}
 sys.Yuan <- system.time(
-test <- Run.HiTME(seu$Galen_2019_30827681,
-                  ref.maps = ref.maps,
+test <- Run.HiTME(seu$Galen_2019_30827681[,1:5000],
+                  scGate.model.branch = "dev",
                   return.Seurat = F,
-                  group.by = c("scGate_multi", "functional.cluster"),
+                  ref.maps = ref.maps,
                   ncores = 9)
 )
 
 #.bpstop_impl(param)
 
 hit <- get.HiTObject(test,
-                     group.by = c("scGate_multi", "functional.cluster")
+                     group.by = list("layer1" = "scGate_multi",
+                                          "layer2" = "functional.cluster",
+                                     "layer1.2" =  "annotation_chetah",
+                                     "layer0" = "baba"
+                                          )
                      )
 
 avg <- get.aggregated.profile(object,
-                                group.by.aggregated = c("scGate_multi", "functional.cluster"))
+                                group.by.aggregated = c("scGate_multi", "functional.cluster"),gene.filter = c("IL10", "CXCR5"))
 
 prop <- get.celltype.composition(object,
-                                 group.by.composition = c("scGate_multi", "functional.cluster"))
+                                 group.by.composition = list("eso" = "scGate_multi",
+                                                          "peroque" = "functional.cluster",
+                                                          "baba"),
+                                 split.by = "group")
+
+agg.sig <- get.aggregated.signature(object,
+                                group.by.aggregated = c("scGate_multi", "functional.cluster", "baba"), fun = sum)
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
