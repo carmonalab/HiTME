@@ -147,17 +147,41 @@ Run.HiTME <- function(object = NULL,
   }
 
 
-  # Either:
-  # - The input is a single Seurat object
-  # - The input is a list of Seurat objects
+  # Get default additional signatures
+  # based on species get SignatuR signatures
+  if(!is.null(additional.signatures)){
+    # convert to list if not
+    if(!is.list(additional.signatures)){
+      additional.signatures <- list(additional.signatures)
+    }
+
+    if(length(additional.signatures) == 1 && tolower(additional.signatures) == "default"){
+      if(species == "human"){
+        sig.species <- "Hs"
+      } else if(species == "mouse"){
+        sig.species <- "Mm"
+      }
+      additional.signatures <- SignatuR::GetSignature(SignatuR[[sig.species]][["Programs"]])
+      message(" - Adding additional signatures: ", paste(names(additional.signatures), collapse = ", "), "\n")
+    } else {
+      for(v in seq_along(additional.signatures)){
+        if(is.null(names(additional.signatures)[[v]])){
+          names(additional.signatures)[[v]] <- paste0("Additional_signature", v)
+        }
+      }
+    }
+  }
 
   # Run scGate, if model is provided
   if(!is.null(scGate.model)) {
     message("## Running scGate\n")
 
+    if(!is.list(scGate.model)){
+      scGate.model <- list(scGate.model)
+    }
 
     # Retrieve default scGate models if default
-    if(is.character(scGate.model) && tolower(scGate.model) == "default"){
+    if(length(scGate.model) == 1 && tolower(scGate.model) == "default"){
       if(species == "human"){
         scGate.model <- scGate::get_scGateDB(branch = scGate.model.branch,
                                              force_update = T)[[species]][["HiTME"]]
@@ -168,16 +192,7 @@ Run.HiTME <- function(object = NULL,
       message(" - Running scGate model for ", paste(names(scGate.model), collapse = ", "), "\n")
     }
 
-    # based on species get SignatuR signatures
-    if(is.character(additional.signatures) && tolower(additional.signatures) == "default"){
-      if(species == "human"){
-        sig.species <- "Hs"
-      } else if(species == "mouse"){
-        sig.species <- "Mm"
-      }
-      additional.signatures <- SignatuR::GetSignature(SignatuR[[sig.species]][["Programs"]])
-      message(" - Adding additional signatures: ", paste(names(additional.signatures), collapse = ", "), "\n")
-    }
+
 
   ## Run scGate
     object <- lapply(
@@ -205,6 +220,32 @@ Run.HiTME <- function(object = NULL,
     message("Finished scGate\n####################################################\n")
   } else {
     message("Not running coarse cell type classification as no scGate model was indicated.\n")
+  }
+
+    # Instance if we want to run additional signatures but not scGate
+  if(is.null(scGate.model) && !is.null(additional.signatures)){
+
+  message("Running additional Signatures but not Running scGate classification\n")
+  object <- lapply(
+    X = object,
+    FUN = function(x) {
+      if(class(x) != "Seurat"){
+        stop("Not Seurat object included, cannot be processed.\n")
+      }
+        x <- UCell::AddModuleScore_UCell(x,
+                                        features = additional.signatures,
+                                        BPPARAM = param,
+                                        ...)
+
+
+      x@misc[["layer1_param"]] <- list()
+      x@misc[["layer1_param"]][["additional.signatures"]] <- names(additional.signatures)
+
+      return(x)
+    }
+  )
+
+
   }
 
 
@@ -243,20 +284,23 @@ Run.HiTME <- function(object = NULL,
   }
 
   # if group.by parameters are not present in metadata, return Seurat
-  if(!all(lapply(object, function(x){any(names(x@meta.data) %in% group.by)}))){
-    message("None of the 'group.by' variables found, returning Seurat object not HiT object.")
-    return.Seurat <- TRUE
+  if(!return.Seurat){
+    if(!all(lapply(object, function(x){any(names(x@meta.data) %in% group.by)}))){
+      message("None of the 'group.by' variables found, returning Seurat object not HiT object.")
+      return.Seurat <- TRUE
+    } else {
+      hit <- lapply(
+        X = object,
+        FUN = function(x) {
+          x <- get.HiTObject(x,
+                             group.by = group.by,
+                             split.by = split.by,
+                             ...)
+        }
+      )
+    }
   }
 
-  if(!return.Seurat){
-      hit <- lapply(
-              X = object,
-              FUN = function(x) {
-                x <- get.HiTObject(x,
-                                   group.by = group.by)
-                }
-        )
-  }
 
   # if list is of 1, return object not list
 
