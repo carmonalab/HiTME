@@ -29,7 +29,6 @@ ProjecTILs.classifier.multi <- function(object,
 
     message("Not scGate classification found in this object\n",
             "Running default scGate (or layer1 classification) filtering within Projectils)")
-    present <- "default"
   }
 
   if(length(present) == 0){
@@ -42,11 +41,16 @@ ProjecTILs.classifier.multi <- function(object,
         X = names(ref.maps),
         BPPARAM = bparam,
         FUN = function(m){
+          if(filter.cells){
+            # don't subset if no scGate gating is found in metadata, instead run scGate within projectils
+            subset.object <- object
+          } else {
           map.celltype <- ref.maps[[m]]@misc$layer1_link
           subset.object <- object[,object@meta.data[[layer1_link]] %in% map.celltype]
+          message("\nRunning Projectils for", paste(map.celltype, collapse = ", "), " celltypes")
+          }
 
           if(ncol(subset.object)>0){
-            message("\nRunning Projectils for", paste(map.celltype, collapse = ", "), " celltypes")
 
             data("Hs2Mm.convert.table")
             # it is mandatory to make run in serial (ncores = 1 and BPPARAM SerialParam)
@@ -67,7 +71,7 @@ ProjecTILs.classifier.multi <- function(object,
 
     functional.clusters <- data.table::rbindlist(lapply(functional.clusters,
                                                         setDT, keep.rownames = TRUE)) %>%
-      tibble::column_to_rownames("rn")
+                            tibble::column_to_rownames("rn")
     object@meta.data <- merge(object@meta.data, functional.clusters, by = 0, all.x = T) %>%
                         tibble::column_to_rownames("Row.names")
 
