@@ -2,7 +2,7 @@
 % Please edit documentation in R/main.R
 \name{Run.HiTME}
 \alias{Run.HiTME}
-\title{Run HitME: classify cells}
+\title{Classify cells using scGate and ProjecTILs.}
 \usage{
 Run.HiTME(
   object = NULL,
@@ -25,17 +25,17 @@ Run.HiTME(
 \arguments{
 \item{object}{A seurat object or a list of seurat objects}
 
-\item{scGate.model}{The scGate model to use (use get_scGateDB() to get a list of available models), by default fetch the HiTME models: \code{ scGate::get_scGateDB(branch = scGate.model.branch,)[[species]][["HiTME"]]}.}
+\item{scGate.model}{The scGate model to use (use get_scGateDB() to get a list of available models), by default fetch the HiTME models: \code{ scGate::get_scGateDB(branch = scGate.model.branch)[[species]][["HiTME"]]}.}
 
 \item{scGate.model.branch}{From which branch Run.HiTME fetch the scGate models, by default models are retrieved from \code{master} branch.}
 
 \item{additional.signatures}{UCell additional signatures to compute on each cell, by default \code{SignatuR} Programs are included.}
 
-\item{ref.maps}{A named list of the ProjecTILs reference maps to use.}
+\item{ref.maps}{A named list of the ProjecTILs reference maps to use. They ought to be Seurat objects. It is recommended to add in reference object slost \code{misc} the identifier connecting to layer 1 classification (scGate): \code{ref.map@misc$layer1_link}}
 
 \item{split.by}{A Seurat object metadata column to split by (e.g. sample names).}
 
-\item{layer1_link}{Column of metadata linking layer1 prediction in order to perform subsetting for second layer classification.}
+\item{layer1_link}{Column of metadata linking layer1 prediction (e.g. scGate ~ scGate_multi) in order to perform subsetting for second layer classification.}
 
 \item{return.Seurat}{Whether to return a Hit object or add the data into Seurat object metadata}
 
@@ -52,10 +52,10 @@ Run.HiTME(
 \item{progressbar}{Whether to show a progressbar or not}
 }
 \value{
-No return in R. The input files will be overwritten.
+Seurat object with additional metadata showing cell type classification, or HiT object summarizing such classification.
 }
 \description{
-Run HitME: classify cells
+Classify cells using scGate and ProjecTILs.
 }
 \examples{
 library(ProjecTILs)

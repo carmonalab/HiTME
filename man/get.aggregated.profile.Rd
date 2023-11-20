@@ -41,8 +41,8 @@ cytokine receptors (GO:0004896), chemokines (GO:0008009), and chemokines recepto
 \item{...}{Extra parameters for internal Seurat functions: AverageExpression, AggregateExpression, FindVariableFeatures}
 }
 \value{
-Average and aggregated expression as a list of matrices fro all gens and indicated filer.
+Average and aggregated expression as a list of matrices for all genes and indicated gene lists filtering.
 }
 \description{
-Function to compute aggregated expression (pseudobulk, i.e. sum counts per ident), and average expression by indicated cell type or groupin variable.
+Function to compute aggregated expression (pseudobulk, i.e. sum counts per ident), and average expression by indicated cell type or grouping variable.
 }

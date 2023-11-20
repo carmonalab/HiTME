@@ -24,7 +24,7 @@ get.aggregated.signature(
 \item{useNA}{logical whether to return aggregated signatures for NA (undefined) cell types, default is FALSE.}
 }
 \value{
-Average and aggregated expression as a list of matrices fro all gens and indicated filer.
+Aggregated signature score for each indicated cell type grouping Results is NULL of not additional signatures are indicated or present in metadata.
 }
 \description{
 Function to compute aggregated signatures of predicted cell types.
