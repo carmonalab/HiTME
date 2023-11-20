@@ -18,65 +18,72 @@ ProjecTILs.classifier.multi <- function(object,
     present <- names(ref.maps[map.celltypes > 0])
     no.present <- names(ref.maps)[!names(ref.maps) %in% present]
 
-    message("Performing Projectils classification for ", paste(present, collapse = ", "))
+    if(length(present) == 0){
+      message(paste("No cells linked to reference maps found by", layer1_link, ".\nNot running Projectils"))
+      run <- FALSE
+    } else {
+      run <- TRUE
+      message("Performing Projectils classification for ", paste(present, collapse = ", "))
 
-    if(length(ref.maps) != length(present)){
-      message("Not doing mapping for ", paste(no.present, collapse = ", ") )
-      ref.maps <- ref.maps[present]
+      if(length(ref.maps) != length(present)){
+        message("Not doing mapping for ", paste(no.present, collapse = ", ") )
+        ref.maps <- ref.maps[present]
+      }
     }
+
   } else {
     filter.cells <- T
 
     message("Not scGate classification found in this object\n",
             "Running default scGate (or layer1 classification) filtering within Projectils)")
+    run <- TRUE
   }
 
-  if(length(present) == 0){
-    warning(paste("No cells linked to reference maps found by", layer1_link, ". Not running Projectils."))
-  } else {
-
-
-    functional.clusters <-
-      BiocParallel::bplapply(
-        X = names(ref.maps),
-        BPPARAM = bparam,
-        FUN = function(m){
-          if(filter.cells){
-            # don't subset if no scGate gating is found in metadata, instead run scGate within projectils
-            subset.object <- object
-          } else {
-          map.celltype <- ref.maps[[m]]@misc$layer1_link
-          subset.object <- object[,object@meta.data[[layer1_link]] %in% map.celltype]
-          message("\nRunning Projectils for", paste(map.celltype, collapse = ", "), " celltypes")
-          }
-
-          if(ncol(subset.object)>0){
-
-            data("Hs2Mm.convert.table")
-            # it is mandatory to make run in serial (ncores = 1 and BPPARAM SerialParam)
-            subset.object.pred <- ProjecTILs:::classifier.singleobject(subset.object,
-                                                                       ref = ref.maps[[m]],
-                                                                       filter.cells = filter.cells,
-                                                                       ncores = 1)
-
-            return(subset.object.pred)
-
-          } else {
-            message("Not Running Projectils classifier for reference map",
-                    paste(map.celltype, collapse = ", "), ". No cells found")
-          }
+  if(run){
+  functional.clusters <-
+    BiocParallel::bplapply(
+      X = names(ref.maps),
+      BPPARAM = bparam,
+      FUN = function(m){
+        if(filter.cells){
+          # don't subset if no scGate gating is found in metadata, instead run scGate within projectils
+          subset.object <- object
+        } else {
+        map.celltype <- ref.maps[[m]]@misc$layer1_link
+        subset.object <- object[,object@meta.data[[layer1_link]] %in% map.celltype]
+        message("\nRunning Projectils for ", m, " reference")
         }
-      )
+
+        if(ncol(subset.object)>0){
+
+          data("Hs2Mm.convert.table")
+          # it is mandatory to make run in serial (ncores = 1 and BPPARAM SerialParam)
+          subset.object.pred <- ProjecTILs:::classifier.singleobject(subset.object,
+                                                                     ref = ref.maps[[m]],
+                                                                     filter.cells = filter.cells,
+                                                                     ncores = 1)
+
+          return(subset.object.pred)
+
+        } else {
+          message("Not Running Projectils classifier for reference map",
+                  paste(map.celltype, collapse = ", "), ". No cells found")
+        }
+      }
+    )
 
 
-    functional.clusters <- data.table::rbindlist(lapply(functional.clusters,
-                                                        setDT, keep.rownames = TRUE)) %>%
-                            tibble::column_to_rownames("rn")
-    object@meta.data <- merge(object@meta.data, functional.clusters, by = 0, all.x = T) %>%
-                        tibble::column_to_rownames("Row.names")
 
-    # save names of reference maps run
-    object@misc[["Projectils_param"]] <- names(ref.maps)
+  functional.clusters <- data.table::rbindlist(lapply(functional.clusters,
+                                                      setDT, keep.rownames = TRUE)) %>%
+                          #remove duplicated rownames (classified by different ref.maps)
+                          dplyr::filter(!duplicated(rn)) %>%
+                          tibble::column_to_rownames("rn")
+  object@meta.data <- merge(object@meta.data, functional.clusters, by = 0, all.x = T) %>%
+                      tibble::column_to_rownames("Row.names")
+
+  # save names of reference maps run
+  object@misc[["Projectils_param"]] <- names(ref.maps)
   }
 
 
@@ -131,7 +138,7 @@ StandardizeCellNames <- function(cell.names, dictionary = NULL){
 
 
 ### Function to get the list of certain genes
-GetGOList <- function(GO_accession = NULL,
+get.GOList <- function(GO_accession = NULL,
                       species = "Human",
                       host = "https://dec2021.archive.ensembl.org/"
 ){
@@ -166,8 +173,13 @@ GetGOList <- function(GO_accession = NULL,
   } else {
     stop("Only supported species are human and mouse")
   }
+  # Load default GO accession in case cannot connect to biomaRt
+  # gene.data.bm <- data("GO_accession_default.RData")
 
   # Retrieve genes for each GO
+  tryCatch(
+    {
+
   ensembl = biomaRt::useMart("ensembl",
                              dataset = dataset)
 
@@ -176,6 +188,15 @@ GetGOList <- function(GO_accession = NULL,
                                  filters = 'go',
                                  values = GO_acc,
                                  mart = ensembl)
+    },
+  error = function(e){
+    message("GO accession from biomaRt not possible")
+    message(e)
+    gene.data.bm <<- NULL
+  }
+  )
+
+  if(!is.null(gene.data.bm)){
   gene.data <- gene.data.bm %>%
     filter(go_id %in% GO_acc) %>%
     filter(hgnc_symbol != "") %>%
@@ -186,6 +207,9 @@ GetGOList <- function(GO_accession = NULL,
     warning("Additional GO accession provided not found in GO database")
   }
   names(gene.data) <- paste0(names(gene.data), "_", names(GO_acc)[GO_acc %in% names(gene.data)])
+  } else {
+    gene.data <- NULL
+  }
 
 
   return(gene.data)
