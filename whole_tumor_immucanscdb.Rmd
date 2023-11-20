@@ -16,11 +16,13 @@ renv::restore()
 #remotes::install_github("carmonalab/scGate", ref="dev")
 
 # load packages
-pckgs <- c("tidyverse", "Seurat", "scGate", 
-           "Matrix", "patchwork",
-           "data.table", "STACAS",
-           "SignatuR", "ProjecTILs",
-           "scCustomize", "UCell", "ProjecTILs")
+# pckgs <- c("tidyverse", "Seurat", "scGate", 
+#            "Matrix", "patchwork",
+#            "data.table", "STACAS",
+#            "SignatuR", "ProjecTILs",
+#            "scCustomize", "UCell", "ProjecTILs")
+
+pckgs <- c("tidyverse", "ProjecTILs")
 for(package in pckgs){
   tryCatch(
     {
@@ -35,9 +37,12 @@ for(package in pckgs){
 
 options(timeout=4000) # increase time out for downloading
 
-source("R/utils.R")
-source("R/main.R")
+# source("R/utils.R")
+# source("R/main.R")
 
+
+#dataset testing
+seu <- list("Galen_2019_30827681" = readRDS("data/galen_Test.rds"))
 
 my_seed <- 321
 set.seed(my_seed)
@@ -118,7 +123,7 @@ rds <- imm.db %>%
         # get only whole tumor
         filter(Enrichment_cell_types == "unbiased") %>% 
         # get only datasets with >+ 10 samples/patients
-        filter(N_samples_light > 9) %>% 
+        filter(N_samples_light > 20) %>% 
         select(RDS_id, CSI_Dataset_id) %>% 
         as.data.frame()
 
@@ -196,7 +201,7 @@ for(i in names(seu)){
   
   wmeta.list[[i]] <-  met
   seu[[i]]@meta.data <- met %>% 
-              mutate(annotation = StandardizeCellNames(annotation_authors))
+              mutate(annotation = HiTME:::StandardizeCellNames(annotation_authors))
   
 }
 
@@ -344,6 +349,7 @@ saveRDS(hit.list, "cache/20hit_annotated.rds")
 
 ## Test new version
 ```{r}
+require(HiTME)
 sys.Yuan <- system.time(
 test <- Run.HiTME(seu$Galen_2019_30827681[,1:5000],
                   scGate.model.branch = "dev",
@@ -380,11 +386,8 @@ agg.sig <- get.aggregated.signature(test,
 
 # Test v2
 ```{r}
-source("R/utils.R")
-source("R/main.R")
-
 add.sig <- GetSignature(SignatuR$Hs$Blocklists)
-t0 <- SplitObject(seu$Galen_2019_30827681, split.by = "group")
+t0 <- Seurat::SplitObject(seu$Galen_2019_30827681, split.by = "group")
 
 scGate_models_DB <- scGate::get_scGateDB(branch = "dev", force_update = F)
 models.TME <- scGate_models_DB$human$TME_HiRes
@@ -400,13 +403,13 @@ test <- Run.HiTME(t0$aml1012d0,
                   ncores = 9)
 
 
-test <- scGate(t0$aml1012d0,
+test <- scGate::scGate(t0$aml1012d0,
                model =  scGate_models_DB$human$HiTME,
                ncores = 9)
 
 # no scGate, projectils, return Seurat
 test <- Run.HiTME(test,
-                  scGate.model = NULL,
+                  scGate.model.branch = "dev",
                   return.Seurat = T,
                   ref.maps = ref.maps,
                   ncores = 9)
@@ -414,8 +417,8 @@ test <- Run.HiTME(test,
 # scGate, no projectils, return Seurat
 test <- Run.HiTME(t0$aml1012d0,
                   scGate.model.branch = "dev",
-                  return.Seurat = T,
-                  ref.maps = ref.maps,
+                  return.Seurat = F,
+                  ref.maps = NULL,
                   additional.signatures = NULL,
                   ncores = 9)
 
@@ -436,7 +439,7 @@ View(test@meta.data)
 test <- Run.HiTME(t0[4:6],
                   scGate.model = NULL,
                   # scGate.model.branch = "dev",
-                  return.Seurat = F,
+                  return.Seurat = T,
                   ref.maps = ref.maps,
                   ncores = 9)
 
@@ -522,8 +525,7 @@ calc <- get.celltype.composition(test,
 
 # test additional param
 ```{r}
-source("R/utils.R")
-source("R/main.R")
+
 hit.na <- Run.HiTME(t0$aml328d113,
                   scGate.model.branch = "dev",
                   return.Seurat = F,
