@@ -347,7 +347,7 @@ saveRDS(hit.list, "cache/20hit_annotated.rds")
 sys.Yuan <- system.time(
 test <- Run.HiTME(seu$Galen_2019_30827681[,1:5000],
                   scGate.model.branch = "dev",
-                  return.Seurat = F,
+                  return.Seurat = T,
                   ref.maps = ref.maps,
                   ncores = 9)
 )
@@ -362,15 +362,175 @@ hit <- get.HiTObject(test,
                                           )
                      )
 
-avg <- get.aggregated.profile(object,
-                                group.by.aggregated = c("scGate_multi", "functional.cluster"),gene.filter = c("IL10", "CXCR5"))
+avg <- get.aggregated.profile(test,
+                                group.by.aggregated = c("scGate_multi",
+                                                        "functional.cluster"),
+                              gene.filter = c("IL10", "CXCR5"),
+                              useNA = T)
 
-prop <- get.celltype.composition(object,
+prop <- get.celltype.composition(test,
                                  group.by.composition = list("eso" = "scGate_multi",
                                                           "peroque" = "functional.cluster",
                                                           "baba"),
                                  split.by = "group")
 
-agg.sig <- get.aggregated.signature(object,
+agg.sig <- get.aggregated.signature(test,
                                 group.by.aggregated = c("scGate_multi", "functional.cluster", "baba"), fun = sum)
 ```
+
+# Test v2
+```{r}
+source("R/utils.R")
+source("R/main.R")
+
+add.sig <- GetSignature(SignatuR$Hs$Blocklists)
+t0 <- SplitObject(seu$Galen_2019_30827681, split.by = "group")
+
+scGate_models_DB <- scGate::get_scGateDB(branch = "dev", force_update = F)
+models.TME <- scGate_models_DB$human$TME_HiRes
+
+
+# one object, for one sample
+
+# scGate, projectils, return Seurat
+test <- Run.HiTME(t0$aml1012d0,
+                  scGate.model.branch = "dev",
+                  return.Seurat = F,
+                  ref.maps = ref.maps,
+                  ncores = 9)
+
+
+test <- scGate(t0$aml1012d0,
+               model =  scGate_models_DB$human$HiTME,
+               ncores = 9)
+
+# no scGate, projectils, return Seurat
+test <- Run.HiTME(test,
+                  scGate.model = NULL,
+                  return.Seurat = T,
+                  ref.maps = ref.maps,
+                  ncores = 9)
+
+# scGate, no projectils, return Seurat
+test <- Run.HiTME(t0$aml1012d0,
+                  scGate.model.branch = "dev",
+                  return.Seurat = T,
+                  ref.maps = ref.maps,
+                  additional.signatures = NULL,
+                  ncores = 9)
+
+# scGate, no projectils, return Seurat, no additional sigs
+test <- Run.HiTME(t0$aml1012d0,
+                  scGate.model.branch = "dev",
+                  return.Seurat = T,
+                  ref.maps = NULL,
+                  additional.signatures = NULL,
+                  ncores = 9)
+
+
+View(test@meta.data)
+```
+
+```{r}
+# list
+test <- Run.HiTME(t0[4:6],
+                  scGate.model = NULL,
+                  # scGate.model.branch = "dev",
+                  return.Seurat = F,
+                  ref.maps = ref.maps,
+                  ncores = 9)
+
+test.by <- Run.HiTME(t0[9:10],
+                  scGate.model.branch = "dev",
+                  return.Seurat = F,
+                  ref.maps = ref.maps,
+                  ncores = 9)
+
+sp <- scCustomize::Merge_Seurat_List(t0[1:2])
+
+object <- Run.HiTME(sp,
+                    split.by = "group",
+                  scGate.model.branch = "dev",
+                  return.Seurat = F,
+                  remerge = T,
+                  ref.maps = ref.maps,
+                  ncores = 9)
+hit.list <- list()
+for(a in names(testby)){
+ hit.list[[a]] <- get.HiTObject(testby[[a]],
+                                group.by = list("layer1" = "scGate_multi",
+                                          "layer2" = "functional.cluster",
+                                         "layer1.2" =  "annotation_chetah",
+                                         "layer0" = "baba"
+                                          )) 
+}
+
+group.by = list("layer1" = "scGate_multi",
+                                          "layer2" = "functional.cluster",
+                                         "layer1.2" =  "annotation_chetah",
+                                         "layer0" = "baba"
+                                          )
+com <- get.celltype.composition(object,
+                                group.by.composition = group.by)
+
+avg <- get.aggregated.profile(object,
+                              group.by.aggregated = group.by)
+
+sigs <- get.aggregated.signature(object,
+                                 group.by.aggregated = group.by)
+
+hit <- get.HiTObject(object,
+              group.by = group.by)
+```
+# tests hit objects
+```{r}
+hit <- get.HiTObject(test,
+                     group.by = list("layer1" = "scGate_multi",
+                                          "layer2" = "functional.cluster",
+                                     "layer1.2" =  "annotation_chetah",
+                                     "layer0" = "baba"
+                                          ))
+
+hit <- Run.HiTME(t0$aml328d113,
+                  scGate.model.branch = "dev",
+                  return.Seurat = F,
+                  ref.maps = ref.maps,
+                  ncores = 9)
+
+object <- Run.HiTME(t0$aml1012d0,
+                  scGate.model.branch = "dev",
+                  return.Seurat = T,
+                  ref.maps = ref.maps,
+                  ncores = 9)
+
+avg <- get.aggregated.profile(object,
+                                group.by.aggregated = c("scGate_multi",
+                                                        "functional.cluster"),
+                              gene.filter = c("IL10", "CXCR5"),
+                              useNA = T)
+
+head(avg$Average$scGate_multi$Ribosomal)
+
+sigs <- get.aggregated.signature(object,
+                                group.by.aggregated = c("scGate_multi",
+                                                        "functional.cluster"),
+                              useNA = F)
+calc <- get.celltype.composition(test,
+                                 group.by.composition = c("scGate_multi",
+                                                        "functional.cluster"))
+```
+
+# test additional param
+```{r}
+source("R/utils.R")
+source("R/main.R")
+hit.na <- Run.HiTME(t0$aml328d113,
+                  scGate.model.branch = "dev",
+                  return.Seurat = F,
+                  ref.maps = ref.maps,
+                  ncores = 9, useNA = T)
+```
+
+
+
+
