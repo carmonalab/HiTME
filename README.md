@@ -38,20 +38,29 @@ The function takes as input the path to the directory containing the seurat obje
 The idea is to process large datasets in a parallel for-loop from samples stored on disk, in order to prevent running out of RAM memory.
 
 ```r
+library(HiTME)
+
 # Create separate .rds files for each sample
 obj.list <- SplitObject(obj, split.by = "Sample")
 
 # Use helper functions to save/load your object list to/from disk
 save_objs(obj.list, "./output/samples")
 obj.list <- read_objs("./output/samples")
+
+# You can also provide an arbitrary list of sample paths for samples located in different directories
 # my_favourite_samples <- c("/Users/elon_mask/Desktop/HiTME/output/samples/sample1.rds",
 #                           "/Users/beel_gates/Archive/sampleXYZ.rds")
 # obj.list <- read_objs("./output/samples", file.list = my_favourite_samples)
 ```
 
 ```r
+library(scGate)
+library(ProjecTILs)
+
 # Example data
 path_data <- file.path("~/Dropbox/CSI/Standardized_SingleCell_Datasets/ZhangY_2022_34653365/output/samples_subset")
+obj.list <- read_objs(path_data)
+object <- merge(obj.list[[1]],obj.list[2:length(obj.list)])
 
 # Define scGate model
 scGate_models_DB <- get_scGateDB(branch = "master", verbose = T, force_update = TRUE)
@@ -65,7 +74,7 @@ ref.maps <- list(CD8 = load.reference.map(file.path(path_ref, "CD8T_human_ref_v1
                  MoMac = load.reference.map(file.path(path_ref, "MoMac_human_v1.rds")))
 
 # For a single Seurat object
-annotate_cells(object = object,
+annotate_cells(object = obj.list[[1]],
                scGate.model = models.TME,
                ref.maps = ref.maps)
 
@@ -102,6 +111,7 @@ To calculate cell subtype composition, it is adviced to create a separate metada
 # Load data
 path_data <- file.path("~/Dropbox/CSI/Standardized_SingleCell_Datasets/ZhangY_2022_34653365/output/samples_subset")
 obj.list <- read_objs(path_data)
+object <- merge(obj.list[[1]],obj.list[2:length(obj.list)])
 
 # For a single Seurat object (one sample)
 celltype.compositions <- calc_CTcomp(obj.list[[1]])
@@ -109,8 +119,7 @@ celltype.compositions <- calc_CTcomp(obj.list[[1]])
 celltype.compositions <- calc_CTcomp(obj.list[[1]], annot.cols = c("scGate_multi", "CD8_subtypes"))
 
 # For a single Seurat object (containing multiple samples)
-obj <- merge(obj.list[[1]],obj.list[2:length(obj.list)])
-celltype.compositions <- calc_CTcomp(obj, split.by = "Sample")
+celltype.compositions <- calc_CTcomp(object, split.by = "Sample")
 
 # For a list of Seurat objects
 celltype.compositions <- calc_CTcomp(obj.list)

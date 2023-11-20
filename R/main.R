@@ -486,6 +486,7 @@ get.HiTObject <- function(object,
 #' @param group.by.composition The Seurat object metadata column(s) containing celltype annotations (provide as character vector, containing the metadata column name(s))
 #' @param split.by A Seurat object metadata column to split by (e.g. sample names)
 #' @param min.cells Set a minimum threshold for number of cells to calculate relative abundance (e.g. less than 10 cells -> no relative abundnace will be calculated)
+
 #' @param useNA Whether to include not annotated cells or not (labelled as "NA" in the group.by.composition). Can be defined separately for each group.by.composition (provide single boolean or vector of booleans)
 #' @param clr_zero_impute_perc To calculate the clr-transformed relative abundance ("clr_freq"), zero values are not allowed and need to be imputed (e.g. by adding a pseudo cell count). Instead of adding a pseudo cell count of flat +1, here a pseudo cell count of +1% of the total cell count will be added to all cell types, to better take into consideration the relative abundance ratios (e.g. adding +1 cell to a total cell count of 10 cells would have a different, i.e. much larger effect, than adding +1 to 1000 cells).
 
@@ -504,6 +505,7 @@ get.HiTObject <- function(object,
 #' celltype.compositions.overall <- get.celltype.composition(object = panc8, group.by.composition = "celltype")
 #'
 #' # Calculate sample-wise composition
+
 #' celltype.compositions.sample_wise <- get.celltype.composition(object = panc8, group.by.composition = "celltype", split.by = "orig.ident")
 #'
 get.celltype.composition <- function(object = NULL,
@@ -534,6 +536,7 @@ get.celltype.composition <- function(object = NULL,
     stop("Please specificy a group.by.composition variable")
   }
 
+
   # Assess wheter split.by variable is in metadata
   if(!is.null(split.by) && !split.by %in% names(meta.data)){
     stop("Split.by variable not found in meta.data!\n")
@@ -548,11 +551,13 @@ get.celltype.composition <- function(object = NULL,
     group.by.composition <- as.list(group.by.composition)
   }
 
+
   # Rename group.by.composition if not indicated
   for(v in seq_along(group.by.composition)){
     if(is.null(names(group.by.composition)[[v]]) || is.na(names(group.by.composition)[[v]])){
       names(group.by.composition)[[v]] <- group.by.composition[[v]]
     }
+
   }
 
 
@@ -565,6 +570,7 @@ get.celltype.composition <- function(object = NULL,
     # accommodate useNA vector
     if (length(useNA) == length(group.by.composition)) {
       useNA <- useNA[group.present]
+
     }
     # keep only grouping variables found in metadata
     group.by.composition <- group.by.composition[group.present]
@@ -787,6 +793,7 @@ get.aggregated.profile <- function(object,
 
   }
 
+
   return(avg.exp)
 }
 
@@ -827,10 +834,10 @@ get.aggregated.signature <- function(object,
     stop("Not Seurat object or dataframe included, cannot be processed.\n")
   }
 
+
   if(is.null(group.by.aggregated)){
     stop("Please specificy a group.by.aggregated variable")
   }
-
 
   # convert group.by.aggregated to list if not
   if(!is.list(group.by.aggregated)){
