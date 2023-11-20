@@ -11,6 +11,7 @@
 #' @param layer1_link Column of metadata linking layer1 prediction in order to perform subsetting for second layer classification.
 #' @param return.Seurat Whether to return a Hit object or add the data into Seurat object metadata
 #' @param group.by If return.Seurat = F, variables to be used to summarize HiTME classification data in HiT object.
+#' @param useNA Whether to include not annotated cells or not (labelled as "NA" in the group.by.composition) when summarizing into HiT object.
 #' @param remerge When setting split.by, if remerge = TRUE one object will be returned. If remerge = FALSE a list of objects will be returned.
 #' @param ncores The number of cores to use
 #' @param bparam A \code{BiocParallel::bpparam()} object that tells Run.HiTME how to parallelize. If provided, it overrides the `ncores` parameter.
@@ -18,7 +19,8 @@
 #'
 #' @importFrom BiocParallel MulticoreParam bplapply
 #' @importFrom parallelly availableCores
-#' @importFrom dplyr mutate %>%
+#' @importFrom dplyr mutate filter %>%
+#' @importFrom tibble column_to_rownames
 #' @importFrom scGate scGate
 #' @importFrom SignatuR SignatuR
 #' @importFrom ProjecTILs ProjecTILs.classifier
@@ -59,12 +61,13 @@ Run.HiTME <- function(object = NULL,
                        group.by = list("layer1" = c("scGate_multi"),
                                        "layer2" = c("functional.cluster")
                                       ),
+                       useNA = FALSE,
                        remerge = TRUE,
                        species = "human",
                        bparam = NULL,
                        ncores = parallelly::availableCores() - 2,
-                       progressbar = TRUE,
-                       ...){
+                       progressbar = TRUE
+                       ){
 
   if (is.null(object)) {
     stop("Please provide a Seurat object or a list of them")
@@ -78,10 +81,15 @@ Run.HiTME <- function(object = NULL,
     }
   }
 
+  if(is.list(object) && !is.null(split.by)){
+    stop("split.by only supported for a single Seurat object, not a list.\n
+         Merge list before running HiTME")
+  }
+
   # split object into a list if indicated
   if (!is.null(split.by)) {
     if(!split.by %in% names(object@meta.data)){
-      stop(paste(split.by, "is not a metadata column in this Seurat object"))
+      stop(paste("split.by argument:", split.by, "is not a metadata column in this Seurat object"))
     }
     object <- Seurat::SplitObject(object, split.by = split.by)
 
@@ -163,14 +171,15 @@ Run.HiTME <- function(object = NULL,
       }
       additional.signatures <- SignatuR::GetSignature(SignatuR[[sig.species]][["Programs"]])
       message(" - Adding additional signatures: ", paste(names(additional.signatures), collapse = ", "), "\n")
+    }
     } else {
       for(v in seq_along(additional.signatures)){
-        if(is.null(names(additional.signatures)[[v]])){
+        if(is.null(names(additional.signatures)[[v]]) || is.na(names(additional.signatures)[[v]])){
           names(additional.signatures)[[v]] <- paste0("Additional_signature", v)
         }
       }
     }
-  }
+
 
   # Run scGate, if model is provided
   if(!is.null(scGate.model)) {
@@ -205,8 +214,7 @@ Run.HiTME <- function(object = NULL,
                                         model=scGate.model,
                                         additional.signatures = additional.signatures,
                                         BPPARAM = param,
-                                        multi.asNA = T,
-                                        ...)
+                                        multi.asNA = T)
 
 
                     x@misc[["layer1_param"]] <- list()
@@ -234,8 +242,7 @@ Run.HiTME <- function(object = NULL,
       }
         x <- UCell::AddModuleScore_UCell(x,
                                         features = additional.signatures,
-                                        BPPARAM = param,
-                                        ...)
+                                        BPPARAM = param)
 
 
       x@misc[["layer1_param"]] <- list()
@@ -277,6 +284,11 @@ Run.HiTME <- function(object = NULL,
   if (is.list(object)) {
     if (remerge && length(object)>1) {
         object <- merge(object[[1]],object[2:length(object)])
+        # add misc slot, removed when merging
+        object@misc[["layer1_param"]] <- list()
+        object@misc[["layer1_param"]][["layer1_models"]] <- names(scGate.model)
+        object@misc[["layer1_param"]][["additional.signatures"]] <- names(additional.signatures)
+
         object <- list(object)
     }
   } else {
@@ -285,19 +297,23 @@ Run.HiTME <- function(object = NULL,
 
   # if group.by parameters are not present in metadata, return Seurat
   if(!return.Seurat){
-    if(!all(lapply(object, function(x){any(names(x@meta.data) %in% group.by)}))){
+    if(suppressWarnings(!all(lapply(object, function(x){any(names(x@meta.data) %in% group.by)})))){
       message("None of the 'group.by' variables found, returning Seurat object not HiT object.")
       return.Seurat <- TRUE
     } else {
-      hit <- lapply(
+      message("\nBuilding HiT object\n")
+
+      hit <- BiocParallel::bplapply(
         X = object,
+        BPPARAM = param,
         FUN = function(x) {
           x <- get.HiTObject(x,
                              group.by = group.by,
-                             split.by = split.by,
-                             ...)
+                             useNA = useNA
+                             )
         }
       )
+
     }
   }
 
@@ -323,17 +339,17 @@ Run.HiTME <- function(object = NULL,
 
 
 # Function get.HiTObject
-#' Get a HiT object summarizing cell type classification and aggregating profiles.
+#' Get a HiT object summarizing cell type classification and aggregated profiles.
 #'
 #'
 #'
 #' @param object A seurat object
 #' @param group.by List with one or multiple Seurat object metadata columns with cell type predictions to group by (e.g. layer 1 cell type classification)
-#' @param name.additional.signatures Names of additional signatures as found in object metadata to take into account
+#' @param name.additional.signatures Names of additional signatures as found in object metadata to take into account.
 #' @param ... Additional parameters for \link{get.aggregated.profile}, \link{get.celltype.composition}, and \link{get.aggregated.signature} functions.
 #' @import Seurat
 #' @import SeuratObject
-#' @return HiT object summarizing cell type classification and aggregating profiles.
+#' @return HiT object summarizing cell type classification and aggregated profiles.
 #' @export get.HiTObject
 #'
 
@@ -343,6 +359,7 @@ get.HiTObject <- function(object,
                                           "layer2" = c("functional.cluster")
                                           ),
                           name.additional.signatures = NULL,
+                          useNA = FALSE
                           ...){
 
 
@@ -369,7 +386,7 @@ get.HiTObject <- function(object,
   }
 
   for(v in seq_along(group.by)){
-    if(is.null(names(group.by[[v]]))){
+    if(is.null(names(group.by[[v]])) || is.na(names(group.by[[v]]))){
       names(group.by[[v]]) <- paste0("layer", v)
     }
   }
@@ -439,24 +456,28 @@ get.HiTObject <- function(object,
 
 
   # Compute proportions
+  message("Computing cell type composition...\n")
+
   comp.prop <- get.celltype.composition(object,
                                         group.by.composition = group.by,
-                                        split.by = split.by,
-                                        ...)
+                                        useNA = useNA, ...)
   # Compute avg expression
+  message("Computing aggregated profile...\n")
+
   avg.expr <- get.aggregated.profile(object,
                                      group.by.aggregated = group.by,
-                                     ...)
+                                     useNA = useNA, ...)
 
   aggr.signature <- get.aggregated.signature(object,
                                              group.by.aggregated = group.by,
-                                             ...)
+                                             name.additional.signatures = name.additional.signatures,
+                                             useNA = useNA, ...)
 
 
   hit <- new("HiT",
              metadata = object@meta.data,
              predictions = pred.list,
-             aggregated_profile = list("Gene expression" = avg.expr,
+             aggregated_profile = list("Gene_expression" = avg.expr,
                                        "Signatures" = aggr.signature),
              composition = comp.prop
   )
@@ -527,7 +548,7 @@ get.celltype.composition <- function(object = NULL,
     stop("Split.by variable not found in meta.data!\n")
   }
 
-  if(length(useNA) != 1 | length(useNA) == length(group.by.composition)){
+  if(length(useNA) != 1 && length(useNA) == length(group.by.composition)){
     stop("useNA variable must be of length 1 or the same length as group.by.composition (group.by)")
   }
 
@@ -538,7 +559,7 @@ get.celltype.composition <- function(object = NULL,
 
   # Rename group.by.composition if not indicated
   for(v in seq_along(group.by.composition)){
-    if(is.null(names(group.by.composition)[[v]])){
+    if(is.null(names(group.by.composition)[[v]]) || is.na(names(group.by.composition)[[v]])){
       names(group.by.composition)[[v]] <- group.by.composition[[v]]
     }
   }
@@ -556,7 +577,7 @@ get.celltype.composition <- function(object = NULL,
     }
     # keep only grouping variables found in metadata
     group.by.composition <- group.by.composition[group.present]
-    message("Only found ", paste(group.by.composition, collapse = ", ") , " as grouping variable for HiT Object.")
+    message("Only found ", paste(group.by.composition, collapse = ", ") , " as grouping variables.")
   }
 
 
@@ -619,6 +640,7 @@ get.celltype.composition <- function(object = NULL,
 #' @param assay Assay to retrieve information. By default "RNA".
 #' @param layer Layer to retrieve the data from to compute average expression.
 #' @param slot Deprecated slot in Seurat version under 5. Same use as layer.
+#' @param useNA logical whether to return aggregated profile for NA (undefined) cell types, default is FALSE.
 #' @param ... Extra parameters for internal Seurat functions: AverageExpression, AggregateExpression, FindVariableFeatures
 
 #' @importFrom Seurat AverageExpression AggregateExpression FindVariableFeatures
@@ -636,6 +658,7 @@ get.aggregated.profile <- function(object,
                                    assay = "RNA",
                                    layer = "data",
                                    slot = "data",
+                                   useNA = FALSE,
                                    ...) {
 
   if (is.null(object)) {
@@ -657,7 +680,7 @@ get.aggregated.profile <- function(object,
   # Rename group.by.aggregated if not indicated
   # Rename group.by.aggregated if not indicated
   for(v in seq_along(group.by.aggregated)){
-    if(is.null(names(group.by.aggregated)[[v]])){
+    if(is.null(names(group.by.aggregated)[[v]]) || is.na(names(group.by.aggregated)[[v]])){
       names(group.by.aggregated)[[v]] <- group.by.aggregated[[v]]
     }
   }
@@ -666,7 +689,7 @@ get.aggregated.profile <- function(object,
     stop("Group.by variables ", paste(group.by.aggregated, collapse = ", "), " not found in metadata")
   } else if (!all(group.by.aggregated %in% names(object@meta.data))){
     group.by.aggregated <- group.by.aggregated[group.by.aggregated %in% names(object@meta.data)]
-    message("Only found ", paste(group.by.aggregated, collapse = ", ") , " as grouping variable for HiT Object.")
+    message("Only found ", paste(group.by.aggregated, collapse = ", ") , " as grouping variables.")
   }
 
   if(!is.null(gene.filter) && !is.list(gene.filter)){
@@ -688,11 +711,12 @@ get.aggregated.profile <- function(object,
   gene.filter.list[["HVG"]] <- Seurat::FindVariableFeatures(object,
                                                             nfeatures = nHVG,
                                                             assay = assay,
-                                                            verbose = F,
-                                                            ...)[[assay]]@var.features
+                                                            verbose = F
+                                                            )[[assay]]@var.features
 
   # Add list genes from GEO accessions
-  gene.filter.list <- c(gene.filter.list, GetGOList(GO_accession))
+
+  gene.filter.list <- c(gene.filter.list, get.GOList(GO_accession, ...))
 
   # Add defined list of genes to filter
   for(a in seq_along(gene.filter)){
@@ -716,7 +740,15 @@ get.aggregated.profile <- function(object,
     avg.exp[["Average"]][[i]] <- list()
     avg.exp[["Aggregated"]][[i]] <- list()
 
+    # if useNA = TRUE, transform NA to character
+    if(useNA){
+      object@meta.data[is.na(object@meta.data[[group.by.aggregated[[i]]]]),
+                       group.by.aggregated[[i]]] <- "NA"
+    }
+
   # compute average
+    suppressWarnings(
+      {
     avg.exp[["Average"]][[i]][["All.genes"]] <-
       Seurat::AverageExpression(object,
                                 group.by = group.by.aggregated[[i]],
@@ -724,21 +756,41 @@ get.aggregated.profile <- function(object,
                                 layer = layer,
                                 slot = layer,
                                 verbose = F,
-                                ...)[[assay]]
+                                ...
+                                )[[assay]]
+
+
     # compute average
     avg.exp[["Aggregated"]][[i]][["All.genes"]] <-
       Seurat::AggregateExpression(object,
                                 group.by = group.by.aggregated[[i]],
                                 assays = assay,
                                 verbose = F,
-                                ...)[[assay]]
+                                ...
+                                )[[assay]]
+      })
 
+    if(ncol(avg.exp[["Average"]][[i]][["All.genes"]]) == 1){
+      for(av in names(avg.exp)){
+        colnames(avg.exp[[av]][[i]][["All.genes"]]) <-
+          unique(object@meta.data[!is.na(object@meta.data[[group.by.aggregated[[i]]]]),
+                                  group.by.aggregated[[i]]])
+      }
+    }
 
     for(sl in names(avg.exp)){
+      # add colnames if only one cell type is found
+      if(ncol(avg.exp[["Average"]][[i]][["All.genes"]]) == 1){
+          colnames(avg.exp[[sl]][[i]][["All.genes"]]) <-
+            unique(object@meta.data[!is.na(object@meta.data[[group.by.aggregated[[i]]]]),
+                                    group.by.aggregated[[i]]])
+      }
+
+      # subset genes accroding to gene filter list
       for(e in names(gene.filter.list)){
         keep <- gene.filter.list[[e]][gene.filter.list[[e]] %in%
                                         rownames(avg.exp[[sl]][[i]][["All.genes"]])]
-        avg.exp[[sl]][[i]][[e]] <- avg.exp[[sl]][[i]][["All.genes"]][keep,]
+        avg.exp[[sl]][[i]][[e]] <- avg.exp[[sl]][[i]][["All.genes"]][keep, , drop = FALSE]
       }
     }
 
@@ -751,15 +803,16 @@ get.aggregated.profile <- function(object,
 
 #' Compute aggregated additional signatures by cell type
 #'
-#' Function to compute aggregated expression (pseudobulk, i.e. sum counts per ident), and average expression by indicated cell type or groupin variable.
+#' Function to compute aggregated signatures of predicted cell types.
 #'
 #'
 #' @param object A seurat object or metadata dataframe.
 #' @param group.by.aggregated The Seurat object metadata column(s) containing celltype annotations (idents).
 #' @param name.additional.signatures Names of additional signatures to compute the aggregation per cell type.
 #' @param fun Function to aggregate the signature, e.g. mean or sum.
+#' @param useNA logical whether to return aggregated signatures for NA (undefined) cell types, default is FALSE.
 
-#' @importFrom dplyr group_by summarize_at
+#' @importFrom dplyr group_by summarize_at filter
 #' @return Average and aggregated expression as a list of matrices fro all gens and indicated filer.
 #' @export get.aggregated.signature
 
@@ -767,7 +820,8 @@ get.aggregated.profile <- function(object,
 get.aggregated.signature <- function(object,
                                      group.by.aggregated = NULL,
                                      name.additional.signatures = NULL,
-                                     fun = mean){
+                                     fun = mean,
+                                     useNA = FALSE){
 
 
   # input can be a Seurat object or a dataframe containing its meta.data
@@ -795,7 +849,7 @@ get.aggregated.signature <- function(object,
 
   # Rename group.by.aggregated if not indicated
   for(v in seq_along(group.by.aggregated)){
-    if(is.null(names(group.by.aggregated)[[v]])){
+    if(is.null(names(group.by.aggregated)[[v]]) || is.na(names(group.by.aggregated)[[v]])){
       names(group.by.aggregated)[[v]] <- group.by.aggregated[[v]]
     }
   }
@@ -804,7 +858,7 @@ get.aggregated.signature <- function(object,
     stop("Group.by variables ", paste(group.by.aggregated, collapse = ", "), " not found in metadata")
   } else if (!all(group.by.aggregated %in% names(meta.data))){
     group.by.aggregated <- group.by.aggregated[group.by.aggregated %in% names(meta.data)]
-    message("Only found ", paste(group.by.aggregated, collapse = ", ") , " as grouping variable for HiT Object.")
+    message("Only found ", paste(group.by.aggregated, collapse = ", ") , " as grouping variable.")
   }
 
   if(is.null(name.additional.signatures)){
@@ -829,6 +883,13 @@ get.aggregated.signature <- function(object,
     aggr.sig[[e]] <- meta.data %>%
       dplyr::group_by(.data[[group.by.aggregated[[e]]]]) %>%
       dplyr::summarize_at(add.sig.cols, fun, na.rm = T)
+
+      # filter out NA if useNA=F
+    if(!useNA){
+      aggr.sig[[e]] <- aggr.sig[[e]] %>%
+                        dplyr::filter(!is.na(.data[[group.by.aggregated[[e]]]]))
+    }
+
   }
 
   return(aggr.sig)
