@@ -1,23 +1,32 @@
 
 
-#' Annotate cell types in parallel
+#' Classify cells using scGate and ProjecTILs.
 #'
 #' @param object A seurat object or a list of seurat objects
-#' @param dir The directory where your sample .rds files(seurat objects) are located
-#' @param scGate.model The scGate model to use (use get_scGateDB() to get a list of available models)
-#' @param ref.maps A named list of the ProjecTILs reference maps to use
-#' @param split.by A Seurat object metadata column to split by (e.g. sample names)
+#' @param scGate.model The scGate model to use (use get_scGateDB() to get a list of available models), by default fetch the HiTME models: \code{ scGate::get_scGateDB(branch = scGate.model.branch)[[species]][["HiTME"]]}.
+#' @param scGate.model.branch From which branch Run.HiTME fetch the scGate models, by default models are retrieved from \code{master} branch.
+#' @param additional.signatures UCell additional signatures to compute on each cell, by default \code{SignatuR} Programs are included.
+#' @param ref.maps A named list of the ProjecTILs reference maps to use. They ought to be Seurat objects. It is recommended to add in reference object slost \code{misc} the identifier connecting to layer 1 classification (scGate): \code{ref.map@misc$layer1_link}
+#' @param split.by A Seurat object metadata column to split by (e.g. sample names).
+#' @param layer1_link Column of metadata linking layer1 prediction (e.g. scGate ~ scGate_multi) in order to perform subsetting for second layer classification.
+#' @param return.Seurat Whether to return a Hit object or add the data into Seurat object metadata
+#' @param group.by If return.Seurat = F, variables to be used to summarize HiTME classification data in HiT object.
+#' @param useNA Whether to include not annotated cells or not (labelled as "NA" in the group.by.composition) when summarizing into HiT object.
 #' @param remerge When setting split.by, if remerge = TRUE one object will be returned. If remerge = FALSE a list of objects will be returned.
 #' @param ncores The number of cores to use
+#' @param bparam A \code{BiocParallel::bpparam()} object that tells Run.HiTME how to parallelize. If provided, it overrides the `ncores` parameter.
 #' @param progressbar Whether to show a progressbar or not
 #'
 #' @importFrom BiocParallel MulticoreParam bplapply
 #' @importFrom parallelly availableCores
-#' @importFrom scGate scGate
-#' @importFrom ProjecTILs ProjecTILs.classifier
+#' @importFrom dplyr mutate filter %>%
+#' @importFrom tibble column_to_rownames
+#' @importFrom scGate scGate get_scGateDB
 #' @importFrom Seurat SplitObject
-#' @return No return in R. The input files will be overwritten.
-#' @export annotate_cells
+#' @importFrom data.table rbindlist setDT
+#'
+#' @return Seurat object with additional metadata showing cell type classification, or HiT object summarizing such classification.
+#' @export Run.HiTME
 #'
 #' @examples
 #' library(ProjecTILs)
@@ -34,163 +43,456 @@
 #'                  CD4 = load.reference.map(file.path(path_ref, "CD4T_human_ref_v2.rds")),
 #'                  DC = load.reference.map(file.path(path_ref, "DC_human_ref_v1.rds")),
 #'                  MoMac = load.reference.map(file.path(path_ref, "MoMac_human_v1.rds")))
-#' annotate_cells(dir = path_data,
-#'                scGate.model = models.TME,
-#'                ref.maps = ref.maps,
-#'                ncores = 6)
-annotate_cells <- function(object = NULL,
-                           dir = NULL,
-                           scGate.model = NULL,
-                           ref.maps = NULL,
-                           split.by = NULL,
-                           remerge = TRUE,
-                           additional.signatures = NULL,
-                           ncores = parallelly::availableCores() - 2,
-                           progressbar = TRUE){
+#' Run.HiTME(object = seurat.object,
+#'           scGate.model = models.TME,
+#'           ref.maps = ref.maps,
+#'           ncores = 6)
+#'
 
-  if (is.null(object) & is.null(dir)) {
-    stop("Please provide either a Seurat object or a directory with rds files")
-  }
+Run.HiTME <- function(object = NULL,
+                       scGate.model = "default",
+                       scGate.model.branch = c("master", "dev"),
+                       additional.signatures = "default",
+                       ref.maps = NULL,
+                       split.by = NULL,
+                       layer1_link = "CellOntology_ID",
+                       return.Seurat = TRUE,
+                       group.by = list("layer1" = c("scGate_multi"),
+                                       "layer2" = c("functional.cluster")
+                                      ),
+                       useNA = FALSE,
+                       remerge = TRUE,
+                       species = "human",
+                       bparam = NULL,
+                       ncores = parallelly::availableCores() - 2,
+                       progressbar = TRUE
+                       ){
 
-  if (!is.null(object) & !is.null(dir)) {
-    stop("Cannot provide both object and directory")
+  if (is.null(object)) {
+    stop("Please provide a Seurat object or a list of them")
   }
 
   if (!is.null(ref.maps)) {
     if (!is.list(ref.maps)) {
       stop("Please provide ref.maps as named list, containing the reference map(s), even if it is just one. The name will be used for the metadata column containing the cell type annotations")
+    } else if(!all(unlist(lapply(ref.maps, function(x){class(x) == "Seurat"})))) {
+      stop("One or more reference maps are not a Seurat object")
     }
   }
 
-  if (is.null(ref.maps) & is.null(scGate.model)) {
-    stop("Please provide at least either an scGate model or reference map for cell type classification")
+  if(is.list(object) && !is.null(split.by)){
+    stop("split.by only supported for a single Seurat object, not a list.\n
+         Merge list before running HiTME")
   }
 
-  if (!is.null(dir)) {
-    files <- list.files(dir)
-    if (!all(endsWith(files, '.rds'))) {
-      stop("There are some files not ending on '.rds'")
-    }
-  }
-
+  # split object into a list if indicated
   if (!is.null(split.by)) {
+    if(!split.by %in% names(object@meta.data)){
+      stop(paste("split.by argument:", split.by, "is not a metadata column in this Seurat object"))
+    }
     object <- Seurat::SplitObject(object, split.by = split.by)
+
+  } else {
+    # if not applying split.by not merge by default
+    remerge <-  FALSE
   }
 
-  # Either:
-  # - The input is a single Seurat object
-  # - The input is a list of Seurat objects
-  # - The input is directory containing multiple .rds files (each a single object)
+  if(!return.Seurat && is.null(group.by)){
+    message("If setting return Seurat as FALSE, HiT summarized object will be returned. Need to indicate group.by variable indicating cell type classification\n
+         e.g. group.by = list(\"layer1\" = c(\"scGate_multi\"),\"layer2\" = c(\"functional.cluster\"))\n
+            Returning Seurat object, not HiT object.")
+    return.Seurat = TRUE
+  }
 
-  param <- BiocParallel::MulticoreParam(workers = ncores, progressbar = progressbar)
+  # adapt species
+  if(is.null(species)){
+    stop("Please provide human or mouse as species")
+  }
+  species <- tolower(species)
+  if(!species == "human"){
+    if(grepl("homo|sap|huma", species)){
+      species <- "human"
+    }
+  } else if (!species == "mouse"){
+    if(grepl("mice|mus", species)){
+      species <- "mouse"
+    }
+  } else {
+    stop("Only supported species are human and mouse")
+  }
+
+  # if object is unique turn into a list
+  if(!is.list(object)){
+    object <- list(object)
+  }
+
+  if(is.null(ncores)){
+    ncores <- 1
+  }
+
+  if(ncores >= parallelly::availableCores()){
+    ncores <- parallelly::availableCores() - 1
+    message("Using all or more cores available in this computer, reducing number of cores to ", ncores)
+  }
+
+  # Reduce number of cores if file is huge
+  if(sum(unlist(lapply(object, ncol)))>=30000){
+    ncores <- 2
+    message("Huge Seurat object, reducing number of cores to avoid memory issues to", ncores)
+  }
+
+
+  # set paralelization parameters
+  if (is.null(bparam)) {
+    if (ncores>1) {
+      param <- BiocParallel::MulticoreParam(workers =  ncores, progressbar = progressbar)
+    } else {
+      param <- SerialParam()
+    }
+  } else {
+    param <- bparam
+  }
+
+
+  # Get default additional signatures
+  # based on species get SignatuR signatures
+  if(!is.null(additional.signatures)){
+    # convert to list if not
+    if(!is.list(additional.signatures)){
+      additional.signatures <- list(additional.signatures)
+    }
+
+    if(length(additional.signatures) == 1 && tolower(additional.signatures) == "default"){
+      if(species == "human"){
+        sig.species <- "Hs"
+      } else if(species == "mouse"){
+        sig.species <- "Mm"
+      }
+      additional.signatures <- SignatuR::GetSignature(SignatuR::SignatuR[[sig.species]][["Programs"]])
+      message(" - Adding additional signatures: ", paste(names(additional.signatures), collapse = ", "), "\n")
+    }
+    } else {
+      for(v in seq_along(additional.signatures)){
+        if(is.null(names(additional.signatures)[[v]]) || is.na(names(additional.signatures)[[v]])){
+          names(additional.signatures)[[v]] <- paste0("Additional_signature", v)
+        }
+      }
+    }
+
 
   # Run scGate, if model is provided
-  if (!is.null(scGate.model)) {
-    message("Running scGate\n")
-    if (isS4(object)) { # If input is a single Seurat object
-      object <- scGate::scGate(object, model=models.TME, ncores = ncores)
-    } else if (is.list(object)) { # If input is object list
-      for (i in 1:length(object)) {
-        object[[i]] <- scGate::scGate(object[[i]], model=models.TME, ncores = ncores)
-      }
-        object <- scGate::scGate(object,
-                                 model=scGate.model,
-                                 ncores = ncores)
-    } else if (is.list(object)) { # If input is object list
-      for (i in 1:length(object)) {
-        object[[i]] <- scGate::scGate(object[[i]], model=models.TME, ncores = ncores)
-      }
-    } else if (!is.null(dir)) { # If input is directory
-      BiocParallel::bplapply(
-        X = files,
-        BPPARAM = param,
-        FUN = function(file) {
-          path <- file.path(dir, file)
-          x <- readRDS(path)
-          x <- scGate::scGate(x, model=models.TME, ncores = 1)
-          saveRDS(x, path)
-        }
-      )
+  if(!is.null(scGate.model)) {
+    message("## Running scGate\n")
+
+    if(!is.list(scGate.model)){
+      scGate.model <- list(scGate.model)
     }
-    message("Finished scGate\n")
+
+    # Retrieve default scGate models if default
+    if(length(scGate.model) == 1 && tolower(scGate.model) == "default"){
+      if(species == "human"){
+        scGate.model <- scGate::get_scGateDB(branch = scGate.model.branch,
+                                             force_update = T)[[species]][["HiTME"]]
+      } else if(species == "mouse"){
+        scGate.model <- scGate::get_scGateDB(branch = scGate.model.branch,
+                                             force_update = T)[[species]][["HiTME"]]
+      }
+      message(" - Running scGate model for ", paste(names(scGate.model), collapse = ", "), "\n")
+    }
+
+
+
+  ## Run scGate
+    object <- lapply(
+              X = object,
+              FUN = function(x) {
+                    if(class(x) != "Seurat"){
+                      stop("Not Seurat object included, cannot be processed.\n")
+                    }
+                    x <- scGate::scGate(x,
+                                        model=scGate.model,
+                                        additional.signatures = additional.signatures,
+                                        BPPARAM = param,
+                                        multi.asNA = T)
+
+
+                    x@misc[["layer1_param"]] <- list()
+                    x@misc[["layer1_param"]][["layer1_models"]] <- names(scGate.model)
+                    x@misc[["layer1_param"]][["additional.signatures"]] <- names(additional.signatures)
+
+                    return(x)
+              }
+    )
+
+    message("Finished scGate\n####################################################\n")
   } else {
     message("Not running coarse cell type classification as no scGate model was indicated.\n")
   }
 
+    # Instance if we want to run additional signatures but not scGate
+  if(is.null(scGate.model) && !is.null(additional.signatures)){
+
+  message("Running additional Signatures but not Running scGate classification\n")
+  object <- lapply(
+    X = object,
+    FUN = function(x) {
+      if(class(x) != "Seurat"){
+        stop("Not Seurat object included, cannot be processed.\n")
+      }
+        x <- UCell::AddModuleScore_UCell(x,
+                                        features = additional.signatures,
+                                        BPPARAM = param)
+
+
+      x@misc[["layer1_param"]] <- list()
+      x@misc[["layer1_param"]][["additional.signatures"]] <- names(additional.signatures)
+
+      return(x)
+    }
+  )
+
+
+  }
+
+
 
   # Run ProjecTILs if ref.maps is provided
   if (!is.null(ref.maps)) {
-    for (i in 1:length(ref.maps)) {
-      ref.map.name <- names(ref.maps)[i]
-      message(paste("Running ProjecTILs with map:  ", ref.map.name, "\n"))
+      message("## Running Projectils\n")
 
-      if (isS4(object)) { # If input is a single Seurat object
-        object <- ProjecTILs::ProjecTILs.classifier(object,
-                                                    ref.maps[[i]],
-                                                    ncores = ncores)
-
-        object@meta.data[[paste0(ref.map.name, "_subtypes")]] <- object@meta.data[["functional.cluster"]]
-        object@meta.data[["functional.cluster"]] <- NULL
-      } else if (is.list(object)) { # If input is object list
-        object <- ProjecTILs::ProjecTILs.classifier(object, ref.maps[[i]], ncores = ncores)
-        for (j in 1:length(object)) {
-          object[[j]]@meta.data[[paste0(ref.map.name, "_subtypes")]] <- object[[j]]@meta.data[["functional.cluster"]]
-          object[[j]]@meta.data[["functional.cluster"]] <- NULL
-        }
-      } else if (!is.null(dir)) { # If input is directory
-        BiocParallel::bplapply(
-          X = files,
-          BPPARAM = param,
-          FUN = function(file) {
-            path <- file.path(dir, file)
-            x <- readRDS(path)
-            x <- ProjecTILs::ProjecTILs.classifier(x, ref.maps[[i]])
-            x@meta.data[[paste0(ref.map.name, "_subtypes")]] <- x@meta.data[["functional.cluster"]]
-            x@meta.data[["functional.cluster"]] <- NULL
-            saveRDS(x, path)
-          }
+        object <- lapply(
+                  X = object,
+                  FUN = function(x) {
+                    if(class(x) != "Seurat"){
+                      stop("Not Seurat object included, cannot be processed.\n")
+                    }
+                    x <- ProjecTILs.classifier.multi(x,
+                                                     ref.maps = ref.maps,
+                                                     bparam = param,
+                                                     layer1_link = layer1_link)
+                    return(x)
+                  }
         )
-      }
-      print(paste("Finished ProjecTILs with map:  ", ref.map.name))
-    }
+
+    message("Finished Projectils\n####################################################\n")
   } else {
     message("Not running reference mapping as no reference maps were indicated.\n")
   }
 
 
-  if (!is.null(split.by)) {
-    if (remerge) {
-      object <- merge(object[[1]],object[2:length(object)])
+  if (is.list(object)) {
+    if (remerge && length(object)>1) {
+        object <- merge(object[[1]],object[2:length(object)])
+        # add misc slot, removed when merging
+        object@misc[["layer1_param"]] <- list()
+        object@misc[["layer1_param"]][["layer1_models"]] <- names(scGate.model)
+        object@misc[["layer1_param"]][["additional.signatures"]] <- names(additional.signatures)
+
+        object <- list(object)
+    }
+  } else {
+    object <- list(object)
+  }
+
+  # if group.by parameters are not present in metadata, return Seurat
+  if(!return.Seurat){
+    if(suppressWarnings(!all(lapply(object, function(x){any(names(x@meta.data) %in% group.by)})))){
+      message("None of the 'group.by' variables found, returning Seurat object not HiT object.")
+      return.Seurat <- TRUE
+    } else {
+      message("\nBuilding HiT object\n")
+
+      hit <- BiocParallel::bplapply(
+        X = object,
+        BPPARAM = param,
+        FUN = function(x) {
+          x <- get.HiTObject(x,
+                             group.by = group.by,
+                             useNA = useNA
+                             )
+        }
+      )
+
     }
   }
 
+
+  # if list is of 1, return object not list
+
   if (!is.null(object)) {
-    return(object)
+    if(return.Seurat){
+      if(length(object)==1){
+        object <- object[[1]]
+      }
+      return(object)
+    } else {
+      if(length(hit)==1){
+        hit <- hit[[1]]
+      }
+      return(hit)
+    }
   }
+
 }
 
 
 
-
-
-#' Calculate cell type composition
+# Function get.HiTObject
+#' Get a HiT object summarizing cell type classification and aggregated profiles.
 #'
-#' @param object A seurat object or a list of seurat objects
-#' @param dir Directory containing the sample .rds files
+#'
+#'
+#' @param object A seurat object
+#' @param group.by List with one or multiple Seurat object metadata columns with cell type predictions to group by (e.g. layer 1 cell type classification)
+#' @param name.additional.signatures Names of additional signatures as found in object metadata to take into account.
+#' @param ... Additional parameters for \link{get.aggregated.profile}, \link{get.celltype.composition}, and \link{get.aggregated.signature} functions.
+#'
+#' @importFrom methods setClass new
+#' @import SeuratObject
+#'
+#' @return HiT object summarizing cell type classification and aggregated profiles.
+#' @export get.HiTObject
+#'
+
+
+get.HiTObject <- function(object,
+                          group.by = list("layer1" = c("scGate_multi"),
+                                          "layer2" = c("functional.cluster")
+                                          ),
+                          name.additional.signatures = NULL,
+                          useNA = FALSE,
+                          ...){
+
+
+  if (is.null(object)) {
+    stop("Please provide a Seurat object")
+  } else if(class(object) != "Seurat"){
+    stop("Not Seurat object included, cannot be processed.\n")
+  }
+
+
+  if(is.null(group.by)){
+    stop("Please provide at least one grouping variable")
+  }
+
+  if(!is.list(group.by)){
+    group.by <- as.list(group.by)
+  }
+
+  if(!any(group.by %in% names(object@meta.data))){
+    stop("Group.by variables ", paste(group.by, collapse = ", "), " not found in metadata")
+  } else if (!all(group.by %in% names(object@meta.data))){
+    group.by <- group.by[group.by %in% names(object@meta.data)]
+    message("Only found ", paste(group.by, collapse = ", ") , " as grouping variable for HiT Object.")
+  }
+
+  for(v in seq_along(group.by)){
+    if(is.null(names(group.by[[v]])) || is.na(names(group.by[[v]]))){
+      names(group.by[[v]]) <- paste0("layer", v)
+    }
+  }
+
+
+    # make list of list for layers for predictions slot
+  pred.list <- list()
+  for(a in names(group.by)){
+    pred.list[[a]] <- list()
+    pred.list[[a]] <- object@meta.data[,group.by[[a]], drop = F]
+  }
+
+
+
+  #run extended if object got scGate info
+  # extract values from misc slot from object
+  if(any(group.by == "scGate_multi")){
+    layer.scgate <- names(group.by[group.by == "scGate_multi"])
+    if(is.null(name.additional.signatures)){
+      name.additional.signatures <- object@misc$layer1_param$additional.signatures
+    }
+  scgate.models <- object@misc$layer1_param$layer1_models
+
+
+  if(!is.null(name.additional.signatures)){
+  sig <- grep(paste(name.additional.signatures, collapse = "|"),
+              names(object@meta.data), value = T)
+  sig.df <- object@meta.data[, sig]
+  pred.list[[layer.scgate]][["additional_signatures"]] <- sig.df
+  }
+
+  if(!is.null(scgate.models)){
+  scgate <- grep(paste(paste0(scgate.models, "$"), collapse = "|"),
+                 names(object@meta.data), value = T)
+  scgate.df <- object@meta.data[, scgate]
+  pred.list[[layer.scgate]][["scGate_is.pure"]] <- scgate.df
+  }
+
+  if(!is.null(name.additional.signatures) && !is.null(scgate.models)){
+  ucell <- names(object@meta.data)[!names(object@meta.data) %in% c(sig, scgate)] %>%
+            grep("_UCell$", ., value = T)
+
+  ucell.df <- object@meta.data[, ucell]
+
+  pred.list[[layer.scgate]][["UCell_scores"]] <- ucell.df
+  }
+  }
+
+  #run extended if object got projectils info
+  # extract values from misc slot from object
+  if(any(group.by == "functional.cluster")){
+    layer.pt <- names(group.by[group.by == "functional.cluster"])
+    pred.list[[layer.pt]][["functional.cluster"]] <- object@meta.data[,"functional.cluster", drop = F]
+    pred.list[[layer.pt]][["functional.cluster.conf"]] <- object@meta.data[,"functional.cluster.conf", drop = F]
+
+  }
+
+
+  # Compute proportions
+  message("Computing cell type composition...\n")
+
+  comp.prop <- get.celltype.composition(object,
+                                        group.by.composition = group.by,
+                                        useNA = useNA, ...)
+  # Compute avg expression
+  message("Computing aggregated profile...\n")
+
+  avg.expr <- get.aggregated.profile(object,
+                                     group.by.aggregated = group.by,
+                                     useNA = useNA, ...)
+
+  aggr.signature <- get.aggregated.signature(object,
+                                             group.by.aggregated = group.by,
+                                             name.additional.signatures = name.additional.signatures,
+                                             useNA = useNA, ...)
+
+
+  hit <- methods::new("HiT",
+                       metadata = object@meta.data,
+                       predictions = pred.list,
+                       aggregated_profile = list("Gene_expression" = avg.expr,
+                                                 "Signatures" = aggr.signature),
+                       composition = comp.prop
+                      )
+
+
+  return(hit)
+
+
+}
+
+
+#' Calculate cell type composition or frequencies
+#'
+#' @param object A seurat object or metadata dataframe.
+#' @param group.by.composition The Seurat object metadata column(s) containing celltype annotations (provide as character vector, containing the metadata column name(s))
 #' @param split.by A Seurat object metadata column to split by (e.g. sample names)
-#' @param annot.cols The Seurat object metadata column(s) containing celltype annotations (provide as character vector, containing the metadata column name(s))
 #' @param min.cells Set a minimum threshold for number of cells to calculate relative abundance (e.g. less than 10 cells -> no relative abundnace will be calculated)
-#' @param useNA Whether to include not annotated cells or not (labelled as "NA" in the annot.cols). Can be defined separately for each annot.cols (provide single boolean or vector of booleans)
-#' @param rename.Multi.to.NA Whether to rename cells labelled as "Multi" by scGate to "NA"
+
+#' @param useNA Whether to include not annotated cells or not (labelled as "NA" in the group.by.composition). Can be defined separately for each group.by.composition (provide single boolean or vector of booleans)
 #' @param clr_zero_impute_perc To calculate the clr-transformed relative abundance ("clr_freq"), zero values are not allowed and need to be imputed (e.g. by adding a pseudo cell count). Instead of adding a pseudo cell count of flat +1, here a pseudo cell count of +1% of the total cell count will be added to all cell types, to better take into consideration the relative abundance ratios (e.g. adding +1 cell to a total cell count of 10 cells would have a different, i.e. much larger effect, than adding +1 to 1000 cells).
-#' @param ncores The number of cores to use
-#' @param progressbar Whether to show a progressbar or not
-#'
+
 #' @importFrom Hotelling clr
-#' @importFrom parallelly availableCores
-#' @importFrom stringr str_remove_all
 #' @return Cell type compositions as a list of data.frames containing cell counts, relative abundance (freq) and clr-transformed freq (freq_clr), respectively.
-#' @export calc_CTcomp
+#' @export get.celltype.composition
 #'
 #' @examples
 #' devtools::install_github('satijalab/seurat-data')
@@ -200,167 +502,402 @@ annotate_cells <- function(object = NULL,
 #' data("panc8")
 #' panc8 = UpdateSeuratObject(object = panc8)
 #' # Calculate overall composition
-#' celltype.compositions.overall <- calc_CTcomp(object = panc8, annot.cols = "celltype")
+#' celltype.compositions.overall <- get.celltype.composition(object = panc8, group.by.composition = "celltype")
 #'
 #' # Calculate sample-wise composition
-#' celltype.compositions.sample_wise <- calc_CTcomp(object = panc8, annot.cols = "celltype", split.by = "orig.ident")
-calc_CTcomp <- function(object = NULL,
-                        dir = NULL,
-                        split.by = NULL,
-                        annot.cols = "scGate_multi",
-                        min.cells = 10,
-                        useNA = FALSE,
-                        rename.Multi.to.NA = TRUE,
-                        clr_zero_impute_perc = 1,
-                        ncores = parallelly::availableCores() - 2, progressbar = T) {
-  if (!is.null(object) & !is.null(dir)) {
-    stop(paste("Cannot provide object and dir"))
+
+#' celltype.compositions.sample_wise <- get.celltype.composition(object = panc8, group.by.composition = "celltype", split.by = "orig.ident")
+#'
+get.celltype.composition <- function(object = NULL,
+                                     group.by.composition = NULL,
+                                     split.by = NULL,
+                                     min.cells = 10,
+                                     useNA = FALSE,
+                                     clr_zero_impute_perc = 1) {
+
+  if (is.null(object)) {
+    stop("Please provide a Seurat object or metadata as dataframe")
   }
 
-  if (length(annot.cols) == 1) {
-    useNA <- ifelse(useNA == TRUE, "ifany", "no")
-  } else {
-    if (length(useNA) == 1) {
-      useNA <- ifelse(useNA == TRUE, "ifany", "no")
-      useNA <- rep(useNA, length(annot.cols))
-    } else if (length(useNA) == length(annot.cols)) {
-      x <- c()
-      for (i in useNA) {
-        x <- c(x, ifelse(useNA == TRUE, "ifany", "no"))
+  # input can be a Seurat object or a dataframe containing its meta.data
+  # convert object to metadata if seurat object is provided
+  if(class(object) == "Seurat"){
+    meta.data <- object@meta.data
+    if(is.null(meta.data)){
+      stop("No metadata found in this Seurat object")
       }
-      useNA <- x
-    } else {stop("useNA has not the same length as annot.cols")}
+  } else if (class(object) == "data.frame"){
+    meta.data <- object
+  } else {
+    stop("Not Seurat object or dataframe included, cannot be processed.\n")
   }
 
+  if(is.null(group.by.composition)){
+    stop("Please specificy a group.by.composition variable")
+  }
+
+
+  # Assess wheter split.by variable is in metadata
+  if(!is.null(split.by) && !split.by %in% names(meta.data)){
+    stop("Split.by variable not found in meta.data!\n")
+  }
+
+  if(length(useNA) != 1 && length(useNA) == length(group.by.composition)){
+    stop("useNA variable must be of length 1 or the same length as group.by.composition (group.by)")
+  }
+
+  # convert group.by.composition to list if not
+  if(!is.list(group.by.composition)){
+    group.by.composition <- as.list(group.by.composition)
+  }
+
+
+  # Rename group.by.composition if not indicated
+  for(v in seq_along(group.by.composition)){
+    if(is.null(names(group.by.composition)[[v]]) || is.na(names(group.by.composition)[[v]])){
+      names(group.by.composition)[[v]] <- group.by.composition[[v]]
+    }
+
+  }
+
+
+
+  # Keep only grouping variables in metadata
+  if(!any(group.by.composition %in% names(meta.data))){
+    stop("Group.by variables ", paste(group.by.composition, collapse = ", "), " not found in metadata")
+  } else if (!all(group.by.composition %in% names(meta.data))){
+    group.present <- group.by.composition %in% names(meta.data)
+    # accommodate useNA vector
+    if (length(useNA) == length(group.by.composition)) {
+      useNA <- useNA[group.present]
+
+    }
+    # keep only grouping variables found in metadata
+    group.by.composition <- group.by.composition[group.present]
+    message("Only found ", paste(group.by.composition, collapse = ", ") , " as grouping variables.")
+  }
+
+
+  # Convert TRUE/FALSE to ifany or no
+  useNA <- ifelse(useNA == TRUE, "ifany", "no")
+  # Rep useNa parameters according to group.by.composition variable
+  if (length(useNA) == 1) {
+    useNA <- rep(useNA, length(group.by.composition))
+  }
+
+  # list to store compositions
   celltype.compositions <- list()
 
-  # Either:
-  # - The input is a single Seurat object
-  # - The input is a list of Seurat objects
-  # - The input is directory containing multiple .rds files (each a single object)
-  if (isS4(object)) { # Input is a single Seurat object
-    for (i in 1:length(annot.cols)) {
-      if (length(object@meta.data[[annot.cols[i]]]) == 0) {
-        stop(paste("Annotation metadata column", annot.cols[i],"could not be found"))
-      }
 
-      if (rename.Multi.to.NA) {
-        object@meta.data[[annot.cols[i]]][object@meta.data[[annot.cols[i]]] == "Multi"] <- NA
-      }
-
-      if (is.null(split.by)) {
-        comp_table <- table(object@meta.data[[annot.cols[i]]],
-                            useNA = useNA[i])
-        comp_table_freq <- prop.table(comp_table) * 100 # To get percentage
-      } else {
-
-        if (length(object@meta.data[[split.by]]) == 0) {
-          stop(paste("Sample column could not be found"))
-        }
-
-        comp_table <- table(object@meta.data[[annot.cols[i]]],
-                            object@meta.data[[split.by]],
-                            useNA = useNA[i])
-
-        comp_table_freq <- prop.table(comp_table, margin = 2) * 100 # To get percentage
-      }
-
-      if (sum(comp_table) < min.cells) {
-        warning(paste("There are less than", min.cells,
-                      "cells detected. This is too few to calculate a reasonable celltype composition, If needed, set parameter min.cells = 0."))
-        next
-      }
-
-      ## clr-transform
-      comp_table_clr <- Hotelling::clr(t(comp_table_freq + clr_zero_impute_perc))
-
-      ## Append
-      celltype.compositions[[annot.cols[i]]][["cell_counts"]] <- as.data.frame.matrix(t(comp_table))
-      celltype.compositions[[annot.cols[i]]][["freq"]] <- as.data.frame.matrix(t(comp_table_freq))
-      celltype.compositions[[annot.cols[i]]][["freq_clr"]] <- as.data.frame.matrix(comp_table_clr)
-    }
-  } else { # Input is a list of Seurat objects or a directory containing multiple .rds files
-    comp_tables <- list()
-
-    if (is.list(object)) {
-      object_names <- names(object)
-    } else if (!is.null(dir)) {
-      files <- list.files(dir)
-      files <- files[endsWith(files, '.rds')]
-      object_names <- stringr::str_remove_all(files, '.rds')
+  for (i in seq_along(group.by.composition)) {
+    if (is.null(split.by)) {
+      comp_table <- table(meta.data[[group.by.composition[[i]]]],
+                          useNA = useNA[i])
+      comp_table_freq <- prop.table(comp_table) * 100 # To get percentage
+    } else {
+      comp_table <- table(meta.data[[group.by.composition[[i]]]],
+                          meta.data[[split.by]],
+                          useNA = useNA[i])
+      comp_table_freq <- prop.table(comp_table, margin = 2) * 100 # To get percentage
     }
 
-    # For each object calculate the comp_table (cell_counts) for each celltype (annot.col)
-    # This is done per sample in order to load every sample only once, if a directory is provided as input
-    for(j in 1:length(object_names)) {
-      if (is.list(object)) {
-        obj <- object[[j]]
-      }
-      if (!is.null(dir)) {
-        obj <- readRDS(file.path(dir, files[j]))
-      }
-
-      for (i in 1:length(annot.cols)) {
-        if (rename.Multi.to.NA) {
-          obj@meta.data[[annot.cols[i]]][obj@meta.data[[annot.cols[i]]] == "Multi"] <- NA
-        }
-        if (length(obj@meta.data[[annot.cols[i]]]) == 0) {
-          stop(paste("Annotation metadata column", annot.cols[i],"could not be found in", object_names[j]))
-        }
-        if (rename.Multi.to.NA) {
-          obj@meta.data[[annot.cols[i]]][obj@meta.data[[annot.cols[i]]] == "Multi"] <- NA
-        }
-        if (!is.null(split.by)) {
-          stop(paste("Cannot define split.by if multiple objects are provided"))
-        } else {
-          if (j == 1) { # For the first sample, simply add table to list
-            comp_tables[[annot.cols[i]]] <- as.data.frame.matrix(t(table(obj@meta.data[[annot.cols[i]]],
-                                                                         useNA = useNA[i])))
-            rownames(comp_tables[[annot.cols[i]]]) <- object_names[j]
-          } else { # For subsequent samples, need to merge tables
-            comp_table_to_append <- as.data.frame.matrix(t(table(obj@meta.data[[annot.cols[i]]],
-                                                                 useNA = useNA[i])))
-            rownames(comp_table_to_append) <- object_names[j]
-            comp_tables_merged <- merge(t(comp_table_to_append),
-                                        t(comp_tables[[annot.cols[i]]]),
-                                        by=0, all=TRUE)
-            comp_tables[[annot.cols[i]]] <- as.data.frame.matrix(t(transform(comp_tables_merged, row.names=Row.names, Row.names=NULL)))
-          }
-        }
-      }
+    if (sum(comp_table) < min.cells) {
+      warning(paste("There are less than", min.cells,
+                    "cells detected. This is too few to calculate a reasonable celltype composition, If needed, set parameter min.cells = 0."))
+      next
     }
 
-    for (i in 1:length(annot.cols)) {
-      comp_table <- comp_tables[[i]]
-      comp_table[is.na(comp_table)] <- 0
+    ## clr-transform
+    comp_table_clr <- Hotelling::clr(t(comp_table_freq + clr_zero_impute_perc))
 
-      low_count_samples <- rownames(comp_table)[rowSums(comp_table) < min.cells]
+    ## Append
+    celltype.compositions[[names(group.by.composition)[i]]][["cell_counts"]] <- as.data.frame.matrix(t(comp_table))
+    celltype.compositions[[names(group.by.composition)[i]]][["freq"]] <- as.data.frame.matrix(t(comp_table_freq))
+    celltype.compositions[[names(group.by.composition)[i]]][["freq_clr"]] <- as.data.frame.matrix(comp_table_clr)
+  }
 
-      comp_table_freq <- as.data.frame(prop.table(as.matrix(comp_table), margin = 1) * 100) # To get percentage
+  return(celltype.compositions)
 
-      if (length(low_count_samples) >= 1) {
-        warning(paste("There are less than", min.cells, annot.cols[i],
-                      "cells detected in sample(s)", low_count_samples,
-                      ". For this sample(s), no celltype composition was calculated. If needed, set parameter min.cells = 0.\n"))
-        comp_table_freq <- comp_table_freq[!rownames(comp_table_freq) %in% low_count_samples, ]
-      }
+}
 
-      ## clr-transform
-      comp_table_clr <- as.data.frame.matrix(Hotelling::clr(comp_table_freq + clr_zero_impute_perc))
 
-      ## Sort
-      comp_table <- comp_table[order(row.names(comp_table)), ]
-      comp_table_freq <- comp_table_freq[order(row.names(comp_table_freq)), ]
-      comp_table_clr <- comp_table_clr[order(row.names(comp_table_clr)), ]
 
-      ## Append
-      celltype.compositions[[annot.cols[i]]][["cell_counts"]] <- comp_table
-      celltype.compositions[[annot.cols[i]]][["freq"]] <- comp_table_freq
-      celltype.compositions[[annot.cols[i]]][["freq_clr"]] <- comp_table_clr
+#' Compute aggregated gene expression
+#'
+#' Function to compute aggregated expression (pseudobulk, i.e. sum counts per ident), and average expression by indicated cell type or grouping variable.
+#'
+#'
+#' @param object A seurat object or a list of seurat objects
+#' @param group.by.aggregated The Seurat object metadata column(s) containing celltype annotations
+#' @param gene.filter Additional named list of genes to subset their aggregated expression, by default all genes,
+#'  highly variable genes (see \code{nHVG}), ribosomal genes, transcription factor (GO:0003700), cytokines (GO:0005125),
+#'   cytokine receptors (GO:0004896), chemokines (GO:0008009), and chemokines receptors (GO:0004950) are subsetted.
+#' @param GO_accession Additional GO accessions to subset genes for aggregation, by default the list indicated in \code{gene.filter} are returned.
+#' @param nHVG Number of highly variable genes returned. By default 1000.
+#' @param assay Assay to retrieve information. By default "RNA".
+#' @param layer Layer to retrieve the data from to compute average expression.
+#' @param slot Deprecated slot in Seurat version under 5. Same use as layer.
+#' @param useNA logical whether to return aggregated profile for NA (undefined) cell types, default is FALSE.
+#' @param ... Extra parameters for internal Seurat functions: AverageExpression, AggregateExpression, FindVariableFeatures
+
+#' @importFrom Seurat AverageExpression AggregateExpression FindVariableFeatures
+#' @importFrom biomaRt useMart getBM
+#' @return Average and aggregated expression as a list of matrices for all genes and indicated gene lists filtering.
+#' @export get.aggregated.profile
+
+
+get.aggregated.profile <- function(object,
+                                   group.by.aggregated = NULL,
+                                   gene.filter = NULL,
+                                   GO_accession = NULL,
+                                   nHVG = 1000,
+                                   assay = "RNA",
+                                   layer = "data",
+                                   slot = "data",
+                                   useNA = FALSE,
+                                   ...) {
+
+  if (is.null(object)) {
+    stop("Please provide a Seurat object")
+    if(class(object) != "Seurat"){
+      stop("Please provide a Seurat object")
     }
   }
-  return(celltype.compositions)
+
+  if(is.null(group.by.aggregated)){
+    stop("Please specificy a group.by.aggregated variable")
+  }
+
+  # convert group.by.aggregated to list if not
+  if(!is.list(group.by.aggregated)){
+    group.by.aggregated <- as.list(group.by.aggregated)
+  }
+
+  # Rename group.by.aggregated if not indicated
+  # Rename group.by.aggregated if not indicated
+  for(v in seq_along(group.by.aggregated)){
+    if(is.null(names(group.by.aggregated)[[v]]) || is.na(names(group.by.aggregated)[[v]])){
+      names(group.by.aggregated)[[v]] <- group.by.aggregated[[v]]
+    }
+  }
+
+  if(!any(group.by.aggregated %in% names(object@meta.data))){
+    stop("Group.by variables ", paste(group.by.aggregated, collapse = ", "), " not found in metadata")
+  } else if (!all(group.by.aggregated %in% names(object@meta.data))){
+    group.by.aggregated <- group.by.aggregated[group.by.aggregated %in% names(object@meta.data)]
+    message("Only found ", paste(group.by.aggregated, collapse = ", ") , " as grouping variables.")
+  }
+
+  if(!is.null(gene.filter) && !is.list(gene.filter)){
+      gene.filter <- list(gene.filter)
+  }
+
+
+  gene.filter.list <- list()
+  # make a list of default subsetting genes
+
+  # Dorothea transcription factors
+  # data("entire_database", package = "dorothea")
+  # gene.filter.list[["Dorothea_Transcription_Factors"]] <- entire_database$tf %>% unique()
+
+  # Ribosomal genes
+  gene.filter.list[["Ribosomal"]] <- SignatuR::GetSignature(SignatuR::SignatuR$Hs$Compartments$Ribo)
+
+  # Highly variable genes (HVG)
+  gene.filter.list[["HVG"]] <- Seurat::FindVariableFeatures(object,
+                                                            nfeatures = nHVG,
+                                                            assay = assay,
+                                                            verbose = F
+                                                            )[[assay]]@var.features
+
+  # Add list genes from GEO accessions
+
+  gene.filter.list <- c(gene.filter.list, get.GOList(GO_accession, ...))
+
+  # Add defined list of genes to filter
+  for(a in seq_along(gene.filter)){
+    if(is.null(names(gene.filter[[a]]))){
+      i.name <- paste0("GeneList_", a)
+    } else {
+      i.name <- names(gene.filter[[a]])
+    }
+    gene.filter.list[[i.name]] <- gene.filter[[a]]
+  }
+
+
+  avg.exp <- list()
+  avg.exp[["Average"]] <- list()
+  avg.exp[["Aggregated"]] <- list()
+
+  # loop over different grouping
+
+  for(i in names(group.by.aggregated)){
+    # Create list for average and aggregated
+    avg.exp[["Average"]][[i]] <- list()
+    avg.exp[["Aggregated"]][[i]] <- list()
+
+    # if useNA = TRUE, transform NA to character
+    if(useNA){
+      object@meta.data[is.na(object@meta.data[[group.by.aggregated[[i]]]]),
+                       group.by.aggregated[[i]]] <- "NA"
+    }
+
+  # compute average
+    suppressWarnings(
+      {
+    avg.exp[["Average"]][[i]][["All.genes"]] <-
+      Seurat::AverageExpression(object,
+                                group.by = group.by.aggregated[[i]],
+                                assays = assay,
+                                layer = layer,
+                                slot = layer,
+                                verbose = F,
+                                ...
+                                )[[assay]]
+
+
+    # compute average
+    avg.exp[["Aggregated"]][[i]][["All.genes"]] <-
+      Seurat::AggregateExpression(object,
+                                group.by = group.by.aggregated[[i]],
+                                assays = assay,
+                                verbose = F,
+                                ...
+                                )[[assay]]
+      })
+
+    if(ncol(avg.exp[["Average"]][[i]][["All.genes"]]) == 1){
+      for(av in names(avg.exp)){
+        colnames(avg.exp[[av]][[i]][["All.genes"]]) <-
+          unique(object@meta.data[!is.na(object@meta.data[[group.by.aggregated[[i]]]]),
+                                  group.by.aggregated[[i]]])
+      }
+    }
+
+    for(sl in names(avg.exp)){
+      # add colnames if only one cell type is found
+      if(ncol(avg.exp[["Average"]][[i]][["All.genes"]]) == 1){
+          colnames(avg.exp[[sl]][[i]][["All.genes"]]) <-
+            unique(object@meta.data[!is.na(object@meta.data[[group.by.aggregated[[i]]]]),
+                                    group.by.aggregated[[i]]])
+      }
+
+      # subset genes accroding to gene filter list
+      for(e in names(gene.filter.list)){
+        keep <- gene.filter.list[[e]][gene.filter.list[[e]] %in%
+                                        rownames(avg.exp[[sl]][[i]][["All.genes"]])]
+        avg.exp[[sl]][[i]][[e]] <- avg.exp[[sl]][[i]][["All.genes"]][keep, , drop = FALSE]
+      }
+    }
+
+
+  }
+
+
+  return(avg.exp)
 }
+
+
+#' Compute aggregated additional signatures by cell type
+#'
+#' Function to compute aggregated signatures of predicted cell types.
+#'
+#'
+#' @param object A seurat object or metadata dataframe.
+#' @param group.by.aggregated The Seurat object metadata column(s) containing celltype annotations (idents).
+#' @param name.additional.signatures Names of additional signatures to compute the aggregation per cell type.
+#' @param fun Function to aggregate the signature, e.g. mean or sum.
+#' @param useNA logical whether to return aggregated signatures for NA (undefined) cell types, default is FALSE.
+
+#' @importFrom dplyr group_by summarize_at filter
+#' @return Aggregated signature score for each indicated cell type grouping Results is NULL of not additional signatures are indicated or present in metadata.
+#' @export get.aggregated.signature
+
+
+get.aggregated.signature <- function(object,
+                                     group.by.aggregated = NULL,
+                                     name.additional.signatures = NULL,
+                                     fun = mean,
+                                     useNA = FALSE){
+
+
+  # input can be a Seurat object or a dataframe containing its meta.data
+  # convert object to metadata if seurat object is provided
+  if(class(object) == "Seurat"){
+    meta.data <- object@meta.data
+    if(is.null(meta.data)){
+      stop("No metadata found in this Seurat object")
+    }
+  } else if (class(object) == "data.frame"){
+    meta.data <- object
+  } else {
+    stop("Not Seurat object or dataframe included, cannot be processed.\n")
+  }
+
+
+  if(is.null(group.by.aggregated)){
+    stop("Please specificy a group.by.aggregated variable")
+  }
+
+  # convert group.by.aggregated to list if not
+  if(!is.list(group.by.aggregated)){
+    group.by.aggregated <- as.list(group.by.aggregated)
+  }
+
+  # Rename group.by.aggregated if not indicated
+  for(v in seq_along(group.by.aggregated)){
+    if(is.null(names(group.by.aggregated)[[v]]) || is.na(names(group.by.aggregated)[[v]])){
+      names(group.by.aggregated)[[v]] <- group.by.aggregated[[v]]
+    }
+  }
+
+  if(!any(group.by.aggregated %in% names(meta.data))){
+    stop("Group.by variables ", paste(group.by.aggregated, collapse = ", "), " not found in metadata")
+  } else if (!all(group.by.aggregated %in% names(meta.data))){
+    group.by.aggregated <- group.by.aggregated[group.by.aggregated %in% names(meta.data)]
+    message("Only found ", paste(group.by.aggregated, collapse = ", ") , " as grouping variable.")
+  }
+
+  if(is.null(name.additional.signatures)){
+    name.additional.signatures <- object@misc$layer1_param$additional.signatures
+  }
+
+  if(is.null(name.additional.signatures)){
+    message("No additional signatures indicated. Returning NULL")
+    aggr.sig <- NULL
+  } else {
+
+    if(!any(grepl(paste(name.additional.signatures, collapse = "|"),
+                  names(meta.data)))){
+      stop("No additional signatures found in this object metadata")
+    }
+
+    add.sig.cols <- grep(paste(name.additional.signatures, collapse = "|"),
+                         names(meta.data), value = T)
+
+    aggr.sig <- list()
+
+    for(e in names(group.by.aggregated)){
+      aggr.sig[[e]] <- meta.data %>%
+        dplyr::group_by(.data[[group.by.aggregated[[e]]]]) %>%
+        dplyr::summarize_at(add.sig.cols, fun, na.rm = T)
+
+        # filter out NA if useNA=F
+      if(!useNA){
+        aggr.sig[[e]] <- aggr.sig[[e]] %>%
+                          dplyr::filter(!is.na(.data[[group.by.aggregated[[e]]]]))
+      }
+
+    }
+  }
+
+  return(aggr.sig)
+
+}
+
+
+
+
 
 #' Save object list to disk, in parallel
 #'
@@ -378,7 +915,8 @@ calc_CTcomp <- function(object = NULL,
 #' save_objs(obj.list, "./output/samples")
 save_objs <- function(obj.list,
                       dir,
-                      ncores = parallelly::availableCores() - 2, progressbar = T){
+                      ncores = parallelly::availableCores() - 2,
+                      progressbar = T){
   BiocParallel::bplapply(
     X = obj.list,
     BPPARAM =  BiocParallel::MulticoreParam(workers = ncores, progressbar = progressbar),
@@ -407,7 +945,8 @@ save_objs <- function(obj.list,
 #' obj.list <- read_objs("./output/samples")
 read_objs <- function(dir = NULL,
                       file.list = NULL,
-                      ncores = parallelly::availableCores() - 2, progressbar = T){
+                      ncores = parallelly::availableCores() - 2,
+                      progressbar = T){
   if (!is.null(dir) & is.null(file.list)) {
     file_names <- list.files(dir)
     file_paths <- file.path(dir, file_names)
@@ -424,3 +963,7 @@ read_objs <- function(dir = NULL,
   names(obj.list) <- stringr::str_remove_all(file_names, '.rds')
   return(obj.list)
 }
+
+
+
+
