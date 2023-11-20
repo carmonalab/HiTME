@@ -1,14 +1,14 @@
 
 
-#' Run HitME: classify cells
+#' Classify cells using scGate and ProjecTILs.
 #'
 #' @param object A seurat object or a list of seurat objects
-#' @param scGate.model The scGate model to use (use get_scGateDB() to get a list of available models), by default fetch the HiTME models: \code{ scGate::get_scGateDB(branch = scGate.model.branch,)[[species]][["HiTME"]]}.
+#' @param scGate.model The scGate model to use (use get_scGateDB() to get a list of available models), by default fetch the HiTME models: \code{ scGate::get_scGateDB(branch = scGate.model.branch)[[species]][["HiTME"]]}.
 #' @param scGate.model.branch From which branch Run.HiTME fetch the scGate models, by default models are retrieved from \code{master} branch.
 #' @param additional.signatures UCell additional signatures to compute on each cell, by default \code{SignatuR} Programs are included.
-#' @param ref.maps A named list of the ProjecTILs reference maps to use.
+#' @param ref.maps A named list of the ProjecTILs reference maps to use. They ought to be Seurat objects. It is recommended to add in reference object slost \code{misc} the identifier connecting to layer 1 classification (scGate): \code{ref.map@misc$layer1_link}
 #' @param split.by A Seurat object metadata column to split by (e.g. sample names).
-#' @param layer1_link Column of metadata linking layer1 prediction in order to perform subsetting for second layer classification.
+#' @param layer1_link Column of metadata linking layer1 prediction (e.g. scGate ~ scGate_multi) in order to perform subsetting for second layer classification.
 #' @param return.Seurat Whether to return a Hit object or add the data into Seurat object metadata
 #' @param group.by If return.Seurat = F, variables to be used to summarize HiTME classification data in HiT object.
 #' @param useNA Whether to include not annotated cells or not (labelled as "NA" in the group.by.composition) when summarizing into HiT object.
@@ -21,12 +21,11 @@
 #' @importFrom parallelly availableCores
 #' @importFrom dplyr mutate filter %>%
 #' @importFrom tibble column_to_rownames
-#' @importFrom scGate scGate
-#' @importFrom SignatuR SignatuR
-#' @importFrom ProjecTILs ProjecTILs.classifier
+#' @importFrom scGate scGate get_scGateDB
 #' @importFrom Seurat SplitObject
+#' @importFrom data.table rbindlist setDT
 #'
-#' @return No return in R. The input files will be overwritten.
+#' @return Seurat object with additional metadata showing cell type classification, or HiT object summarizing such classification.
 #' @export Run.HiTME
 #'
 #' @examples
@@ -169,7 +168,7 @@ Run.HiTME <- function(object = NULL,
       } else if(species == "mouse"){
         sig.species <- "Mm"
       }
-      additional.signatures <- SignatuR::GetSignature(SignatuR[[sig.species]][["Programs"]])
+      additional.signatures <- SignatuR::GetSignature(SignatuR::SignatuR[[sig.species]][["Programs"]])
       message(" - Adding additional signatures: ", paste(names(additional.signatures), collapse = ", "), "\n")
     }
     } else {
@@ -347,8 +346,10 @@ Run.HiTME <- function(object = NULL,
 #' @param group.by List with one or multiple Seurat object metadata columns with cell type predictions to group by (e.g. layer 1 cell type classification)
 #' @param name.additional.signatures Names of additional signatures as found in object metadata to take into account.
 #' @param ... Additional parameters for \link{get.aggregated.profile}, \link{get.celltype.composition}, and \link{get.aggregated.signature} functions.
-#' @import Seurat
+#'
+#' @importFrom methods setClass new
 #' @import SeuratObject
+#'
 #' @return HiT object summarizing cell type classification and aggregated profiles.
 #' @export get.HiTObject
 #'
@@ -359,7 +360,7 @@ get.HiTObject <- function(object,
                                           "layer2" = c("functional.cluster")
                                           ),
                           name.additional.signatures = NULL,
-                          useNA = FALSE
+                          useNA = FALSE,
                           ...){
 
 
@@ -391,16 +392,6 @@ get.HiTObject <- function(object,
     }
   }
 
-  ## Build S4 objects to store data
-  setClass(Class = "HiT",
-           slots = list(
-             metadata = "data.frame",
-             predictions = "list",
-             composition = "list",
-             aggregated_profile = "list",
-             version = "list"
-           )
-  )
 
     # make list of list for layers for predictions slot
   pred.list <- list()
@@ -474,13 +465,13 @@ get.HiTObject <- function(object,
                                              useNA = useNA, ...)
 
 
-  hit <- new("HiT",
-             metadata = object@meta.data,
-             predictions = pred.list,
-             aggregated_profile = list("Gene_expression" = avg.expr,
-                                       "Signatures" = aggr.signature),
-             composition = comp.prop
-  )
+  hit <- methods::new("HiT",
+                       metadata = object@meta.data,
+                       predictions = pred.list,
+                       aggregated_profile = list("Gene_expression" = avg.expr,
+                                                 "Signatures" = aggr.signature),
+                       composition = comp.prop
+                      )
 
 
   return(hit)
@@ -627,7 +618,7 @@ get.celltype.composition <- function(object = NULL,
 
 #' Compute aggregated gene expression
 #'
-#' Function to compute aggregated expression (pseudobulk, i.e. sum counts per ident), and average expression by indicated cell type or groupin variable.
+#' Function to compute aggregated expression (pseudobulk, i.e. sum counts per ident), and average expression by indicated cell type or grouping variable.
 #'
 #'
 #' @param object A seurat object or a list of seurat objects
@@ -644,9 +635,8 @@ get.celltype.composition <- function(object = NULL,
 #' @param ... Extra parameters for internal Seurat functions: AverageExpression, AggregateExpression, FindVariableFeatures
 
 #' @importFrom Seurat AverageExpression AggregateExpression FindVariableFeatures
-#' @importFrom SignatuR SignatuR
 #' @importFrom biomaRt useMart getBM
-#' @return Average and aggregated expression as a list of matrices fro all gens and indicated filer.
+#' @return Average and aggregated expression as a list of matrices for all genes and indicated gene lists filtering.
 #' @export get.aggregated.profile
 
 
@@ -705,7 +695,7 @@ get.aggregated.profile <- function(object,
   # gene.filter.list[["Dorothea_Transcription_Factors"]] <- entire_database$tf %>% unique()
 
   # Ribosomal genes
-  gene.filter.list[["Ribosomal"]] <- SignatuR::GetSignature(SignatuR$Hs$Compartments$Ribo)
+  gene.filter.list[["Ribosomal"]] <- SignatuR::GetSignature(SignatuR::SignatuR$Hs$Compartments$Ribo)
 
   # Highly variable genes (HVG)
   gene.filter.list[["HVG"]] <- Seurat::FindVariableFeatures(object,
@@ -813,7 +803,7 @@ get.aggregated.profile <- function(object,
 #' @param useNA logical whether to return aggregated signatures for NA (undefined) cell types, default is FALSE.
 
 #' @importFrom dplyr group_by summarize_at filter
-#' @return Average and aggregated expression as a list of matrices fro all gens and indicated filer.
+#' @return Aggregated signature score for each indicated cell type grouping Results is NULL of not additional signatures are indicated or present in metadata.
 #' @export get.aggregated.signature
 
 
@@ -866,30 +856,32 @@ get.aggregated.signature <- function(object,
   }
 
   if(is.null(name.additional.signatures)){
-    stop("Please provide additional signatures")
-  }
+    message("No additional signatures indicated. Returning NULL")
+    aggr.sig <- NULL
+  } else {
 
-  if(!any(grepl(paste(name.additional.signatures, collapse = "|"),
-                names(meta.data)))){
-    stop("No additional signatures found in this object metadata")
-  }
-
-  add.sig.cols <- grep(paste(name.additional.signatures, collapse = "|"),
-                       names(meta.data), value = T)
-
-  aggr.sig <- list()
-
-  for(e in names(group.by.aggregated)){
-    aggr.sig[[e]] <- meta.data %>%
-      dplyr::group_by(.data[[group.by.aggregated[[e]]]]) %>%
-      dplyr::summarize_at(add.sig.cols, fun, na.rm = T)
-
-      # filter out NA if useNA=F
-    if(!useNA){
-      aggr.sig[[e]] <- aggr.sig[[e]] %>%
-                        dplyr::filter(!is.na(.data[[group.by.aggregated[[e]]]]))
+    if(!any(grepl(paste(name.additional.signatures, collapse = "|"),
+                  names(meta.data)))){
+      stop("No additional signatures found in this object metadata")
     }
 
+    add.sig.cols <- grep(paste(name.additional.signatures, collapse = "|"),
+                         names(meta.data), value = T)
+
+    aggr.sig <- list()
+
+    for(e in names(group.by.aggregated)){
+      aggr.sig[[e]] <- meta.data %>%
+        dplyr::group_by(.data[[group.by.aggregated[[e]]]]) %>%
+        dplyr::summarize_at(add.sig.cols, fun, na.rm = T)
+
+        # filter out NA if useNA=F
+      if(!useNA){
+        aggr.sig[[e]] <- aggr.sig[[e]] %>%
+                          dplyr::filter(!is.na(.data[[group.by.aggregated[[e]]]]))
+      }
+
+    }
   }
 
   return(aggr.sig)
@@ -916,7 +908,8 @@ get.aggregated.signature <- function(object,
 #' save_objs(obj.list, "./output/samples")
 save_objs <- function(obj.list,
                       dir,
-                      ncores = parallelly::availableCores() - 2, progressbar = T){
+                      ncores = parallelly::availableCores() - 2,
+                      progressbar = T){
   BiocParallel::bplapply(
     X = obj.list,
     BPPARAM =  BiocParallel::MulticoreParam(workers = ncores, progressbar = progressbar),
@@ -945,7 +938,8 @@ save_objs <- function(obj.list,
 #' obj.list <- read_objs("./output/samples")
 read_objs <- function(dir = NULL,
                       file.list = NULL,
-                      ncores = parallelly::availableCores() - 2, progressbar = T){
+                      ncores = parallelly::availableCores() - 2,
+                      progressbar = T){
   if (!is.null(dir) & is.null(file.list)) {
     file_names <- list.files(dir)
     file_paths <- file.path(dir, file_names)
