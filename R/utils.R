@@ -1,3 +1,17 @@
+#### HiT class definition
+## Build S4 objects to store data
+methods::setClass(Class = "HiT",
+                  slots = list(
+                    metadata = "data.frame",
+                    predictions = "list",
+                    composition = "list",
+                    aggregated_profile = "list",
+                    version = "list"
+                  )
+)
+
+
+
 # projectils on multiple reference maps
 ProjecTILs.classifier.multi <- function(object,
                                         ref.maps,
@@ -75,7 +89,8 @@ ProjecTILs.classifier.multi <- function(object,
 
 
   functional.clusters <- data.table::rbindlist(lapply(functional.clusters,
-                                                      setDT, keep.rownames = TRUE)) %>%
+                                                      data.table::setDT,
+                                                      keep.rownames = TRUE)) %>%
                           #remove duplicated rownames (classified by different ref.maps)
                           dplyr::filter(!duplicated(rn)) %>%
                           tibble::column_to_rownames("rn")
@@ -177,7 +192,8 @@ get.GOList <- function(GO_accession = NULL,
   # gene.data.bm <- data("GO_accession_default.RData")
 
   # Retrieve genes for each GO
-  tryCatch(
+  gene.data.bm <-
+    tryCatch(
     {
 
   ensembl = biomaRt::useMart("ensembl",
@@ -188,11 +204,12 @@ get.GOList <- function(GO_accession = NULL,
                                  filters = 'go',
                                  values = GO_acc,
                                  mart = ensembl)
+  gene.data.bm
     },
   error = function(e){
     message("GO accession from biomaRt not possible")
     message(e)
-    gene.data.bm <<- NULL
+    NULL
   }
   )
 
