@@ -769,6 +769,23 @@
       ],
       "Hash": "d2c4e02ec556af4fe97133c792c5be67"
     },
+    "SignatuR": {
+      "Package": "SignatuR",
+      "Version": "0.1.2",
+      "Source": "GitHub",
+      "RemoteType": "github",
+      "RemoteHost": "api.github.com",
+      "RemoteRepo": "SignatuR",
+      "RemoteUsername": "carmonalab",
+      "RemoteRef": "HEAD",
+      "RemoteSha": "54bc3e8bf9923d26130e548fa5e129297e5b0249",
+      "Requirements": [
+        "R",
+        "data.tree",
+        "tools"
+      ],
+      "Hash": "0532d0d864341b16184357eb53146014"
+    },
     "SingleCellExperiment": {
       "Package": "SingleCellExperiment",
       "Version": "1.22.0",
@@ -1178,6 +1195,19 @@
         "methods"
       ],
       "Hash": "b4c06e554f33344e044ccd7fdca750a9"
+    },
+    "data.tree": {
+      "Package": "data.tree",
+      "Version": "1.0.0",
+      "Source": "Repository",
+      "Repository": "RSPM",
+      "Requirements": [
+        "R",
+        "R6",
+        "methods",
+        "stringi"
+      ],
+      "Hash": "c0ddced80c3f074cb39a7a781698f68a"
     },
     "dbplyr": {
       "Package": "dbplyr",
