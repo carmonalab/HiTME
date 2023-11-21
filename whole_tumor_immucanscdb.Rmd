@@ -13,7 +13,7 @@ knit: (function(input_file, encoding) {
 ```{r load_packages_functions, message=F, warning=F}
 renv::restore()
 
-#remotes::install_github("carmonalab/scGate", ref="dev")
+#remotes::install_github("carmonalab/HiTME", ref="dev", authtoken)
 
 # load packages
 # pckgs <- c("tidyverse", "Seurat", "scGate",
@@ -445,18 +445,24 @@ View(test@meta.data)
 
 ```{r}
 # list
-test <- Run.HiTME(t0[4:6],
-                  scGate.model = NULL,
-                  # scGate.model.branch = "dev",
-                  return.Seurat = T,
-                  ref.maps = ref.maps,
-                  ncores = 9)
-
-test.by <- Run.HiTME(t0[9:10],
+test1 <- Run.HiTME(t0[4:6],
                   scGate.model.branch = "dev",
                   return.Seurat = F,
                   ref.maps = ref.maps,
+                  ncores = 9)
+
+test2 <- Run.HiTME(t0[4:6],
+                  scGate.model = NULL,
+                  return.Seurat = F,
+                  ref.maps = NULL,
                   ncores = 9, useNA = T)
+
+test.by <- Run.HiTME(t0[9:11],
+                  scGate.model = NULL ,
+                  return.Seurat = F,
+                  ref.maps = list(ref.maps[[2]], ref.maps[[3]]),
+                  ncores = 9,
+                  useNA = T)
 
 sp <- scCustomize::Merge_Seurat_List(t0[7:8])
 
@@ -465,8 +471,8 @@ object <- Run.HiTME(sp,
                   scGate.model.branch = "dev",
                   return.Seurat = F,
                   remerge = F,
-                  ref.maps = ref.maps,
-                  ncores = 9)
+                  ref.maps = ref.maps[2:3],
+                  ncores = 9, additional.signatures = NULL)
 hit.list <- list()
 for(a in names(testby)){
  hit.list[[a]] <- get.HiTObject(testby[[a]],
