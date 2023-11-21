@@ -16,13 +16,14 @@ renv::restore()
 #remotes::install_github("carmonalab/scGate", ref="dev")
 
 # load packages
-# pckgs <- c("tidyverse", "Seurat", "scGate", 
+# pckgs <- c("tidyverse", "Seurat", "scGate",
 #            "Matrix", "patchwork",
 #            "data.table", "STACAS",
 #            "SignatuR", "ProjecTILs",
 #            "scCustomize", "UCell", "ProjecTILs")
 
-pckgs <- c("tidyverse", "ProjecTILs")
+pckgs <- c("tidyverse", "ProjecTILs", "HiTME"
+           )
 for(package in pckgs){
   tryCatch(
     {
@@ -248,10 +249,10 @@ dev.off()
 
 # Hitme annotation
 
-
+## Load ref
 
 ```{r}
-# scGate_models_DB <- scGate::get_scGateDB(branch = "dev", force_update = F)
+scGate_models_DB <- scGate::get_scGateDB(branch = "dev", force_update = F)
 # models.TME <- scGate_models_DB$human$TME_HiRes
 
 path_ref <- "~/Dropbox/CSI/reference_atlases" 
@@ -353,7 +354,7 @@ require(HiTME)
 sys.Yuan <- system.time(
 test <- Run.HiTME(seu$Galen_2019_30827681[,1:5000],
                   scGate.model.branch = "dev",
-                  return.Seurat = T,
+                  return.Seurat = F,
                   ref.maps = ref.maps,
                   ncores = 9)
 )
@@ -396,11 +397,19 @@ models.TME <- scGate_models_DB$human$TME_HiRes
 # one object, for one sample
 
 # scGate, projectils, return Seurat
-test <- Run.HiTME(t0$aml1012d0,
+test <- Run.HiTME(t0$aml210ad0,
                   scGate.model.branch = "dev",
-                  return.Seurat = F,
+                  return.Seurat = T,
                   ref.maps = ref.maps,
-                  ncores = 9)
+                  ncores = 9, additional.signatures = NULL)
+
+aggr <- get.aggregated.profile(test,
+                              group.by.aggregated = list("layer1" = "scGate_multi",
+                                                          "layer2" = "functional.cluster",
+                                                         "layer1.2" =  "annotation_chetah",
+                                                         "layer0" = "baba"
+                                                          ),
+                              GO_accession = "GO:0007049")
 
 
 test <- scGate::scGate(t0$aml1012d0,
@@ -447,15 +456,15 @@ test.by <- Run.HiTME(t0[9:10],
                   scGate.model.branch = "dev",
                   return.Seurat = F,
                   ref.maps = ref.maps,
-                  ncores = 9)
+                  ncores = 9, useNA = T)
 
-sp <- scCustomize::Merge_Seurat_List(t0[1:2])
+sp <- scCustomize::Merge_Seurat_List(t0[7:8])
 
 object <- Run.HiTME(sp,
                     split.by = "group",
                   scGate.model.branch = "dev",
                   return.Seurat = F,
-                  remerge = T,
+                  remerge = F,
                   ref.maps = ref.maps,
                   ncores = 9)
 hit.list <- list()
@@ -532,6 +541,11 @@ hit.na <- Run.HiTME(t0$aml328d113,
                   ref.maps = ref.maps,
                   ncores = 9, useNA = T)
 ```
+
+```{r}
+
+```
+
 
 
 

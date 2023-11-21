@@ -72,14 +72,6 @@ Run.HiTME <- function(object = NULL,
     stop("Please provide a Seurat object or a list of them")
   }
 
-  if (!is.null(ref.maps)) {
-    if (!is.list(ref.maps)) {
-      stop("Please provide ref.maps as named list, containing the reference map(s), even if it is just one. The name will be used for the metadata column containing the cell type annotations")
-    } else if(!all(unlist(lapply(ref.maps, function(x){class(x) == "Seurat"})))) {
-      stop("One or more reference maps are not a Seurat object")
-    }
-  }
-
   if(is.list(object) && !is.null(split.by)){
     stop("split.by only supported for a single Seurat object, not a list.\n
          Merge list before running HiTME")
@@ -87,6 +79,9 @@ Run.HiTME <- function(object = NULL,
 
   # split object into a list if indicated
   if (!is.null(split.by)) {
+    if(is.list(object)){
+      stop("Split.by argument not supported when providing a list of Seurat objects. Set split.by = NULL or merge list.")
+    }
     if(!split.by %in% names(object@meta.data)){
       stop(paste("split.by argument:", split.by, "is not a metadata column in this Seurat object"))
     }
@@ -123,6 +118,7 @@ Run.HiTME <- function(object = NULL,
 
   # if object is unique turn into a list
   if(!is.list(object)){
+    remerge <-  FALSE
     object <- list(object)
   }
 
@@ -190,12 +186,13 @@ Run.HiTME <- function(object = NULL,
 
     # Retrieve default scGate models if default
     if(length(scGate.model) == 1 && tolower(scGate.model) == "default"){
+      scGate.model.branch <- scGate.model.branch[1]
       if(species == "human"){
         scGate.model <- scGate::get_scGateDB(branch = scGate.model.branch,
-                                             force_update = T)[[species]][["HiTME"]]
+                                             force_update = F)[[species]][["HiTME"]]
       } else if(species == "mouse"){
         scGate.model <- scGate::get_scGateDB(branch = scGate.model.branch,
-                                             force_update = T)[[species]][["HiTME"]]
+                                             force_update = F)[[species]][["HiTME"]]
       }
       message(" - Running scGate model for ", paste(names(scGate.model), collapse = ", "), "\n")
     }
@@ -258,6 +255,23 @@ Run.HiTME <- function(object = NULL,
 
   # Run ProjecTILs if ref.maps is provided
   if (!is.null(ref.maps)) {
+    # convert ref.maps to list if not
+    if(!is.list(ref.maps)){
+      ref.maps <- list(ref.maps)
+    }
+
+    # give name to ref.maps list if not present
+    for(v in seq_along(ref.maps)){
+      if(is.null(names(ref.maps)[[v]]) || is.na(names(ref.maps)[[v]])){
+        names(ref.maps)[[v]] <- paste0("Map_", v)
+      }
+    }
+
+    # check that all ref maps are Seurat objects
+    if(suppressWarnings(!all(lapply(ref.maps, function(x){class(x) == "Seurat"})))){
+      message("Some or all reference maps are not a Seurat object, please prodive refenrece maps as Seurat objects.\nNot running Projectils.")
+    } else {
+
       message("## Running Projectils\n")
 
         object <- lapply(
@@ -275,6 +289,7 @@ Run.HiTME <- function(object = NULL,
         )
 
     message("Finished Projectils\n####################################################\n")
+    }
   } else {
     message("Not running reference mapping as no reference maps were indicated.\n")
   }
@@ -293,6 +308,7 @@ Run.HiTME <- function(object = NULL,
   } else {
     object <- list(object)
   }
+
 
   # if group.by parameters are not present in metadata, return Seurat
   if(!return.Seurat){
@@ -342,10 +358,14 @@ Run.HiTME <- function(object = NULL,
 #'
 #'
 #'
-#' @param object A seurat object
+#' @param object A Seurat object
 #' @param group.by List with one or multiple Seurat object metadata columns with cell type predictions to group by (e.g. layer 1 cell type classification)
 #' @param name.additional.signatures Names of additional signatures as found in object metadata to take into account.
-#' @param ... Additional parameters for \link{get.aggregated.profile}, \link{get.celltype.composition}, and \link{get.aggregated.signature} functions.
+#' @param clr_zero_impute_perc Parameter for internal \link{get.celltype.composition}.
+#' @param gene.filter List of genes to subset for aggregated expression. Parameter for internal \link{get.aggregated.profile}.
+#' @param nHVG Number of highly variable genes. Parameter for internal \link{get.aggregated.profile}.
+#' @param assay Parameter for internal \link{get.aggregated.profile}.
+#' @param layer Parameter for internal \link{get.aggregated.profile}.
 #'
 #' @importFrom methods setClass new
 #' @import SeuratObject
@@ -361,7 +381,12 @@ get.HiTObject <- function(object,
                                           ),
                           name.additional.signatures = NULL,
                           useNA = FALSE,
-                          ...){
+                          clr_zero_impute_perc = 1,
+                          gene.filter = NULL,
+                          nHVG = 1000,
+                          assay = "RNA",
+                          layer = "data"
+                          ){
 
 
   if (is.null(object)) {
@@ -451,18 +476,23 @@ get.HiTObject <- function(object,
 
   comp.prop <- get.celltype.composition(object,
                                         group.by.composition = group.by,
-                                        useNA = useNA, ...)
+                                        useNA = useNA,
+                                        clr_zero_impute_perc = clr_zero_impute_perc)
   # Compute avg expression
   message("Computing aggregated profile...\n")
 
   avg.expr <- get.aggregated.profile(object,
                                      group.by.aggregated = group.by,
-                                     useNA = useNA, ...)
+                                     gene.filter = gene.filter,
+                                     nHVG = nHVG,
+                                     assay = assay,
+                                     layer = layer,
+                                     useNA = useNA)
 
   aggr.signature <- get.aggregated.signature(object,
                                              group.by.aggregated = group.by,
                                              name.additional.signatures = name.additional.signatures,
-                                             useNA = useNA, ...)
+                                             useNA = useNA)
 
 
   hit <- methods::new("HiT",
@@ -485,7 +515,7 @@ get.HiTObject <- function(object,
 #' @param object A seurat object or metadata dataframe.
 #' @param group.by.composition The Seurat object metadata column(s) containing celltype annotations (provide as character vector, containing the metadata column name(s))
 #' @param split.by A Seurat object metadata column to split by (e.g. sample names)
-#' @param min.cells Set a minimum threshold for number of cells to calculate relative abundance (e.g. less than 10 cells -> no relative abundnace will be calculated)
+#' @param min.cells Set a minimum threshold for number of cells to calculate relative abundance (e.g. less than 10 cells -> no relative abundance will be calculated)
 
 #' @param useNA Whether to include not annotated cells or not (labelled as "NA" in the group.by.composition). Can be defined separately for each group.by.composition (provide single boolean or vector of booleans)
 #' @param clr_zero_impute_perc To calculate the clr-transformed relative abundance ("clr_freq"), zero values are not allowed and need to be imputed (e.g. by adding a pseudo cell count). Instead of adding a pseudo cell count of flat +1, here a pseudo cell count of +1% of the total cell count will be added to all cell types, to better take into consideration the relative abundance ratios (e.g. adding +1 cell to a total cell count of 10 cells would have a different, i.e. much larger effect, than adding +1 to 1000 cells).
@@ -641,7 +671,6 @@ get.celltype.composition <- function(object = NULL,
 #' @param ... Extra parameters for internal Seurat functions: AverageExpression, AggregateExpression, FindVariableFeatures
 
 #' @importFrom Seurat AverageExpression AggregateExpression FindVariableFeatures
-#' @importFrom biomaRt useMart getBM
 #' @return Average and aggregated expression as a list of matrices for all genes and indicated gene lists filtering.
 #' @export get.aggregated.profile
 
@@ -710,9 +739,17 @@ get.aggregated.profile <- function(object,
                                                             verbose = F
                                                             )[[assay]]@var.features
 
-  # Add list genes from GEO accessions
+  # Add list genes from GO accessions
+  # check if indicted additional GO accessions
+  if(!is.null(GO_accession)){
+    GO_additional <- get.GOList(GO_accession, ...)
+  } else {
+    GO_additional <- NULL
+  }
 
-  gene.filter.list <- c(gene.filter.list, get.GOList(GO_accession, ...))
+  #default gene list
+  data("GO_accession_default")
+  gene.filter.list <- c(gene.filter.list, GO_default, GO_additional)
 
   # Add defined list of genes to filter
   for(a in seq_along(gene.filter)){
@@ -803,7 +840,7 @@ get.aggregated.profile <- function(object,
 #' Function to compute aggregated signatures of predicted cell types.
 #'
 #'
-#' @param object A seurat object or metadata dataframe.
+#' @param object A seurat object or metadata data frame.
 #' @param group.by.aggregated The Seurat object metadata column(s) containing celltype annotations (idents).
 #' @param name.additional.signatures Names of additional signatures to compute the aggregation per cell type.
 #' @param fun Function to aggregate the signature, e.g. mean or sum.
@@ -896,6 +933,99 @@ get.aggregated.signature <- function(object,
 }
 
 
+#' Retrieve list of genes from GO accessions
+#'
+#' Function to fetch GO accessions gene list from biomaRt.
+#'
+#'
+#' @param GO_accession Vector of GO accession ID (e.g. \code{c("GO:0003700","GO:0005125")}). Vector could be named for clarity in the output.
+#' @param species species to retrieve the genes, for now suppported human and mice.
+#' @param host BioMart host to connect. Default is \link{https://dec2021.archive.ensembl.org/}, as it fails less.
+
+#' @importFrom dplyr filter
+#' @importFrom biomaRt useMart getBM
+
+#' @return List of genes for each GO accession requested. If named vector is provided, lists output are named as GO:accession.ID_named (e.g. "GO:0004950_cytokine_receptor_activity")
+#' @export get.GOList
+
+
+get.GOList <- function(GO_accession = NULL,
+                       species = "Human",
+                       host = "https://dec2021.archive.ensembl.org/"
+                      ){
+
+
+
+  if(is.null(GO_accession)){
+    stop("Please provide at least one GO accession ID (e.g. GO:0003700")
+  } else {
+    if(length(names(GO_accession)) == 0){
+      names(GO_accession) <- GO_accession
+    }
+  }
+
+  species <- tolower(species)
+
+
+  # adapt species
+  if(is.null(species)){
+    stop("Please provide human or mouse as species")
+  }
+  species <- tolower(species)
+  if(grepl("homo|sapi|huma", species)){
+    dataset <- "hsapiens_gene_ensembl"
+  } else if (grepl("mice|mus", species)){
+    dataset <- "mmusculus_gene_ensembl"
+  } else {
+    stop("Only supported species are human and mouse")
+  }
+  # Load default GO accession in case cannot connect to biomaRt
+  # gene.data.bm <- data("GO_accession_default.RData")
+
+  # Retrieve genes for each GO
+  gene.data.bm <-
+    tryCatch(
+      {
+
+        ensembl = biomaRt::useMart("ensembl",
+                                   dataset = dataset,
+                                   host = host)
+
+        gene.data.bm <- biomaRt::getBM(attributes=c('hgnc_symbol',
+                                                    'go_id'),
+                                       filters = 'go',
+                                       values = GO_accession,
+                                       mart = ensembl)
+        gene.data.bm
+      },
+      error = function(e){
+        message("GO accession from biomaRt not possible")
+        message(e)
+        NULL
+      }
+    )
+
+  if(!is.null(gene.data.bm)){
+    gene.data <- gene.data.bm %>%
+      dplyr::filter(go_id %in% GO_accession) %>%
+      dplyr::filter(hgnc_symbol != "") %>%
+      split(., as.factor(.$go_id)) %>%
+      lapply(., function(x) x[,1])
+
+    if(length(names(gene.data)) != length(GO_accession)){
+      warning("Additional GO accession provided not found in GO database")
+    }
+  names(gene.data) <- paste0(names(gene.data), "_",
+                             names(GO_accession)[GO_accession %in% names(gene.data)]) %>%
+                      gsub(" ", "_", .)
+  } else {
+    gene.data <- NULL
+  }
+
+
+  return(gene.data)
+
+}
 
 
 

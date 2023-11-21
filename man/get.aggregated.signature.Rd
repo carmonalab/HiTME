@@ -13,7 +13,7 @@ get.aggregated.signature(
 )
 }
 \arguments{
-\item{object}{A seurat object or metadata dataframe.}
+\item{object}{A seurat object or metadata data frame.}
 
 \item{group.by.aggregated}{The Seurat object metadata column(s) containing celltype annotations (idents).}
 

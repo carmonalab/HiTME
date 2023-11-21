@@ -1,4 +1,5 @@
-#### HiT class definition
+#############################################################################################################
+# HiT class definition
 ## Build S4 objects to store data
 methods::setClass(Class = "HiT",
                   slots = list(
@@ -11,8 +12,8 @@ methods::setClass(Class = "HiT",
 )
 
 
-
-# projectils on multiple reference maps
+#############################################################################################################
+# Projectils on multiple reference maps
 ProjecTILs.classifier.multi <- function(object,
                                         ref.maps,
                                         bparam = NULL,
@@ -65,11 +66,11 @@ ProjecTILs.classifier.multi <- function(object,
         } else {
         map.celltype <- ref.maps[[m]]@misc$layer1_link
         subset.object <- object[,object@meta.data[[layer1_link]] %in% map.celltype]
-        message("\nRunning Projectils for ", m, " reference")
+
         }
 
         if(ncol(subset.object)>0){
-
+          message("\nRunning Projectils for ", m, " reference")
           data("Hs2Mm.convert.table")
           # it is mandatory to make run in serial (ncores = 1 and BPPARAM SerialParam)
           subset.object.pred <- ProjecTILs:::classifier.singleobject(subset.object,
@@ -87,18 +88,23 @@ ProjecTILs.classifier.multi <- function(object,
     )
 
 
+  if(!all(unlist(lapply(functional.clusters, function(x){is.null(x)})))){
+    functional.clusters <- data.table::rbindlist(lapply(functional.clusters,
+                                                        data.table::setDT,
+                                                        keep.rownames = TRUE)) %>%
+                            #remove duplicated rownames (classified by different ref.maps)
+                            dplyr::filter(!duplicated(rn)) %>%
+                            tibble::column_to_rownames("rn")
+    object@meta.data <- merge(object@meta.data, functional.clusters, by = 0, all.x = T) %>%
+                        tibble::column_to_rownames("Row.names")
 
-  functional.clusters <- data.table::rbindlist(lapply(functional.clusters,
-                                                      data.table::setDT,
-                                                      keep.rownames = TRUE)) %>%
-                          #remove duplicated rownames (classified by different ref.maps)
-                          dplyr::filter(!duplicated(rn)) %>%
-                          tibble::column_to_rownames("rn")
-  object@meta.data <- merge(object@meta.data, functional.clusters, by = 0, all.x = T) %>%
-                      tibble::column_to_rownames("Row.names")
-
-  # save names of reference maps run
-  object@misc[["Projectils_param"]] <- names(ref.maps)
+    # save names of reference maps run
+    object@misc[["Projectils_param"]] <- names(ref.maps)
+  } else {
+    object@meta.data <- object@meta.data %>%
+                        dplyr::mutate(functional.cluster = NA,
+                                      functional.cluster.conf = NA)
+  }
   }
 
 
@@ -107,7 +113,7 @@ ProjecTILs.classifier.multi <- function(object,
 }
 
 
-
+#############################################################################################################
 # function to match words with grep
 match_dictionary <- function(cell_type,
                              dictionary = NULL) {
@@ -140,6 +146,7 @@ match_dictionary <- function(cell_type,
   return(cell_type)
 }
 
+#############################################################################################################
 # complete function applying previous function with sapply to all vector
 StandardizeCellNames <- function(cell.names, dictionary = NULL){
 
@@ -152,83 +159,4 @@ StandardizeCellNames <- function(cell.names, dictionary = NULL){
 }
 
 
-### Function to get the list of certain genes
-get.GOList <- function(GO_accession = NULL,
-                      species = "Human",
-                      host = "https://dec2021.archive.ensembl.org/"
-){
 
-  GO_acc <- c(
-    "DNA-binding transcription factor activity" = "GO:0003700",
-    "Cytokine activity" = "GO:0005125",
-    "cytokine receptor activity" = "GO:0004896",
-    "chemokine activity" = "GO:0008009",
-    "chemokine receptor activity" = "GO:0004950"
-  )
-
-  if(!is.null(GO_accession)){
-    if(length(names(GO_accession)) == 0){
-      names(GO_accession) <- GO_accession
-    }
-    GO_acc <- c(GO_acc, GO_accession)
-  }
-
-  species <- tolower(species)
-
-
-  # adapt species
-  if(is.null(species)){
-    stop("Please provide human or mouse as species")
-  }
-  species <- tolower(species)
-  if(grepl("homo|sapi|huma", species)){
-    dataset <- "hsapiens_gene_ensembl"
-  } else if (grepl("mice|mus", species)){
-    dataset <- "mmusculus_gene_ensembl"
-  } else {
-    stop("Only supported species are human and mouse")
-  }
-  # Load default GO accession in case cannot connect to biomaRt
-  # gene.data.bm <- data("GO_accession_default.RData")
-
-  # Retrieve genes for each GO
-  gene.data.bm <-
-    tryCatch(
-    {
-
-  ensembl = biomaRt::useMart("ensembl",
-                             dataset = dataset)
-
-  gene.data.bm <- biomaRt::getBM(attributes=c('hgnc_symbol',
-                                              'go_id'),
-                                 filters = 'go',
-                                 values = GO_acc,
-                                 mart = ensembl)
-  gene.data.bm
-    },
-  error = function(e){
-    message("GO accession from biomaRt not possible")
-    message(e)
-    NULL
-  }
-  )
-
-  if(!is.null(gene.data.bm)){
-  gene.data <- gene.data.bm %>%
-    filter(go_id %in% GO_acc) %>%
-    filter(hgnc_symbol != "") %>%
-    split(., as.factor(.$go_id)) %>%
-    lapply(., function(x) x[,1])
-
-  if(length(names(gene.data)) != length(GO_acc)){
-    warning("Additional GO accession provided not found in GO database")
-  }
-  names(gene.data) <- paste0(names(gene.data), "_", names(GO_acc)[GO_acc %in% names(gene.data)])
-  } else {
-    gene.data <- NULL
-  }
-
-
-  return(gene.data)
-
-}
