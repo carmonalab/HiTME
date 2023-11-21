@@ -69,7 +69,7 @@ for(a in names(ref.maps)){
 }
 
 # Run HiTME
-obj <- Run.HiTME(object = obj,
+annotated.obj <- Run.HiTME(object = obj,
                 scGate.model = models.TME,
                 ref.maps = ref.maps)
 
@@ -86,12 +86,12 @@ annotated.obj <- Run.HiTME(object = obj,
 
 `Run.HiTME` will return the Seurat object or list of them with new metadata indicating cell type annotation.
 
-Annotated Seurat objects can be summarized into HiT objects using `get.HiTObject` function. For this function the grouping variable `group.by`, resulting from `Run.HiTME` annotation or additional annotations need to indicated.
+Annotated Seurat objects can be summarized into HiT objects using `get.HiTObject` function. For this function the grouping variable `group.by` resulting from `Run.HiTME` annotation or additional annotations need to be indicated. Compositional cell type distribution and aggregated transcriptomic profile are returned for each sample.
 
 ``` r
-HiT_summary <- get.HiTObject(object ,
-                              group.by = list("layer1" = "scGate_multi",
-                                              "layer2" = "functional.cluster"))
+HiT_summary <- get.HiTObject(annotated.obj ,
+                            group.by = list("layer1" = "scGate_multi",
+                                            "layer2" = "functional.cluster"))
 ```
 
 Alternatively, HiT summarizing object can be obtained directly using `Run.HiTME` with parameters `return.Seurat = FALSE`.
@@ -109,11 +109,13 @@ The Hit object summarize the cell type annotation and contain the following slot
 
 1.  Seurat object metadata: `metadata`
 
-2.  Cell type predictions for each cell in the dataset: \`predictions\`\`
+2.  Cell type predictions for each cell in the data set: `predictions`
 
 3.  Cell type composition for each layer of cell type prediction: `composition.` Including:
 
-    3.1. cell counts 3.2. frequency 3.3. CLR (Central log ratio)-transformed frequency
+    3.1.  cell counts 
+    3.2.  frequency 
+    3.3.  CLR (Central log ratio)-transformed frequency
 
     ``` r
     # Run by
@@ -146,7 +148,7 @@ The Hit object summarize the cell type annotation and contain the following slot
 
     ```
 
-    4.2. Mean of signature scores per cell type, if additional signatures are provided, for example from [SignatuR](https://github.com/carmonalab/SignatuR)
+    4.2. Mean of signature scores per cell type, if additional signatures are provided, for example from [SignatuR](https://github.com/carmonalab/SignatuR).
 
     ``` r
     # Run by
