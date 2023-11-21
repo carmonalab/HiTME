@@ -9,17 +9,29 @@ get.HiTObject(
   group.by = list(layer1 = c("scGate_multi"), layer2 = c("functional.cluster")),
   name.additional.signatures = NULL,
   useNA = FALSE,
-  ...
+  clr_zero_impute_perc = 1,
+  gene.filter = NULL,
+  nHVG = 1000,
+  assay = "RNA",
+  layer = "data"
 )
 }
 \arguments{
-\item{object}{A seurat object}
+\item{object}{A Seurat object}
 
 \item{group.by}{List with one or multiple Seurat object metadata columns with cell type predictions to group by (e.g. layer 1 cell type classification)}
 
 \item{name.additional.signatures}{Names of additional signatures as found in object metadata to take into account.}
 
-\item{...}{Additional parameters for \link{get.aggregated.profile}, \link{get.celltype.composition}, and \link{get.aggregated.signature} functions.}
+\item{clr_zero_impute_perc}{Parameter for internal \link{get.celltype.composition}.}
+
+\item{gene.filter}{List of genes to subset for aggregated expression. Parameter for internal \link{get.aggregated.profile}.}
+
+\item{nHVG}{Number of highly variable genes. Parameter for internal \link{get.aggregated.profile}.}
+
+\item{assay}{Parameter for internal \link{get.aggregated.profile}.}
+
+\item{layer}{Parameter for internal \link{get.aggregated.profile}.}
 }
 \value{
 HiT object summarizing cell type classification and aggregated profiles.
