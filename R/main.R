@@ -492,7 +492,7 @@ get.HiTObject <- function(object,
   aggr.signature <- get.aggregated.signature(object,
                                              group.by.aggregated = group.by,
                                              name.additional.signatures = name.additional.signatures,
-                                             useNA = useNA, ...)
+                                             useNA = useNA)
 
 
   hit <- methods::new("HiT",
