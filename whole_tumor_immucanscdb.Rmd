@@ -16,14 +16,14 @@ renv::restore()
 #remotes::install_github("carmonalab/scGate", ref="dev")
 
 # load packages
-pckgs <- c("tidyverse", "Seurat", "scGate",
-           "Matrix", "patchwork",
-           "data.table", "STACAS",
-           "SignatuR", "ProjecTILs",
-           "scCustomize", "UCell", "ProjecTILs")
+# pckgs <- c("tidyverse", "Seurat", "scGate",
+#            "Matrix", "patchwork",
+#            "data.table", "STACAS",
+#            "SignatuR", "ProjecTILs",
+#            "scCustomize", "UCell", "ProjecTILs")
 
-# pckgs <- c("tidyverse", "ProjecTILs", "HiTME"
-#            )
+pckgs <- c("tidyverse", "ProjecTILs", "HiTME"
+           )
 for(package in pckgs){
   tryCatch(
     {
@@ -249,7 +249,7 @@ dev.off()
 
 # Hitme annotation
 
-
+## Load ref
 
 ```{r}
 # scGate_models_DB <- scGate::get_scGateDB(branch = "dev", force_update = F)
@@ -448,15 +448,15 @@ test.by <- Run.HiTME(t0[9:10],
                   scGate.model.branch = "dev",
                   return.Seurat = F,
                   ref.maps = ref.maps,
-                  ncores = 9)
+                  ncores = 9, useNA = T)
 
-sp <- scCustomize::Merge_Seurat_List(t0[1:2])
+sp <- scCustomize::Merge_Seurat_List(t0[7:8])
 
 object <- Run.HiTME(sp,
                     split.by = "group",
                   scGate.model.branch = "dev",
                   return.Seurat = F,
-                  remerge = T,
+                  remerge = F,
                   ref.maps = ref.maps,
                   ncores = 9)
 hit.list <- list()
