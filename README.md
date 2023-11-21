@@ -97,7 +97,7 @@ HiT_summary <- get.HiTObject(annotated.obj ,
 Alternatively, HiT summarizing object can be obtained directly using `Run.HiTME` with parameters `return.Seurat = FALSE`.
 
 ``` r
-obj <- Run.HiTME(object = obj,
+HiT_summary <- Run.HiTME(object = obj,
                 scGate.model = models.TME,
                 ref.maps = ref.maps,
                 return.Seurat = FALSE)
@@ -111,11 +111,14 @@ The Hit object summarize the cell type annotation and contain the following slot
 
 2.  Cell type predictions for each cell in the data set: `predictions`
 
-3.  Cell type composition for each layer of cell type prediction: `composition.` Including:
+3.  Cell type composition for each layer of cell type prediction: `composition`. Including:
 
     3.1.  cell counts 
+    
     3.2.  frequency 
+    
     3.3.  CLR (Central log ratio)-transformed frequency
+    
 
     ``` r
     # Run by
