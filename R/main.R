@@ -358,10 +358,14 @@ Run.HiTME <- function(object = NULL,
 #'
 #'
 #'
-#' @param object A seurat object
+#' @param object A Seurat object
 #' @param group.by List with one or multiple Seurat object metadata columns with cell type predictions to group by (e.g. layer 1 cell type classification)
 #' @param name.additional.signatures Names of additional signatures as found in object metadata to take into account.
-#' @param ... Additional parameters for \link{get.aggregated.profile}, \link{get.celltype.composition}, and \link{get.aggregated.signature} functions.
+#' @param clr_zero_impute_perc Parameter for internal \link{get.celltype.composition}.
+#' @param gene.filter List of genes to subset for aggregated expression. Parameter for internal \link{get.aggregated.profile}.
+#' @param nHVG Number of highly variable genes. Parameter for internal \link{get.aggregated.profile}.
+#' @param assay Parameter for internal \link{get.aggregated.profile}.
+#' @param layer Parameter for internal \link{get.aggregated.profile}.
 #'
 #' @importFrom methods setClass new
 #' @import SeuratObject
@@ -377,7 +381,12 @@ get.HiTObject <- function(object,
                                           ),
                           name.additional.signatures = NULL,
                           useNA = FALSE,
-                          ...){
+                          clr_zero_impute_perc = 1,
+                          gene.filter = NULL,
+                          nHVG = 1000,
+                          assay = "RNA",
+                          layer = "data"
+                          ){
 
 
   if (is.null(object)) {
@@ -467,13 +476,18 @@ get.HiTObject <- function(object,
 
   comp.prop <- get.celltype.composition(object,
                                         group.by.composition = group.by,
-                                        useNA = useNA, ...)
+                                        useNA = useNA,
+                                        clr_zero_impute_perc = clr_zero_impute_perc)
   # Compute avg expression
   message("Computing aggregated profile...\n")
 
   avg.expr <- get.aggregated.profile(object,
                                      group.by.aggregated = group.by,
-                                     useNA = useNA, ...)
+                                     gene.filter = gene.filter,
+                                     nHVG = nHVG,
+                                     assay = assay,
+                                     layer = layer,
+                                     useNA = useNA)
 
   aggr.signature <- get.aggregated.signature(object,
                                              group.by.aggregated = group.by,
@@ -501,7 +515,7 @@ get.HiTObject <- function(object,
 #' @param object A seurat object or metadata dataframe.
 #' @param group.by.composition The Seurat object metadata column(s) containing celltype annotations (provide as character vector, containing the metadata column name(s))
 #' @param split.by A Seurat object metadata column to split by (e.g. sample names)
-#' @param min.cells Set a minimum threshold for number of cells to calculate relative abundance (e.g. less than 10 cells -> no relative abundnace will be calculated)
+#' @param min.cells Set a minimum threshold for number of cells to calculate relative abundance (e.g. less than 10 cells -> no relative abundance will be calculated)
 
 #' @param useNA Whether to include not annotated cells or not (labelled as "NA" in the group.by.composition). Can be defined separately for each group.by.composition (provide single boolean or vector of booleans)
 #' @param clr_zero_impute_perc To calculate the clr-transformed relative abundance ("clr_freq"), zero values are not allowed and need to be imputed (e.g. by adding a pseudo cell count). Instead of adding a pseudo cell count of flat +1, here a pseudo cell count of +1% of the total cell count will be added to all cell types, to better take into consideration the relative abundance ratios (e.g. adding +1 cell to a total cell count of 10 cells would have a different, i.e. much larger effect, than adding +1 to 1000 cells).
