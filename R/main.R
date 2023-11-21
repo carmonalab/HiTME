@@ -123,6 +123,7 @@ Run.HiTME <- function(object = NULL,
 
   # if object is unique turn into a list
   if(!is.list(object)){
+    remerge <-  FALSE
     object <- list(object)
   }
 
@@ -259,6 +260,16 @@ Run.HiTME <- function(object = NULL,
 
   # Run ProjecTILs if ref.maps is provided
   if (!is.null(ref.maps)) {
+    # convert ref.maps to list if not
+    if(!is.list(ref.maps)){
+      ref.maps <- list(ref.maps)
+    }
+
+    # check that all ref maps are Seurat objects
+    if(suppressWarnings(!all(lapply(ref.maps, function(x){class(x) == "Seurat"})))){
+      message("Some or all reference maps are not a Seurat object, please prodive refenrece maps as Seurat objects.\nNot running Projectils.")
+    } else {
+
       message("## Running Projectils\n")
 
         object <- lapply(
@@ -276,6 +287,7 @@ Run.HiTME <- function(object = NULL,
         )
 
     message("Finished Projectils\n####################################################\n")
+    }
   } else {
     message("Not running reference mapping as no reference maps were indicated.\n")
   }
@@ -294,6 +306,7 @@ Run.HiTME <- function(object = NULL,
   } else {
     object <- list(object)
   }
+
 
   # if group.by parameters are not present in metadata, return Seurat
   if(!return.Seurat){
