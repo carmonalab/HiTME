@@ -72,14 +72,6 @@ Run.HiTME <- function(object = NULL,
     stop("Please provide a Seurat object or a list of them")
   }
 
-  if (!is.null(ref.maps)) {
-    if (!is.list(ref.maps)) {
-      stop("Please provide ref.maps as named list, containing the reference map(s), even if it is just one. The name will be used for the metadata column containing the cell type annotations")
-    } else if(!all(unlist(lapply(ref.maps, function(x){class(x) == "Seurat"})))) {
-      stop("One or more reference maps are not a Seurat object")
-    }
-  }
-
   if(is.list(object) && !is.null(split.by)){
     stop("split.by only supported for a single Seurat object, not a list.\n
          Merge list before running HiTME")
@@ -87,6 +79,9 @@ Run.HiTME <- function(object = NULL,
 
   # split object into a list if indicated
   if (!is.null(split.by)) {
+    if(is.list(object)){
+      stop("Split.by argument not supported when providing a list of Seurat objects. Set split.by = NULL or merge list.")
+    }
     if(!split.by %in% names(object@meta.data)){
       stop(paste("split.by argument:", split.by, "is not a metadata column in this Seurat object"))
     }
@@ -263,6 +258,13 @@ Run.HiTME <- function(object = NULL,
     # convert ref.maps to list if not
     if(!is.list(ref.maps)){
       ref.maps <- list(ref.maps)
+    }
+
+    # give name to ref.maps list if not present
+    for(v in seq_along(ref.maps)){
+      if(is.null(names(ref.maps)[[v]]) || is.na(names(ref.maps)[[v]])){
+        names(ref.maps)[[v]] <- paste0("Map_", v)
+      }
     }
 
     # check that all ref maps are Seurat objects
