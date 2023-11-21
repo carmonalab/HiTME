@@ -641,7 +641,6 @@ get.celltype.composition <- function(object = NULL,
 #' @param ... Extra parameters for internal Seurat functions: AverageExpression, AggregateExpression, FindVariableFeatures
 
 #' @importFrom Seurat AverageExpression AggregateExpression FindVariableFeatures
-#' @importFrom biomaRt useMart getBM
 #' @return Average and aggregated expression as a list of matrices for all genes and indicated gene lists filtering.
 #' @export get.aggregated.profile
 
@@ -710,9 +709,17 @@ get.aggregated.profile <- function(object,
                                                             verbose = F
                                                             )[[assay]]@var.features
 
-  # Add list genes from GEO accessions
+  # Add list genes from GO accessions
+  # check if indicted additional GO accessions
+  if(!is.null(GO_accession)){
+    GO_additional <- get.GOList(GO_accession, ...)
+  } else {
+    GO_additional <- NULL
+  }
 
-  gene.filter.list <- c(gene.filter.list, get.GOList(GO_accession, ...))
+  #default gene list
+  data("GO_accession_default")
+  gene.filter.list <- c(gene.filter.list, GO_default, GO_additional)
 
   # Add defined list of genes to filter
   for(a in seq_along(gene.filter)){
@@ -803,7 +810,7 @@ get.aggregated.profile <- function(object,
 #' Function to compute aggregated signatures of predicted cell types.
 #'
 #'
-#' @param object A seurat object or metadata dataframe.
+#' @param object A seurat object or metadata data frame.
 #' @param group.by.aggregated The Seurat object metadata column(s) containing celltype annotations (idents).
 #' @param name.additional.signatures Names of additional signatures to compute the aggregation per cell type.
 #' @param fun Function to aggregate the signature, e.g. mean or sum.
@@ -896,6 +903,99 @@ get.aggregated.signature <- function(object,
 }
 
 
+#' Retrieve list of genes from GO accessions
+#'
+#' Function to fetch GO accessions gene list from biomaRt.
+#'
+#'
+#' @param GO_accession Vector of GO accession ID (e.g. \code{c("GO:0003700","GO:0005125")}). Vector could be named for clarity in the output.
+#' @param species species to retrieve the genes, for now suppported human and mice.
+#' @param host BioMart host to connect. Default is \link{https://dec2021.archive.ensembl.org/}, as it fails less.
+
+#' @importFrom dplyr filter
+#' @importFrom biomaRt useMart getBM
+
+#' @return List of genes for each GO accession requested. If named vector is provided, lists output are named as GO:accession.ID_named (e.g. "GO:0004950_cytokine_receptor_activity")
+#' @export get.GOList
+
+
+get.GOList <- function(GO_accession = NULL,
+                       species = "Human",
+                       host = "https://dec2021.archive.ensembl.org/"
+                      ){
+
+
+
+  if(is.null(GO_accession)){
+    stop("Please provide at least one GO accession ID (e.g. GO:0003700")
+  } else {
+    if(length(names(GO_accession)) == 0){
+      names(GO_accession) <- GO_accession
+    }
+  }
+
+  species <- tolower(species)
+
+
+  # adapt species
+  if(is.null(species)){
+    stop("Please provide human or mouse as species")
+  }
+  species <- tolower(species)
+  if(grepl("homo|sapi|huma", species)){
+    dataset <- "hsapiens_gene_ensembl"
+  } else if (grepl("mice|mus", species)){
+    dataset <- "mmusculus_gene_ensembl"
+  } else {
+    stop("Only supported species are human and mouse")
+  }
+  # Load default GO accession in case cannot connect to biomaRt
+  # gene.data.bm <- data("GO_accession_default.RData")
+
+  # Retrieve genes for each GO
+  gene.data.bm <-
+    tryCatch(
+      {
+
+        ensembl = biomaRt::useMart("ensembl",
+                                   dataset = dataset,
+                                   host = host)
+
+        gene.data.bm <- biomaRt::getBM(attributes=c('hgnc_symbol',
+                                                    'go_id'),
+                                       filters = 'go',
+                                       values = GO_accession,
+                                       mart = ensembl)
+        gene.data.bm
+      },
+      error = function(e){
+        message("GO accession from biomaRt not possible")
+        message(e)
+        NULL
+      }
+    )
+
+  if(!is.null(gene.data.bm)){
+    gene.data <- gene.data.bm %>%
+      dplyr::filter(go_id %in% GO_accession) %>%
+      dplyr::filter(hgnc_symbol != "") %>%
+      split(., as.factor(.$go_id)) %>%
+      lapply(., function(x) x[,1])
+
+    if(length(names(gene.data)) != length(GO_accession)){
+      warning("Additional GO accession provided not found in GO database")
+    }
+  names(gene.data) <- paste0(names(gene.data), "_",
+                             names(GO_accession)[GO_accession %in% names(gene.data)]) %>%
+                      gsub(" ", "_", .)
+  } else {
+    gene.data <- NULL
+  }
+
+
+  return(gene.data)
+
+}
 
 
 
