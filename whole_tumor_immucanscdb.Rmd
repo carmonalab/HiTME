@@ -16,13 +16,14 @@ renv::restore()
 #remotes::install_github("carmonalab/scGate", ref="dev")
 
 # load packages
-# pckgs <- c("tidyverse", "Seurat", "scGate", 
-#            "Matrix", "patchwork",
-#            "data.table", "STACAS",
-#            "SignatuR", "ProjecTILs",
-#            "scCustomize", "UCell", "ProjecTILs")
+pckgs <- c("tidyverse", "Seurat", "scGate",
+           "Matrix", "patchwork",
+           "data.table", "STACAS",
+           "SignatuR", "ProjecTILs",
+           "scCustomize", "UCell", "ProjecTILs")
 
-pckgs <- c("tidyverse", "ProjecTILs")
+# pckgs <- c("tidyverse", "ProjecTILs", "HiTME"
+#            )
 for(package in pckgs){
   tryCatch(
     {
@@ -37,8 +38,8 @@ for(package in pckgs){
 
 options(timeout=4000) # increase time out for downloading
 
-# source("R/utils.R")
-# source("R/main.R")
+source("R/utils.R")
+source("R/main.R")
 
 
 #dataset testing
@@ -353,7 +354,7 @@ require(HiTME)
 sys.Yuan <- system.time(
 test <- Run.HiTME(seu$Galen_2019_30827681[,1:5000],
                   scGate.model.branch = "dev",
-                  return.Seurat = T,
+                  return.Seurat = F,
                   ref.maps = ref.maps,
                   ncores = 9)
 )
@@ -532,6 +533,11 @@ hit.na <- Run.HiTME(t0$aml328d113,
                   ref.maps = ref.maps,
                   ncores = 9, useNA = T)
 ```
+
+```{r}
+
+```
+
 
 
 
