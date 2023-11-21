@@ -66,11 +66,11 @@ ProjecTILs.classifier.multi <- function(object,
         } else {
         map.celltype <- ref.maps[[m]]@misc$layer1_link
         subset.object <- object[,object@meta.data[[layer1_link]] %in% map.celltype]
-        message("\nRunning Projectils for ", m, " reference")
+
         }
 
         if(ncol(subset.object)>0){
-
+          message("\nRunning Projectils for ", m, " reference")
           data("Hs2Mm.convert.table")
           # it is mandatory to make run in serial (ncores = 1 and BPPARAM SerialParam)
           subset.object.pred <- ProjecTILs:::classifier.singleobject(subset.object,
@@ -88,18 +88,23 @@ ProjecTILs.classifier.multi <- function(object,
     )
 
 
+  if(!all(unlist(lapply(functional.clusters, function(x){is.null(x)})))){
+    functional.clusters <- data.table::rbindlist(lapply(functional.clusters,
+                                                        data.table::setDT,
+                                                        keep.rownames = TRUE)) %>%
+                            #remove duplicated rownames (classified by different ref.maps)
+                            dplyr::filter(!duplicated(rn)) %>%
+                            tibble::column_to_rownames("rn")
+    object@meta.data <- merge(object@meta.data, functional.clusters, by = 0, all.x = T) %>%
+                        tibble::column_to_rownames("Row.names")
 
-  functional.clusters <- data.table::rbindlist(lapply(functional.clusters,
-                                                      data.table::setDT,
-                                                      keep.rownames = TRUE)) %>%
-                          #remove duplicated rownames (classified by different ref.maps)
-                          dplyr::filter(!duplicated(rn)) %>%
-                          tibble::column_to_rownames("rn")
-  object@meta.data <- merge(object@meta.data, functional.clusters, by = 0, all.x = T) %>%
-                      tibble::column_to_rownames("Row.names")
-
-  # save names of reference maps run
-  object@misc[["Projectils_param"]] <- names(ref.maps)
+    # save names of reference maps run
+    object@misc[["Projectils_param"]] <- names(ref.maps)
+  } else {
+    object@meta.data <- object@meta.data %>%
+                        dplyr::mutate(functional.cluster = NA,
+                                      functional.cluster.conf = NA)
+  }
   }
 
 
