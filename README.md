@@ -32,7 +32,7 @@ remotes::install_github("carmonalab/HiTME")
 
 The function takes as input `Seurat` objects (or list of them). These should be split by sample to avoid batch effects, or split internally in `Run.HitME` by indicating the parameter `split.by`.
 
-This wrapper firstly runs [scGate](https://github.com/carmonalab/scGate) on TME (Tumor micronenvirontment) default models or alternatively to the models provided, resulting in a coarse cell type classification (CD4T, B cell, Dendritic cell...). Next, it runs [ProjecTILs](https://github.com/carmonalab/ProjecTILs) for a finer cell type classification (CD4+ TFH, Tex CD8+...) on the references provided on the cell types classified by [scGate](https://github.com/carmonalab/scGate) that are linked to a respective reference map.
+This wrapper firstly runs [scGate](https://github.com/carmonalab/scGate) on TME (Tumor micronenvirontment) default models or alternatively on the models provided, resulting in a coarse cell type classification (CD4T, B cell, Dendritic cell...). Next, it runs [ProjecTILs](https://github.com/carmonalab/ProjecTILs) for a finer cell type classification (CD4+ TFH, Tex CD8+, cDC1...) based on the references provided on the cell types classified by [scGate](https://github.com/carmonalab/scGate) that are linked to a respective reference map.
 
 ``` r
 library(scGate)
@@ -44,7 +44,7 @@ library(HiTME)
 
 # Define scGate model if other than default is wanted
 scGate_models_DB <- get_scGateDB(branch = "master")
-models.TME <- scGate_models_DB$human$TME_HiRes
+models.TME <- scGate_models_DB$human$HiTME
 
 # Load ProjecTILs reference maps
 path_ref <- "~/reference_atlases"
