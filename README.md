@@ -3,167 +3,158 @@
 New tool for classifying all cell types in the tumor microenvironment
 
 # TO DO ❗
-```r
+
+``` r
 # Installation for devs. From Rstudio Terminal, run the following code:
 # R CMD build /directory_of_your_downloaded_project_/HiTME
 # R CMD install HiTME_0.1.tar.gz
 
 # Then load as usual
-# library(HiTME)
+library(HiTME)
 ```
-- Provide better example dataset for public use.
-- Update example plots
-- **Consider scGate_multi classification vs ProjecTILs filter annotation**
-- Compare cells having scGate_multi "NA" and have ProjecTIL classifications
-- Check cells having multiple classifications?
+
+-   Provide better example dataset for public use.
+-   Update example plots
+
 <br>
 
 ### Installation
-To `annotate_cells` you need to install [ProjecTILs](https://github.com/carmonalab/ProjecTILs) from GitHub:
-```r
-remotes::install_github("carmonalab/ProjecTILs")
+
+``` r
+remotes::install_github("carmonalab/HiTME")
 ```
+
 <br>
 
-# Annotate sample cell types
-You can `annotate_cells` with [scGate](https://github.com/carmonalab/scGate) and [ProjecTILs](https://github.com/carmonalab/ProjecTILs).
-For each `ProjecTIL` reference map (provided in named list), a new metadata column will be created called x_subtypes, where x = reference map name from list, e.g. CD8_subtypes, CD4_subtypes, ...
+# Cell type annotation
 
-Accepted inputs are:
-- `object` = a single Seurat object
-- `object` = a list of Seurat objects
-- `dir` = a directory containing Seurat objects saved as .rds files
+**HiTME's `Run.HiTME` is a wrapper of [scGate](https://github.com/carmonalab/scGate) and [ProjecTILs](https://github.com/carmonalab/ProjecTILs) to classify cell types in single-cell RNA-seq experiments.**
 
-The function takes as input the path to the directory containing the seurat objects saved as .rds files (preferably small files, e.g. each sample saved as separate .rds file). The directory should not contain other files.
-The idea is to process large datasets in a parallel for-loop from samples stored on disk, in order to prevent running out of RAM memory.
+The function takes as input `Seurat` objects (or list of them). These should be split by sample to avoid batch effects, or split internally in `Run.HitME` by indicating the parameter `split.by`.
 
-```r
-library(HiTME)
+This wrapper firstly runs [scGate](https://github.com/carmonalab/scGate) on TME (Tumor micronenvirontment) default models or alternatively to the models provided, resulting in a coarse cell type classification (CD4T, B cell, Dendritic cell...). Next, it runs [ProjecTILs](https://github.com/carmonalab/ProjecTILs) for a finer cell type classification (CD4+ TFH, Tex CD8+...) on the references provided on the cell types classified by [scGate](https://github.com/carmonalab/scGate) that are linked to a respective reference map.
 
-# Create separate .rds files for each sample
-obj.list <- SplitObject(obj, split.by = "Sample")
-
-# Use helper functions to save/load your object list to/from disk
-save_objs(obj.list, "./output/samples")
-obj.list <- read_objs("./output/samples")
-
-# You can also provide an arbitrary list of sample paths for samples located in different directories
-# my_favourite_samples <- c("/Users/elon_mask/Desktop/HiTME/output/samples/sample1.rds",
-#                           "/Users/beel_gates/Archive/sampleXYZ.rds")
-# obj.list <- read_objs("./output/samples", file.list = my_favourite_samples)
-```
-
-```r
+``` r
 library(scGate)
 library(ProjecTILs)
+library(HiTME)
 
-# Example data
-path_data <- file.path("~/Dropbox/CSI/Standardized_SingleCell_Datasets/ZhangY_2022_34653365/output/samples_subset")
-obj.list <- read_objs(path_data)
-object <- merge(obj.list[[1]],obj.list[2:length(obj.list)])
+# If multiple samples are within the same Seurat object, split by sample.
+# obj.list <- SplitObject(obj, split.by = "Sample")
 
-# Define scGate model
-scGate_models_DB <- get_scGateDB(branch = "master", verbose = T, force_update = TRUE)
+# Define scGate model if other than default is wanted
+scGate_models_DB <- get_scGateDB(branch = "master")
 models.TME <- scGate_models_DB$human$TME_HiRes
 
 # Load ProjecTILs reference maps
-path_ref <- "~/Dropbox/CSI/reference_atlases"
+path_ref <- "~/reference_atlases"
 ref.maps <- list(CD8 = load.reference.map(file.path(path_ref, "CD8T_human_ref_v1.rds")),
                  CD4 = load.reference.map(file.path(path_ref, "CD4T_human_ref_v2.rds")),
                  DC = load.reference.map(file.path(path_ref, "DC_human_ref_v1.rds")),
-                 MoMac = load.reference.map(file.path(path_ref, "MoMac_human_v1.rds")))
+                 MoMac = load.reference.map(file.path(path_ref, "MoMac_human_v1.rds"))
+                 )
 
-# For a single Seurat object
-annotate_cells(object = obj.list[[1]],
-               scGate.model = models.TME,
-               ref.maps = ref.maps)
+# add scGate_link to ref.maps
+# Include a slot in @misc with the cell name output by scGate
+# By default scGate returns cell ontology ID
 
-# For a single Seurat object, split by a metadata column, e.g. "Sample"
-annotate_cells(object = object,
-               scGate.model = models.TME,
-               ref.maps = ref.maps,
-               split.by = "Sample")
+layer1.links <- list("CD8" = "CL:0000625",
+                  "CD4" = "CL:0000624",
+                  "DC" = "CL:0000451",
+                  "MoMac" = "CL:0000576_CL:0000235"
+                  )
+                  
+for(a in names(ref.maps)){
+  ref.maps[[a]]@misc$layer1_link <- layer1.links[[a]]
+}
 
-# For a list of Seurat objects
-annotate_cells(object = obj.list,
-               scGate.model = models.TME,
-               ref.maps = ref.maps)
+# Run HiTME
+obj <- Run.HiTME(object = obj,
+                scGate.model = models.TME,
+                ref.maps = ref.maps)
 
-# From a directory with Seurat objects (e.g. samples), without loading all into memory but instead looping over the single files
-annotate_cells(dir = path_data,
-               scGate.model = models.TME,
-               ref.maps = ref.maps)
+# Alternatively HiTME can be run splitting by sample
+annotated.obj <- Run.HiTME(object = obj,
+                          scGate.model = models.TME,
+                          ref.maps = ref.maps,
+                          split.by = "sample")
 ```
+
 <br>
 
-# Calculate cell type compositions
-`calc_CTcomp` calculates the cell type composition from one or multiple metadata column `annot.cols` containing the cell type annotations (e.g. called "scGate_multi", "CD8_subtypes", ...).
-Accepted inputs are:
-- `object` = a single Seurat object
-- `object` = a list of Seurat objects
-- `dir` = a directory containing Seurat objects saved as .rds (`object` parameter will be ignored)
+# Summarized cell annotation
 
-To calculate cell subtype composition, it is adviced to create a separate metadata column for each subtype composition, e.g.
-- One metadata column called "scGate_multi"
-- One metadata column called "CD8_subtypes" containing only CD8 subtype annotations (all other cells as "NA")
-- One metadata column called "CD4_subtypes" ...
-```r
-# Load data
-path_data <- file.path("~/Dropbox/CSI/Standardized_SingleCell_Datasets/ZhangY_2022_34653365/output/samples_subset")
-obj.list <- read_objs(path_data)
-object <- merge(obj.list[[1]],obj.list[2:length(obj.list)])
+`Run.HiTME` will return the Seurat object or list of them with new metadata indicating cell type annotation.
 
-# For a single Seurat object (one sample)
-celltype.compositions <- calc_CTcomp(obj.list[[1]])
-# For a single Seurat object, multiple cell type columns
-celltype.compositions <- calc_CTcomp(obj.list[[1]], annot.cols = c("scGate_multi", "CD8_subtypes"))
+Annotated Seurat objects can be summarized into HiT objects using `get.HiTObject` function. For this function the grouping variable `group.by`, resulting from `Run.HiTME` annotation or additional annotations need to indicated.
 
-# For a single Seurat object (containing multiple samples)
-celltype.compositions <- calc_CTcomp(object, split.by = "Sample")
-
-# For a list of Seurat objects
-celltype.compositions <- calc_CTcomp(obj.list)
-celltype.compositions <- calc_CTcomp(obj.list, annot.cols = c("scGate_multi", "CD8_subtypes", "CD4_subtypes", "DC_subtypes", "MoMac_subtypes"))
-
-# From a directory with Seurat objects (e.g. samples), without loading all into memory but instead looping over the single files
-celltype.compositions <- calc_CTcomp(dir = path_data)
-celltype.compositions <- calc_CTcomp(dir = path_data, annot.cols = c("scGate_multi", "CD8_subtypes"))
+``` r
+HiT_summary <- get.HiTObject(object ,
+                              group.by = list("layer1" = "scGate_multi",
+                                              "layer2" = "functional.cluster"))
 ```
 
-## Example
-```r
-devtools::install_github('satijalab/seurat-data')
-library(SeuratData)
-options(timeout = max(300, getOption("timeout")))
-InstallData("panc8")
-data("panc8")
-panc8 = UpdateSeuratObject(object = panc8)
+Alternatively, HiT summarizing object can be obtained directly using `Run.HiTME` with parameters `return.Seurat = FALSE`.
 
-###################################################################
-# Calculate overall composition
-celltype.compositions.overall <- calc_CTcomp(object = panc8, annot.cols = "celltype")
-
-# Calculate sample-wise composition
-celltype.compositions.sample_wise <- calc_CTcomp(object = panc8, annot.cols = "celltype", split.by = "orig.ident")
-
-###################################################################
-# Plot overall composition
-par(mar = c(8.1, 4.1, 4.1, 2.1)) 
-barplot(unlist(celltype.compositions.overall[["celltype"]][["freq"]]),
-        ylab = "Relative abundance (%)",
-        las = 2)
-
-
-# Plot sample-wise composition
-df <- celltype.compositions.sample_wise[["celltype"]][["freq"]]
-dflong <- reshape2::melt(t(df))
-
-library(ggplot2)
-ggplot(dflong, aes(x=Var1, y=value, color=Var1)) +
-  geom_boxplot() + geom_point() + theme_classic() +
-  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) + labs(x = "", y = "Relative abundance (%)") + NoLegend()
+``` r
+obj <- Run.HiTME(object = obj,
+                scGate.model = models.TME,
+                ref.maps = ref.maps,
+                return.Seurat = FALSE)
 ```
 
-|Overall composition|Composition by sample|
-|:-:|:-:|
-|![Rplot1](https://github.com/carmonalab/HiTME/assets/67605347/43c81cfc-e4a2-42eb-8b8f-bf70da52a271)|![Rplot2](https://github.com/carmonalab/HiTME/assets/67605347/d876846d-b7c9-4ff4-af5c-a4bfefcbc29f)|
+## Hit Object content
+
+The Hit object summarize the cell type annotation and contain the following slots:
+
+1.  Seurat object metadata: `metadata`
+
+2.  Cell type predictions for each cell in the dataset: \`predictions\`\`
+
+3.  Cell type composition for each layer of cell type prediction: `composition.` Including:
+
+    3.1. cell counts 3.2. frequency 3.3. CLR (Central log ratio)-transformed frequency
+
+    ``` r
+    # Run by
+
+    get.celltype.composition(object = NULL,
+                            group.by.composition = NULL,
+                            split.by = NULL,
+                            min.cells = 10,
+                            useNA = FALSE,
+                            clr_zero_impute_perc = 1
+                            )
+    ```
+
+4.  Aggregated profile of predicted cell types: `aggregated_profile`. Including:
+
+    4.1. Average and aggregated expression per cell type of all genes in the dataset and a subset of them.
+
+    ``` r
+    # Run by
+
+    get.aggregated.profile(object,
+                          group.by.aggregated = NULL,
+                          gene.filter = NULL, # list of genes to subset
+                          GO_accession = NULL, # GO accessions to fetch for subsetting
+                          nHVG = 1000, # number of highly variable genes to subset
+                          assay = "RNA",
+                          layer = "data",
+                          useNA = FALSE,
+                        )
+
+    ```
+
+    4.2. Mean of signature scores per cell type, if additional signatures are provided, for example from [SignatuR](https://github.com/carmonalab/SignatuR)
+
+    ``` r
+    # Run by
+
+    get.aggregated.signature(object,
+                            group.by.aggregated = NULL,
+                            name.additional.signatures = NULL,
+                            fun = mean, # function for aggregating cell-wise signature scores
+                            useNA = FALSE
+                            )
+    ```
