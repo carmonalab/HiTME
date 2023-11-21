@@ -190,12 +190,13 @@ Run.HiTME <- function(object = NULL,
 
     # Retrieve default scGate models if default
     if(length(scGate.model) == 1 && tolower(scGate.model) == "default"){
+      scGate.model.branch <- scGate.model.branch[1]
       if(species == "human"){
         scGate.model <- scGate::get_scGateDB(branch = scGate.model.branch,
-                                             force_update = T)[[species]][["HiTME"]]
+                                             force_update = F)[[species]][["HiTME"]]
       } else if(species == "mouse"){
         scGate.model <- scGate::get_scGateDB(branch = scGate.model.branch,
-                                             force_update = T)[[species]][["HiTME"]]
+                                             force_update = F)[[species]][["HiTME"]]
       }
       message(" - Running scGate model for ", paste(names(scGate.model), collapse = ", "), "\n")
     }
