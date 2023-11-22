@@ -1028,6 +1028,186 @@ get.GOList <- function(GO_accession = NULL,
 }
 
 
+#' Compute PCA of summarized data
+#'
+#' Compute PCA of summarized data
+#'
+#'
+#' @param object List of Hit class object
+#' @param group.by Grouping variable for
+#' @param layer whether to use composition (CLR frequencies) or aggregated pseudobulk expression.
+#' @param metadata Variables to show as metadata
+#' @param ncores The number of cores to use
+#' @param bparam A \code{BiocParallel::bpparam()} object that tells how to parallelize. If provided, it overrides the `ncores` parameter.
+#' @param progressbar Whether to show a progressbar or not
+
+#' @importFrom dplyr mutate filter %>% coalesce mutate_all
+#' @importFrom BiocParallel MulticoreParam bplapply
+#' @importFrom parallelly availableCores
+#' @importFrom plyr join_all
+
+#' @return List of genes for each GO accession requested. If named vector is provided, lists output are named as GO:accession.ID_named (e.g. "GO:0004950_cytokine_receptor_activity")
+#' @export get.PCA.samples
+#'
+
+get.PCA.samples <- function(object,
+                            group.by = list("layer1" = c("scGate_multi"),
+                                            "layer2" = c("functional.cluster")
+                            ),
+                            layer = c("composition", "aggregated"),
+                            metadata = NULL,
+                            ncores = parallelly::availableCores() - 2,
+                            bparam = NULL,
+                            progressbar = TRUE
+                            ){
+
+  if (is.null(object) || !is.list(object)) {
+    stop("Please provide a list of HiT object containing more than one sample")
+    if(suppressWarnings(!all(lapply(object, function(x){class(x) == "HiT"})))){
+      stop("Not all components of the list are HiT objects.")
+    }
+  }
+
+  #give name to list of hit objects
+  for(v in seq_along(object)){
+    if(is.null(names(object[[v]])) || is.na(names(object[[v]]))){
+      names(object[[v]]) <- paste0("Sample", v)
+    }
+  }
+
+
+  if(is.null(group.by)){
+    stop("Please provide at least one grouping variable for cell type classification common in all elements of the list of Hit objects")
+  } else {
+    if(!is.list(group.by)){
+      group.by <- as.list(group.by)
+    }
+  # give name to list of grouping.by variables
+    for(v in seq_along(group.by)){
+      if(is.null(names(group.by[[v]])) || is.na(names(group.by[[v]]))){
+        names(group.by[[v]]) <- paste0("layer", v)
+      }
+    }
+  }
+
+  if(suppressWarnings(!all(lapply(object, function(x){any(group.by %in% names(x@metadata))})))) {
+    stop("Not all supplied HiT object contain", group.by, "group.by elements in their metadata")
+  } else {
+    present <- sapply(group.by,
+                      function(char){
+                        unlist(lapply(object,
+                                   function(df) {char %in% colnames(df@metadata)}
+                                   ))
+
+                        }
+                      )
+    present.sum <- colSums(present)
+
+    for(l in names(group.by)){
+      message("** ", l, " present in ", present.sum[[l]], " / ", length(object), " HiT objects.")
+    }
+
+  }
+
+  if(is.null(layer)){
+    stop("Please provide a layer to compute metrics, either composition or aggregated")
+  }
+
+# set paralelization parameters
+  if(is.null(ncores)){
+    ncores <- 1
+  }
+
+  if(ncores >= parallelly::availableCores()){
+    ncores <- parallelly::availableCores() - 1
+    message("Using all or more cores available in this computer, reducing number of cores to ", ncores)
+  }
+
+  # Reduce number of cores if file is huge
+  if(sum(unlist(lapply(object, ncol)))>=30000){
+    ncores <- 2
+    message("Huge Seurat object, reducing number of cores to avoid memory issues to", ncores)
+  }
+
+
+  # set paralelization parameters
+  if (is.null(bparam)) {
+    if (ncores>1) {
+      param <- BiocParallel::MulticoreParam(workers =  ncores, progressbar = progressbar)
+    } else {
+      param <- SerialParam()
+    }
+  } else {
+    param <- bparam
+  }
+
+
+# Join data from all HiT objects
+  layer <- layer[[1]]
+
+  # list to store joined data for each grouping variable
+  join.list <- list()
+
+  for(gb in names(group.by)){
+  layer.present <- names(present[,gb] == T)
+  if(tolower(layer) == "composition"){
+    message("Computing metrics for composition...")
+
+    join.list[["composition"]] <-
+      BiocParallel::bplapply(
+        X = layer.present,
+        BPPARAM = param,
+        FUN = function(x){
+            mat <- object[[x]]@composition[[gb]]$freq %>%
+                    dplyr::mutate(sample = x)
+            return(mat)
+      }) %>%
+      data.table::rbindlist(., use.names = T, fill = T) %>%
+      # convert NA to 0
+      mutate_if(is.numeric, ~ifelse(is.na(.), 0, .)) %>%
+      tibble::column_to_rownames("sample") %>%
+      t()
+
+  } else if (tolower(layer) == "aggregated"){
+    message("Computing metrics for aggregated profile")
+
+    # get gene subsets
+    gene.filter <- unique(unlist(lapply(object, function(x){
+                    names(x@aggregated_profile$Gene_expression$Average[[gb]])
+                   })))
+    # list for each gene subset
+    join.list[["aggregated"]] <-
+      lapply(gene.filter, function(y){
+        gf <- BiocParallel::bplapply(
+              X = layer.present,
+              BPPARAM = param,
+              FUN = function(x){
+                names(object[[x]]@aggregated_profile$Gene_expression$Average[[gb]][[y]]) <-
+                  paste(names(object[[x]]@aggregated_profile$Gene_expression$Average[[gb]][[y]]),
+                        names(y), sep = "_")
+                return(object[[x]]@aggregated_profile$Gene_expression$Average[[gb]][[y]])
+          }) %>%
+          plyr::join_all(by = 0, type = "full")
+      })
+
+
+ %>%
+      data.table::rbindlist(., use.names = T, fill = T) %>%
+      # convert NA to 0
+      mutate_if(is.numeric, ~ifelse(is.na(.), 0, .))
+  }
+
+  }
+
+
+
+  return("OK")
+
+}
+
+
+
+
 
 #' Save object list to disk, in parallel
 #'
