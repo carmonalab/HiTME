@@ -1035,16 +1035,16 @@ get.GOList <- function(GO_accession = NULL,
 #'
 #' @param object List of Hit class object
 #' @param group.by Grouping variable for
-#' @param layer whether to use composition (CLR frequencies) or aggregated pseudobulk expression.
+#' @param min.cells Minimum number of cells to consider for aggregated expression.
 #' @param metadata Variables to show as metadata
 #' @param ncores The number of cores to use
 #' @param bparam A \code{BiocParallel::bpparam()} object that tells how to parallelize. If provided, it overrides the `ncores` parameter.
 #' @param progressbar Whether to show a progressbar or not
 
-#' @importFrom dplyr mutate filter %>% coalesce mutate_all
+#' @importFrom dplyr mutate filter %>% coalesce mutate_all full_join
 #' @importFrom BiocParallel MulticoreParam bplapply
 #' @importFrom parallelly availableCores
-#' @importFrom plyr join_all
+#' @importFrom tibble rownames_to_column
 
 #' @return List of genes for each GO accession requested. If named vector is provided, lists output are named as GO:accession.ID_named (e.g. "GO:0004950_cytokine_receptor_activity")
 #' @export get.PCA.samples
@@ -1054,7 +1054,7 @@ get.PCA.samples <- function(object,
                             group.by = list("layer1" = c("scGate_multi"),
                                             "layer2" = c("functional.cluster")
                             ),
-                            layer = c("composition", "aggregated"),
+                            min.cells = 10,
                             metadata = NULL,
                             ncores = parallelly::availableCores() - 2,
                             bparam = NULL,
@@ -1070,8 +1070,8 @@ get.PCA.samples <- function(object,
 
   #give name to list of hit objects
   for(v in seq_along(object)){
-    if(is.null(names(object[[v]])) || is.na(names(object[[v]]))){
-      names(object[[v]]) <- paste0("Sample", v)
+    if(is.null(names(object)[[v]]) || is.na(names(object)[[v]])){
+      names(object)[[v]] <- paste0("Sample", v)
     }
   }
 
@@ -1091,8 +1091,10 @@ get.PCA.samples <- function(object,
   }
 
   if(suppressWarnings(!all(lapply(object, function(x){any(group.by %in% names(x@metadata))})))) {
-    stop("Not all supplied HiT object contain", group.by, "group.by elements in their metadata")
+    stop("Not all supplied HiT object contain", paste(group.by, collapse = ", "),
+         "group.by elements in their metadata")
   } else {
+    message("\n#### Group by ####")
     present <- sapply(group.by,
                       function(char){
                         unlist(lapply(object,
@@ -1109,9 +1111,28 @@ get.PCA.samples <- function(object,
 
   }
 
-  if(is.null(layer)){
-    stop("Please provide a layer to compute metrics, either composition or aggregated")
-  }
+  if(!is.null(metadata)){
+    message("\n#### Metadata ####")
+    if(suppressWarnings(!all(lapply(object, function(x){any(metadata %in% names(x@metadata))})))) {
+      message("Not all supplied HiT object contain", paste(metadata, collapse = ", "),
+           "metadata elements in their metadata")
+    }
+      in.md <- sapply(metadata,
+                        function(char){
+                          unlist(lapply(object,
+                                        function(df) {char %in% colnames(df@metadata)}
+                          ))
+
+                        }
+      )
+      in.md.sum <- colSums(in.md)
+
+      for(l in metadata){
+        message("** ", l, " present in ", in.md.sum[[l]], " / ", length(object), " HiT objects.")
+      }
+
+    }
+
 
 # set paralelization parameters
   if(is.null(ncores)){
@@ -1122,13 +1143,6 @@ get.PCA.samples <- function(object,
     ncores <- parallelly::availableCores() - 1
     message("Using all or more cores available in this computer, reducing number of cores to ", ncores)
   }
-
-  # Reduce number of cores if file is huge
-  if(sum(unlist(lapply(object, ncol)))>=30000){
-    ncores <- 2
-    message("Huge Seurat object, reducing number of cores to avoid memory issues to", ncores)
-  }
-
 
   # set paralelization parameters
   if (is.null(bparam)) {
@@ -1141,67 +1155,112 @@ get.PCA.samples <- function(object,
     param <- bparam
   }
 
+# prepare metadata
+  md.all <- sapply(metadata, function(x){
+    BiocParallel::bplapply(X = names(object),
+                           BPPARAM = param,
+                           FUN =function(y){
+                             unique(object[[y]]@metadata[[x]])
+                           }
+    ) %>% unlist()
+  }) %>% as.data.frame() %>%
+    dplyr::mutate(sample = names(object))
 
 # Join data from all HiT objects
-  layer <- layer[[1]]
 
   # list to store joined data for each grouping variable
   join.list <- list()
+  join.list[["aggregated"]] <- list()
+  join.list[["composition"]] <- list()
 
   for(gb in names(group.by)){
-  layer.present <- names(present[,gb] == T)
-  if(tolower(layer) == "composition"){
+
+    layer.present <- rownames(present)[present[,gb]]
     message("Computing metrics for composition...")
+      count  <-
+        BiocParallel::bplapply(
+          X = layer.present,
+          BPPARAM = param,
+          FUN = function(x){
+              mat <- object[[x]]@composition[[gb]]$freq %>%
+                      dplyr::mutate(sample = x)
+              return(mat)
+        }) %>%
+        data.table::rbindlist(., use.names = T, fill = T) %>%
+        # convert NA to 0
+        mutate_if(is.numeric, ~ifelse(is.na(.), 0, .)) %>%
+        tibble::column_to_rownames("sample") %>%
+        t() %>% as.matrix()
 
-    join.list[["composition"]] <-
-      BiocParallel::bplapply(
-        X = layer.present,
-        BPPARAM = param,
-        FUN = function(x){
-            mat <- object[[x]]@composition[[gb]]$freq %>%
-                    dplyr::mutate(sample = x)
-            return(mat)
-      }) %>%
-      data.table::rbindlist(., use.names = T, fill = T) %>%
-      # convert NA to 0
-      mutate_if(is.numeric, ~ifelse(is.na(.), 0, .)) %>%
-      tibble::column_to_rownames("sample") %>%
-      t()
+      join.list[["composition"]][[gb]] <- list("Composition" = count,
+                                               "Metadata" = md.all %>%
+                                                            tibble::column_to_rownames("sample"))
 
-  } else if (tolower(layer) == "aggregated"){
-    message("Computing metrics for aggregated profile")
+      message("Computing metrics for aggregated profile")
 
-    # get gene subsets
-    gene.filter <- unique(unlist(lapply(object, function(x){
-                    names(x@aggregated_profile$Gene_expression$Average[[gb]])
-                   })))
-    # list for each gene subset
-    join.list[["aggregated"]] <-
-      lapply(gene.filter, function(y){
-        gf <- BiocParallel::bplapply(
-              X = layer.present,
-              BPPARAM = param,
-              FUN = function(x){
-                names(object[[x]]@aggregated_profile$Gene_expression$Average[[gb]][[y]]) <-
-                  paste(names(object[[x]]@aggregated_profile$Gene_expression$Average[[gb]][[y]]),
-                        names(y), sep = "_")
-                return(object[[x]]@aggregated_profile$Gene_expression$Average[[gb]][[y]])
-          }) %>%
-          plyr::join_all(by = 0, type = "full")
-      })
+      # get gene subsets
+      gene.filter <- unique(unlist(lapply(object, function(x){
+                      names(x@aggregated_profile$Gene_expression$Average[[gb]])
+                     })))
+      # list for each gene subset
+
+      join.list[["aggregated"]][[gb]] <-
+        BiocParallel::bplapply(X = gene.filter,
+                               BPPARAM = param,
+                               FUN =function(y){
+                gf <- lapply(
+                  X = layer.present,
+                  FUN = function(x){
+                    # remove cells with less than min.cells
+                    tab <- object[[x]]@composition[[gb]]$cell_counts
+                    names(tab) <- gsub("-", "_", names(tab))
+                    keep <- names(tab)[tab>=min.cells]
+                    dat <- object[[x]]@aggregated_profile$Gene_expression$Average[[gb]][[y]]
+                    colnames(dat) <- gsub("-", "_", colnames(dat))
+                    dat <- dat[, keep, drop = F]
+
+                    # accommodate colnames to merge then
+                    colnames(dat) <- paste(colnames(dat), x, sep = "_")
+                    dat <- dat %>%
+                            as.data.frame() %>%
+                            tibble::rownames_to_column("gene")
+                    md <- data.frame(rn = colnames(dat)[colnames(dat)!= "gene"],
+                                     sample = rep(x, ncol(dat)-1))
+                    return(list("data" = dat,
+                                "metadata" = md))
+            })
+            dat <- lapply(gf, function(x) x[["data"]]) %>%
+                    reduce(full_join, by = "gene") %>%
+            # convert NA to 0
+            mutate_if(is.numeric, ~ifelse(is.na(.), 0, .)) %>%
+            tibble::column_to_rownames("gene") %>%
+            as.matrix()
+
+            ## Summarize metadata
+            md <- lapply(gf, function(x) x[["metadata"]]) %>%
+                  data.table::rbindlist() %>%
+                  left_join(., md.all, by = "sample") %>%
+                  as.data.frame() %>%
+                  tibble::column_to_rownames("rn")
+
+            # return list
+            return(list("data" = dat,
+                        "metadata" = md))
+        })
+      # give names to list
+      names(join.list[["aggregated"]][[gb]]) <- gene.filter
+      data <- lapply(join.list[["aggregated"]][[gb]], function(x) {x[["data"]]})
+      md <- join.list[["aggregated"]][[gb]][[1]]$metadata %>% data.frame()
+      join.list[["aggregated"]][[gb]] <- c(data,list("metadata" = md))
 
 
- %>%
-      data.table::rbindlist(., use.names = T, fill = T) %>%
-      # convert NA to 0
-      mutate_if(is.numeric, ~ifelse(is.na(.), 0, .))
   }
 
-  }
 
 
 
-  return("OK")
+
+  return(join.list)
 
 }
 
