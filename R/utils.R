@@ -160,3 +160,36 @@ StandardizeCellNames <- function(cell.names, dictionary = NULL){
 
 
 
+#############################################################################################################
+# Compute the clustering score
+
+get.cluster.score <- function(matrix,
+                              group.by = c("sample", "celltype"),
+                              score = c("silhouette"),
+                              dist.method = "euclidean",
+                              ){
+
+  if(!is.matrix){
+    stop("Please provide a matrix object.")
+  }
+
+
+  score <- score[1]
+
+  # compute distance
+  dist <- dist(matrix,
+               method = dist.method)
+
+  dist.score <- cluster::silhouette(, dist)
+
+
+
+
+}
+
+
+
+
+
+
+
