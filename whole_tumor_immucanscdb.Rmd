@@ -557,10 +557,24 @@ Load hit files
 ```{r}
 require(tidyverse)
 hit <- readRDS("cache/20hit_annotated.rds")
+
+names(imm.db) <- tolower(names(imm.db))
+
+# accommodate metdata
+for(a in names(hit)){
+  hit[[a]]@metadata <- left_join(hit[[a]]@metadata,
+                                 imm.db, by = "csi_dataset_id")
+}
 ```
 
 ```{r}
-get.PCA.samples(hit)
+metadata <- c("cancer_type", "treatment_type")
+t <- get.PCA.samples(hit, metadata = metadata)
+
+
+mat <- t$aggregated$layer1$All.genes
+md <- t$aggregated$layer1$metadata
+cluster::silhouette(md$sample, dist(mat))
 ```
 
 
