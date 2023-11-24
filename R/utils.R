@@ -316,7 +316,7 @@ get.cluster.score <- function(matrix = NULL,
                 # return list
                 ret <- list("whole_avgerage" = whole.mean,
                             "bygroup_average" = g.df.sum,
-                            "plots" = list(df.score[x,3] = gpl,
+                            "plots" = list(as.character(df.score[x,3]) = gpl,
                                            "cmdscale" = mds.p,
                                            "PCA" = pc.pl))
                 return(ret)
