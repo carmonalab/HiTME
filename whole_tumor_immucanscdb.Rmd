@@ -81,7 +81,7 @@ The list of datasets from https://immucanscdb.vital-it.ch/ are detailed in https
 
 We retrieve this dataframe from google drive
 
-```{r}
+```{r load_db_specs}
 imm.db <- readxl::read_xlsx("data/Standarized_datasets_DB.xlsx")
 ```
 
@@ -554,6 +554,10 @@ hit.na <- Run.HiTME(t0$aml328d113,
 
 # Cell type consistency analysis
 Load hit files
+```{r load_db_specs}
+imm.db <- readxl::read_xlsx("data/Standarized_datasets_DB.xlsx")
+```
+
 ```{r}
 require(tidyverse)
 hit <- readRDS("cache/20hit_annotated.rds")
@@ -572,10 +576,25 @@ metadata <- c("cancer_type", "treatment_type")
 t <- get.PCA.samples(hit, metadata = metadata)
 
 
-mat <- t$aggregated$layer1$All.genes
-md <- t$aggregated$layer1$metadata
-cluster::silhouette(md$sample, dist(mat))
+matrix <- t$aggregated$layer1$`GO:0004896_Cytokine_activity`
+metadata <- t$aggregated$layer1$metadata
+silh <- cluster::silhouette(as.numeric(as.factor(metadata$celltype)),
+                            stats::dist(t(matrix)))
+print(factoextra::fviz_silhouette(silh)+
+                            theme(legend.position = "none"))
+
+mean(pl$data$sil_width)
 ```
+
+
+```{r}
+group.by <- c("sample", "celltype")
+param <- BiocParallel::MulticoreParam(workers =  8, progressbar = T)
+cc <- get.cluster.score(matrix,
+                  metadata,
+                  group.by = group.by, bparam = param)
+```
+
 
 
 
