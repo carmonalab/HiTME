@@ -22,6 +22,7 @@
 #' @importFrom dplyr mutate filter %>%
 #' @importFrom tibble column_to_rownames
 #' @importFrom scGate scGate get_scGateDB
+#' @importFrom ProjecTILs classifier.singleobject
 #' @importFrom Seurat SplitObject
 #' @importFrom data.table rbindlist setDT
 #'
@@ -1176,7 +1177,7 @@ get.PCA.samples <- function(object,
   for(gb in names(group.by)){
 
     layer.present <- rownames(present)[present[,gb]]
-    message("Computing metrics for composition...")
+    message("Computing metrics for composition of " , gb, "...")
       count  <-
         BiocParallel::bplapply(
           X = layer.present,
@@ -1196,7 +1197,7 @@ get.PCA.samples <- function(object,
                                                "Metadata" = md.all %>%
                                                             tibble::column_to_rownames("sample"))
 
-      message("Computing metrics for aggregated profile")
+      message("Computing metrics for aggregated profile of " , gb, "...")
 
       # get gene subsets
       gene.filter <- unique(unlist(lapply(object, function(x){
@@ -1218,14 +1219,15 @@ get.PCA.samples <- function(object,
                     dat <- object[[x]]@aggregated_profile$Gene_expression$Average[[gb]][[y]]
                     colnames(dat) <- gsub("-", "_", colnames(dat))
                     dat <- dat[, keep, drop = F]
-
+                    celltype <- colnames(dat)[colnames(dat)!= "gene"]
                     # accommodate colnames to merge then
                     colnames(dat) <- paste(colnames(dat), x, sep = "_")
                     dat <- dat %>%
                             as.data.frame() %>%
                             tibble::rownames_to_column("gene")
                     md <- data.frame(rn = colnames(dat)[colnames(dat)!= "gene"],
-                                     sample = rep(x, ncol(dat)-1))
+                                     sample = rep(x, ncol(dat)-1),
+                                     celltype = celltype)
                     return(list("data" = dat,
                                 "metadata" = md))
             })
