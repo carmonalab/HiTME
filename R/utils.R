@@ -310,15 +310,15 @@ get.cluster.score <- function(matrix = NULL,
                 #     legend.position = leg.pos,
                 #     legend.key = element_rect(fill = "white")
                 #   )
-
-
+              score.type <- as.character(df.score[x,3])
+              pl.list <- list( score.type = gpl,
+                              "cmdscale" = mds.p,
+                              "PCA" = pc.pl)
 
                 # return list
                 ret <- list("whole_avgerage" = whole.mean,
                             "bygroup_average" = g.df.sum,
-                            "plots" = list(as.character(df.score[x,3]) = gpl,
-                                           "cmdscale" = mds.p,
-                                           "PCA" = pc.pl))
+                            "plots" = pl.list)
                 return(ret)
                 }
   )
