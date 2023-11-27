@@ -749,7 +749,7 @@ get.aggregated.profile <- function(object,
   }
 
   #default gene list
-  data("GO_accession_default")
+  GO_default <- HiTME::GO_default
   gene.filter.list <- c(gene.filter.list, GO_default, GO_additional)
 
   # Add defined list of genes to filter
