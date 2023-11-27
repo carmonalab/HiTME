@@ -16,6 +16,9 @@ Imports:
   Hotelling,
   parallelly,
   scGate,
+  ProjecTILs,
+  dplyr,
+  ggplot2,
   Seurat,
   stringr
 
