@@ -55,8 +55,6 @@ ProjecTILs.classifier.multi <- function(object,
   }
 
   if(run){
-    # object needed fro classifier.singleobject
-    Hs2Mm.convert.table <- ProjecTILs::Hs2Mm.convert.table
   functional.clusters <-
     BiocParallel::bplapply(
       X = names(ref.maps),
