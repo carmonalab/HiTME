@@ -22,7 +22,7 @@
 #' @importFrom dplyr mutate filter %>%
 #' @importFrom tibble column_to_rownames
 #' @importFrom scGate scGate get_scGateDB
-#' @importFrom ProjecTILs Hs2Mm.convert.table classifier.singleobject
+#' @import ProjecTILs
 #' @importFrom Seurat SplitObject
 #' @importFrom data.table rbindlist setDT
 #'
