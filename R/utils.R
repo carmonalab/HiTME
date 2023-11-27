@@ -55,6 +55,8 @@ ProjecTILs.classifier.multi <- function(object,
   }
 
   if(run){
+  suppressWarnings(require(ProjecTILs))
+
   functional.clusters <-
     BiocParallel::bplapply(
       X = names(ref.maps),
