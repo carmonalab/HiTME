@@ -55,6 +55,8 @@ ProjecTILs.classifier.multi <- function(object,
   }
 
   if(run){
+    # object needed fro classifier.singleobject
+    Hs2Mm.convert.table <- ProjecTILs::Hs2Mm.convert.table
   functional.clusters <-
     BiocParallel::bplapply(
       X = names(ref.maps),
@@ -71,7 +73,6 @@ ProjecTILs.classifier.multi <- function(object,
 
         if(ncol(subset.object)>0){
           message("\nRunning Projectils for ", m, " reference")
-          data("Hs2Mm.convert.table")
           # it is mandatory to make run in serial (ncores = 1 and BPPARAM SerialParam)
           subset.object.pred <- ProjecTILs:::classifier.singleobject(subset.object,
                                                                      ref = ref.maps[[m]],
