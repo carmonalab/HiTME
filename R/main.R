@@ -499,7 +499,7 @@ get.HiTObject <- function(object,
   hit <- methods::new("HiT",
                        metadata = object@meta.data,
                        predictions = pred.list,
-                       aggregated_profile = list("Gene_expression" = avg.expr,
+                       aggregated_profile = list("Pseudobulk" = avg.expr,
                                                  "Signatures" = aggr.signature),
                        composition = comp.prop
                       )
@@ -733,13 +733,6 @@ get.aggregated.profile <- function(object,
   # Ribosomal genes
   gene.filter.list[["Ribosomal"]] <- SignatuR::GetSignature(SignatuR::SignatuR$Hs$Compartments$Ribo)
 
-  # Highly variable genes (HVG)
-  gene.filter.list[["HVG"]] <- Seurat::FindVariableFeatures(object,
-                                                            nfeatures = nHVG,
-                                                            assay = assay,
-                                                            verbose = F
-                                                            )[[assay]]@var.features
-
   # Add list genes from GO accessions
   # check if indicted additional GO accessions
   if(!is.null(GO_accession)){
@@ -764,15 +757,11 @@ get.aggregated.profile <- function(object,
 
 
   avg.exp <- list()
-  avg.exp[["Average"]] <- list()
-  avg.exp[["Aggregated"]] <- list()
 
   # loop over different grouping
 
   for(i in names(group.by.aggregated)){
-    # Create list for average and aggregated
-    avg.exp[["Average"]][[i]] <- list()
-    avg.exp[["Aggregated"]][[i]] <- list()
+    avg.exp[[i]] <- list()
 
     # if useNA = TRUE, transform NA to character
     if(useNA){
@@ -780,31 +769,11 @@ get.aggregated.profile <- function(object,
                        group.by.aggregated[[i]]] <- "NA"
     }
 
-  # compute average
-    suppressWarnings(
-      {
-    avg.exp[["Average"]][[i]][["All.genes"]] <-
-      Seurat::AverageExpression(object,
-                                group.by = group.by.aggregated[[i]],
-                                assays = assay,
-                                layer = layer,
-                                slot = layer,
-                                verbose = F,
-                                ...
-                                )[[assay]]
+  # compute pseudobulk
 
 
-    # compute average
-    avg.exp[["Aggregated"]][[i]][["All.genes"]] <-
-      Seurat::AggregateExpression(object,
-                                group.by = group.by.aggregated[[i]],
-                                assays = assay,
-                                verbose = F,
-                                ...
-                                )[[assay]]
-      })
 
-    if(ncol(avg.exp[["Average"]][[i]][["All.genes"]]) == 1){
+    if(ncol(avg.exp[[i]][["All.genes"]]) == 1){
       for(av in names(avg.exp)){
         colnames(avg.exp[[av]][[i]][["All.genes"]]) <-
           unique(object@meta.data[!is.na(object@meta.data[[group.by.aggregated[[i]]]]),
