@@ -1037,7 +1037,10 @@ get.GOList <- function(GO_accession = NULL,
 #' @param object List of Hit class object
 #' @param group.by Grouping variable for
 #' @param min.cells Minimum number of cells to consider for aggregated expression.
-#' @param metadata Variables to show as metadata
+#' @param metadata.vars Variables to show as metadata
+#' @param score Score to compute clustering of samples based on cell type prediction, either Silhoutte or modularity.
+#' @param dist.method Method to compute distance between celltypes, default euclidean.
+#' @param ndim Number of dimensions to be use for PCA clustering metrics.
 #' @param ncores The number of cores to use
 #' @param bparam A \code{BiocParallel::bpparam()} object that tells how to parallelize. If provided, it overrides the `ncores` parameter.
 #' @param progressbar Whether to show a progressbar or not
@@ -1046,17 +1049,22 @@ get.GOList <- function(GO_accession = NULL,
 #' @importFrom BiocParallel MulticoreParam bplapply
 #' @importFrom parallelly availableCores
 #' @importFrom tibble rownames_to_column
+#' @importFrom caret nearZeroVar
+#' @importFrom ggplot2 aes geom_point guides theme geom_col labs geom_hline guide_legend
 
 #' @return List of genes for each GO accession requested. If named vector is provided, lists output are named as GO:accession.ID_named (e.g. "GO:0004950_cytokine_receptor_activity")
-#' @export get.PCA.samples
+#' @export get.cluster.samples
 #'
 
-get.PCA.samples <- function(object,
+get.cluster.samples <- function(object,
                             group.by = list("layer1" = c("scGate_multi"),
                                             "layer2" = c("functional.cluster")
                             ),
                             min.cells = 10,
-                            metadata = NULL,
+                            metadata.vars = NULL,
+                            score = c("silhouette"),
+                            dist.method = "euclidean",
+                            ndim = 10,
                             ncores = parallelly::availableCores() - 2,
                             bparam = NULL,
                             progressbar = TRUE
@@ -1085,8 +1093,8 @@ get.PCA.samples <- function(object,
     }
   # give name to list of grouping.by variables
     for(v in seq_along(group.by)){
-      if(is.null(names(group.by[[v]])) || is.na(names(group.by[[v]]))){
-        names(group.by[[v]]) <- paste0("layer", v)
+      if(is.null(names(group.by)[[v]]) || is.na(names(group.by)[[v]])){
+        names(group.by)[[v]] <- paste0("layer", v)
       }
     }
   }
@@ -1112,13 +1120,13 @@ get.PCA.samples <- function(object,
 
   }
 
-  if(!is.null(metadata)){
+  if(!is.null(metadata.vars)){
     message("\n#### Metadata ####")
-    if(suppressWarnings(!all(lapply(object, function(x){any(metadata %in% names(x@metadata))})))) {
-      message("Not all supplied HiT object contain", paste(metadata, collapse = ", "),
+    if(suppressWarnings(!all(lapply(object, function(x){any(metadata.vars %in% names(x@metadata))})))) {
+      message("Not all supplied HiT object contain", paste(metadata.vars, collapse = ", "),
            "metadata elements in their metadata")
     }
-      in.md <- sapply(metadata,
+      in.md <- sapply(metadata.vars,
                         function(char){
                           unlist(lapply(object,
                                         function(df) {char %in% colnames(df@metadata)}
@@ -1128,7 +1136,7 @@ get.PCA.samples <- function(object,
       )
       in.md.sum <- colSums(in.md)
 
-      for(l in metadata){
+      for(l in metadata.vars){
         message("** ", l, " present in ", in.md.sum[[l]], " / ", length(object), " HiT objects.")
       }
 
@@ -1148,7 +1156,8 @@ get.PCA.samples <- function(object,
   # set paralelization parameters
   if (is.null(bparam)) {
     if (ncores>1) {
-      param <- BiocParallel::MulticoreParam(workers =  ncores, progressbar = progressbar)
+      param <- BiocParallel::MulticoreParam(workers =  ncores,
+                                            progressbar = progressbar)
     } else {
       param <- SerialParam()
     }
@@ -1157,7 +1166,7 @@ get.PCA.samples <- function(object,
   }
 
 # prepare metadata
-  md.all <- sapply(metadata, function(x){
+  md.all <- sapply(metadata.vars, function(x){
     BiocParallel::bplapply(X = names(object),
                            BPPARAM = param,
                            FUN =function(y){
@@ -1216,10 +1225,14 @@ get.PCA.samples <- function(object,
                     tab <- object[[x]]@composition[[gb]]$cell_counts
                     names(tab) <- gsub("-", "_", names(tab))
                     keep <- names(tab)[tab>=min.cells]
-                    dat <- object[[x]]@aggregated_profile$Gene_expression$Average[[gb]][[y]]
+                    dat <- object[[x]]@aggregated_profile$Gene_expression$Aggregated[[gb]][[y]]
+                    # in case _ and - are not match
                     colnames(dat) <- gsub("-", "_", colnames(dat))
+
+                    #keep only cell type with more than min.cells
                     dat <- dat[, keep, drop = F]
                     celltype <- colnames(dat)[colnames(dat)!= "gene"]
+
                     # accommodate colnames to merge then
                     colnames(dat) <- paste(colnames(dat), x, sep = "_")
                     dat <- dat %>%
@@ -1231,7 +1244,7 @@ get.PCA.samples <- function(object,
                     return(list("data" = dat,
                                 "metadata" = md))
             })
-            dat <- lapply(gf, function(x) x[["data"]]) %>%
+            data.all <- lapply(gf, function(x) x[["data"]]) %>%
                     reduce(full_join, by = "gene") %>%
             # convert NA to 0
             mutate_if(is.numeric, ~ifelse(is.na(.), 0, .)) %>%
@@ -1239,20 +1252,34 @@ get.PCA.samples <- function(object,
             as.matrix()
 
             ## Summarize metadata
-            md <- lapply(gf, function(x) x[["metadata"]]) %>%
+            md.all <- lapply(gf, function(x) x[["metadata"]]) %>%
                   data.table::rbindlist() %>%
                   left_join(., md.all, by = "sample") %>%
                   as.data.frame() %>%
                   tibble::column_to_rownames("rn")
 
+            # compute clustering metrics
             # return list
-            return(list("data" = dat,
-                        "metadata" = md))
+            return(list("data" = data.all,
+                        "metadata" = md.all))
         })
       # give names to list
       names(join.list[["aggregated"]][[gb]]) <- gene.filter
-      data <- lapply(join.list[["aggregated"]][[gb]], function(x) {x[["data"]]})
+
+      # there seems to be problems in running this in pararlel...
+      message("\nComputing clustering metrics of aggregated for ", gb)
+      for(c in names(join.list[["aggregated"]][[gb]])){
+        message("Computing clustering metrics of aggregated for ", gb, " ", c)
+        cc <- get.cluster.score(matrix = join.list[["aggregated"]][[gb]][[c]]$data,
+                                metadata = join.list[["aggregated"]][[gb]][[c]]$metadata,
+                                cluster.by = c("sample", "celltype"),
+                                score = score,
+                                dist.method = dist.method)
+        join.list[["aggregated"]][[gb]][[c]][["clustering"]] <- cc
+      }
+
       md <- join.list[["aggregated"]][[gb]][[1]]$metadata %>% data.frame()
+      data <- lapply(join.list[["aggregated"]][[gb]], function(x) {x[-which(names(x) == "metadata") ]})
       join.list[["aggregated"]][[gb]] <- c(data,list("metadata" = md))
 
 
