@@ -166,10 +166,10 @@ StandardizeCellNames <- function(cell.names, dictionary = NULL){
 
 get.cluster.score <- function(matrix = NULL,
                               metadata = NULL,
-                              group.by = c("sample", "celltype"),
+                              cluster.by = c("sample", "celltype"),
+                              ndim = 10,
                               score = c("silhouette"),
-                              dist.method = "euclidean",
-                              bparam = NULL
+                              dist.method = "euclidean"
                               ){
 
   if(is.null(matrix) || !is.matrix(matrix)){
@@ -181,155 +181,195 @@ get.cluster.score <- function(matrix = NULL,
   }
 
 
-  score <- score[1]
-
-
 
   # dataframe to store score result
   cnames <- c("grouping", "dist_method", "score_method")
-  df.score <- expand.grid(group.by, dist.method, score)
+  df.score <- expand.grid(cluster.by, dist.method, score)
+  # convert to characters, not factors
+  df.score <- lapply(df.score, as.character) %>% as.data.frame()
   names(df.score) <- cnames
 
+  # empty list to fill in the loop
+
+  scores <- list()
+
   # convert metadata grouping to numeric and factor
-  for(n in group.by){
+  for(n in cluster.by){
     metadata[[paste0(n,"N")]] <- as.numeric(as.factor(metadata[[n]]))
   }
 
-  # compute distance
-  scores <- BiocParallel::bplapply(
-                X = 1:nrow(df.score),
-                BPPARAM = bparam,
-                function(x){
-                  # define the grouping by variable
-                  gb <- as.character(df.score[x, 1])
 
-                  dist <- stats::dist(t(matrix),
-                               method = df.score[x, 2])
+  # compute common PCA space
 
-                  # do not show legend if too many groups
-                  leg.pos <- ifelse(length(unique(metadata[[gb]])) < 12,
-                                    "right", "none")
+  mat.scaled <- scale(matrix)
 
-                  if(df.score[x,3] == "silhouette"){
-                    silh <- cluster::silhouette(as.numeric(as.factor(metadata[[paste0(gb,"N")]])),
-                                        dist)
 
-                    sum <- summary(silh)
-
-                    sil.df <- as.data.frame(silh) %>%
-                              dplyr::rename(!!paste0(gb,"N") := cluster) %>%
-                              left_join(., dplyr::distinct(metadata[,c(paste0(gb,"N"), gb)]),
-                                      by = paste0(gb,"N")) %>%
-                              dplyr::group_by_at(dplyr::vars(!!gb)) %>%
-                              dplyr::arrange(desc(sil_width), .by_group = T) %>%
-                              dplyr::ungroup() %>%
-                              dplyr::mutate(rowid = dplyr::row_number())
-
-                    whole.mean <- mean(sil.df$sil_width)
-
-                    g.df.sum <- sil.df %>%
-                                  dplyr::group_by_at(dplyr::vars(!!gb)) %>%
-                                  dplyr::summarize(size = n(),
-                                                   average.sil.width = mean(sil_width),
-                                                   !!gb := .data[[gb]]) %>%
-                                  dplyr::distinct()
-
-                    gpl <- sil.df %>%
-                      ggplot2::ggplot(ggplot2::aes(rowid, sil_width, fill = .data[[gb]])) +
-                      ggplot2::geom_col() +
-                      ggplot2::geom_hline(yintercept = whole.mean,
-                                          color = "black",
-                                          linetype = 2) +
-                      ggplot2::labs(y = "Silhouette width",
-                           title = paste0(gb, " - Average Silhoutte width: ", round(sil.mean, 3))) +
-                      ggplot2::guides(fill=guide_legend(ncol=2))+
-                      ggplot2::theme(
-                        panel.background = element_rect(fill = "white"),
-                        axis.text.x = element_blank(),
-                        axis.title.x = element_blank(),
-                        axis.ticks.x = element_blank(),
-                        legend.position = leg.pos
-                      )
-
-                  } else if(df.score[x,3] == "modularity"){
-                    # adjancy matrix
-                    adjacency_matrix <- as.matrix(matrix > 1)
-                    ncol(adjacency_matrix) != nrow(adjacency_matrix)
-
-                    # Create a graph object
-                    graph <- igraph::graph_from_adjacency_matrix(matrix, mode = "undirected")
-
-                    # Apply a community detection algorithm (e.g., Louvain)
-                    membership <- igraph::cluster_louvain(graph)$membership
-
-                    # Calculate modularity
-                    modularity_value <- igraph::modularity(graph, membership)
-                  }
-
-                # run dimensional reduction on distances
-                mds <- stats::cmdscale(dist) %>%
-                      as.data.frame() %>%
-                      tibble::rownames_to_column("sample_celltype") %>%
-                      left_join(., metadata %>% tibble::rownames_to_column("sample_celltype"),
-                                by = "sample_celltype")
-                mds.pl <- mds %>%
-                      ggplot2::ggplot(ggplot2::aes(V1, V2, color = .data[[gb]])) +
-                      geom_point() +
-                  ggplot2::guides(color=guide_legend(ncol=2))+
-                  labs(title = paste0(gb, " - ", df.score[x, 2], " distance. Multidimensional scaling")) +
-                  ggplot2::theme(
-                    panel.background = element_rect(fill = "white"),
-                    axis.text = element_blank(),
-                    axis.title = element_blank(),
-                    axis.ticks = element_blank(),
-                    legend.position = leg.pos,
-                    legend.key = element_rect(fill = "white")
-                  )
-
-                # # plot for PCA
-                # pc <- stats::prcomp(t(matrix))
-                # pc_sum <- summary(pc)
-                # PC1_varexpl <- pc_sum$importance[2,"PC1"]
-                # PC2_varexpl <- pc_sum$importance[2,"PC2"]
-                #
-                # # get first 2 PC
-                # pc.df <- pc$x[,1:2] %>% as.data.frame() %>%
-                #   tibble::rownames_to_column("sample_celltype") %>%
-                #   left_join(., metadata %>% tibble::rownames_to_column("sample_celltype"),
-                #             by = "sample_celltype")
-                #
-                # pc.pl <- pc.df %>%
-                #   ggplot2::ggplot(ggplot2::aes(PC1, PC2, color = .data[[gb]])) +
-                #   geom_point() +
-                #   ggplot2::guides(color=guide_legend(ncol=2))+
-                #   labs(title = paste0(gb, " - ", " PCA")) +
-                #   ggplot2::theme(
-                #     panel.background = element_rect(fill = "white"),
-                #     axis.text = element_blank(),
-                #     axis.title = element_blank(),
-                #     axis.ticks = element_blank(),
-                #     legend.position = leg.pos,
-                #     legend.key = element_rect(fill = "white")
-                #   )
-              score.type <- as.character(df.score[x,3])
-              pl.list <- list( score.type = gpl,
-                              "cmdscale" = mds.p,
-                              "PCA" = pc.pl)
-
-                # return list
-                ret <- list("whole_avgerage" = whole.mean,
-                            "bygroup_average" = g.df.sum,
-                            "plots" = pl.list)
-                return(ret)
-                }
+  # remove samples with low variability if needed
+  tryCatch({
+    pc <- stats::prcomp(t(mat.scaled))
+  },
+  error = function(e){
+    near_zero_var <- caret::nearZeroVar(mat.scaled)
+    if(length(near_zero_var) > 0){
+      mat.scaled <- mat.scaled[, -near_zero_var]
+      metadata <<- metadata[-near_zero_var, ]
+      pc <<- stats::prcomp(t(mat.scaled))
+    } else if (length(near_zero_var) == ncol(mat.scaled)) {
+      message("PCA compute not possible.\n")
+    }
+  }
   )
 
-  names(scores) <- apply(df.score, 1, paste, collapse = "_")
+
+
+  # compute distance
+  for(x in 1:nrow(df.score)){
+
+    # define the grouping by variable
+    gr.by <- as.character(df.score[x, 1])
+
+    dist <- stats::dist(pc$x[,1:ndim],
+                        method = df.score[x, 2])
+
+    # do not show legend if too many groups
+    leg.pos <- ifelse(length(unique(metadata[[gr.by]])) < 30,
+                      "right", "none")
+
+    if(df.score[x,3] == "silhouette"){
+      silh <- cluster::silhouette(as.numeric(as.factor(metadata[[paste0(gr.by,"N")]])),
+                          dist)
+
+      sil.df <- as.data.frame(silh) %>%
+                dplyr::rename(!!paste0(gr.by,"N") := cluster) %>%
+                left_join(., dplyr::distinct(metadata[,c(paste0(gr.by,"N"), gr.by)]),
+                        by = paste0(gr.by,"N")) %>%
+                dplyr::group_by_at(dplyr::vars(!!gr.by)) %>%
+                dplyr::arrange(desc(sil_width), .by_group = T) %>%
+                dplyr::ungroup() %>%
+                dplyr::mutate(rowid = dplyr::row_number())
+
+      whole.mean <- mean(sil.df$sil_width)
+
+      g.df.sum <- sil.df %>%
+                    dplyr::group_by_at(dplyr::vars(!!gr.by)) %>%
+                    dplyr::reframe(
+                      size = n(),
+                      average.sil.width = mean(sil_width),
+                      !!gr.by := .data[[gr.by]]
+                      ) %>%
+                    dplyr::distinct()
+
+      gpl <- sil.df %>%
+        ggplot2::ggplot(ggplot2::aes(rowid, sil_width, fill = .data[[gr.by]])) +
+        ggplot2::geom_col() +
+        ggplot2::geom_hline(yintercept = whole.mean,
+                            color = "black",
+                            linetype = 2) +
+        ggplot2::labs(y = "Silhouette width",
+             title = paste0(gr.by, " - ", df.score[x, 2], "\nAverage Silhoutte width: ", round(whole.mean, 3))) +
+        ggplot2::guides(fill=guide_legend(ncol=3))+
+        ggplot2::theme(
+          panel.background = element_rect(fill = "white"),
+          axis.text.x = element_blank(),
+          axis.title.x = element_blank(),
+          axis.ticks.x = element_blank(),
+          legend.position = leg.pos
+        )
+
+    }
+
+    if(df.score[x,3] == "modularity"){
+      # transform to network the distance
+      graph <- graph.adjacency(
+                                as.matrix(as.dist(cor(matrix,
+                                                      method="pearson"))),
+                                mode="undirected",
+                                weighted=TRUE,
+                                diag=FALSE
+                              )
+      # simplify graph
+      graph <- simplify(graph, remove.multiple=TRUE, remove.loops=TRUE)
+
+      # Colour negative correlation edges as blue
+      E(graph)[which(E(graph)$weight<0)]$color <- "darkblue"
+      # Colour positive correlation edges as red
+      E(graph)[which(E(graph)$weight>0)]$color <- "darkred"
+      # Convert edge weights to absolute values
+      E(graph)$weight <- abs(E(graph)$weight)
+
+      # set grouping variable
+      V(graph)$group <- as.numeric(as.factor(metadata[[paste0(gr.by,"N")]]))
+      # calculate modularity
+      mod_score <- igraph::modularity(graph, V(graph)$group)
+
+      V(graph)$label <- NA
+
+      mod.pl <- plot(graph,
+                     vertex.color = V(graph)$group,
+                     main = "Network with Group Assignments")
+
+
+
+
+    }
+
+    # run dimensional reduction on distances
+    # mds <- stats::cmdscale(dist) %>%
+    #       as.data.frame() %>%
+    #       tibble::rownames_to_column("sample_celltype") %>%
+    #       left_join(., metadata %>% tibble::rownames_to_column("sample_celltype"),
+    #                 by = "sample_celltype")
+    # mds.pl <- mds %>%
+    #       ggplot2::ggplot(ggplot2::aes(V1, V2, color = .data[[gr.by]])) +
+    #       geom_point() +
+    #   ggplot2::guides(color=guide_legend(ncol=2))+
+    #   labs(title = paste0(gr.by, " - ", df.score[x, 2], " distance. Multidimensional scaling")) +
+    #   ggplot2::theme(
+    #     panel.background = element_rect(fill = "white"),
+    #     axis.text = element_blank(),
+    #     axis.title = element_blank(),
+    #     axis.ticks = element_blank(),
+    #     legend.position = leg.pos,
+    #     legend.key = element_rect(fill = "white")
+    #   )
+
+    # # plot for PCA
+    pc_sum <- summary(pc)
+    PC1_varexpl <- pc_sum$importance[2,"PC1"]
+    PC2_varexpl <- pc_sum$importance[2,"PC2"]
+
+    # get first 2 PC
+    pc.df <- pc$x[,1:2] %>% as.data.frame() %>%
+      tibble::rownames_to_column("sample_celltype") %>%
+      left_join(., metadata %>% tibble::rownames_to_column("sample_celltype"),
+                by = "sample_celltype")
+
+    pc.pl <- pc.df %>%
+      ggplot2::ggplot(ggplot2::aes(PC1, PC2, color = .data[[gr.by]])) +
+      geom_point() +
+      ggplot2::guides(color=guide_legend(ncol=2))+
+      labs(title = paste0(gr.by, " - ", " PCA"),
+           y = paste0("PC2 (", PC2_varexpl*100, " %)"),
+           x = paste0("PC1 (", PC1_varexpl*100, " %)"))+
+      ggplot2::theme(
+        panel.background = element_rect(fill = "white"),
+        legend.position = leg.pos,
+        legend.key = element_rect(fill = "white")
+      )
+  score.type <- as.character(df.score[x,3])
+  pl.list <- list( score.type = gpl,
+                  "PCA" = pc.pl)
+
+    # return list
+    ret <- list("whole_avgerage" = whole.mean,
+                "bygroup_average" = g.df.sum,
+                "plots" = pl.list)
+
+    scores[[paste(df.score[x,], collapse = "_")]] <- ret
+  }
+
 
   return(scores)
-
-
-
 
 
 }
