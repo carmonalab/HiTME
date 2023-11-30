@@ -12,8 +12,7 @@ get.HiTObject(
   clr_zero_impute_perc = 1,
   gene.filter = NULL,
   nHVG = 1000,
-  assay = "RNA",
-  layer = "data"
+  assay = "RNA"
 )
 }
 \arguments{
@@ -30,8 +29,6 @@ get.HiTObject(
 \item{nHVG}{Number of highly variable genes. Parameter for internal \link{get.aggregated.profile}.}
 
 \item{assay}{Parameter for internal \link{get.aggregated.profile}.}
-
-\item{layer}{Parameter for internal \link{get.aggregated.profile}.}
 }
 \value{
 HiT object summarizing cell type classification and aggregated profiles.
