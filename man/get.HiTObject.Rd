@@ -11,7 +11,6 @@ get.HiTObject(
   useNA = FALSE,
   clr_zero_impute_perc = 1,
   gene.filter = NULL,
-  nHVG = 1000,
   assay = "RNA"
 )
 }
@@ -25,8 +24,6 @@ get.HiTObject(
 \item{clr_zero_impute_perc}{Parameter for internal \link{get.celltype.composition}.}
 
 \item{gene.filter}{List of genes to subset for aggregated expression. Parameter for internal \link{get.aggregated.profile}.}
-
-\item{nHVG}{Number of highly variable genes. Parameter for internal \link{get.aggregated.profile}.}
 
 \item{assay}{Parameter for internal \link{get.aggregated.profile}.}
 }
