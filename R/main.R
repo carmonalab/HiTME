@@ -366,7 +366,6 @@ Run.HiTME <- function(object = NULL,
 #' @param gene.filter List of genes to subset for aggregated expression. Parameter for internal \link{get.aggregated.profile}.
 #' @param nHVG Number of highly variable genes. Parameter for internal \link{get.aggregated.profile}.
 #' @param assay Parameter for internal \link{get.aggregated.profile}.
-#' @param layer Parameter for internal \link{get.aggregated.profile}.
 #'
 #' @importFrom methods setClass new
 #' @import SeuratObject
@@ -385,8 +384,7 @@ get.HiTObject <- function(object,
                           clr_zero_impute_perc = 1,
                           gene.filter = NULL,
                           nHVG = 1000,
-                          assay = "RNA",
-                          layer = "data"
+                          assay = "RNA"
                           ){
 
 
@@ -487,7 +485,6 @@ get.HiTObject <- function(object,
                                      gene.filter = gene.filter,
                                      nHVG = nHVG,
                                      assay = assay,
-                                     layer = layer,
                                      useNA = useNA)
 
   aggr.signature <- get.aggregated.signature(object,
@@ -666,8 +663,6 @@ get.celltype.composition <- function(object = NULL,
 #' @param GO_accession Additional GO accessions to subset genes for aggregation, by default the list indicated in \code{gene.filter} are returned.
 #' @param nHVG Number of highly variable genes returned. By default 1000.
 #' @param assay Assay to retrieve information. By default "RNA".
-#' @param layer Layer to retrieve the data from to compute average expression.
-#' @param slot Deprecated slot in Seurat version under 5. Same use as layer.
 #' @param useNA logical whether to return aggregated profile for NA (undefined) cell types, default is FALSE.
 #' @param ... Extra parameters for internal Seurat functions: AverageExpression, AggregateExpression, FindVariableFeatures
 
@@ -682,8 +677,6 @@ get.aggregated.profile <- function(object,
                                    GO_accession = NULL,
                                    nHVG = 1000,
                                    assay = "RNA",
-                                   layer = "data",
-                                   slot = "data",
                                    useNA = FALSE,
                                    ...) {
 
@@ -770,7 +763,15 @@ get.aggregated.profile <- function(object,
     }
 
   # compute pseudobulk
-
+    suppressWarnings(
+      {
+        avg.exp[[i]][["All.genes"]] <-
+          Seurat::AggregateExpression(object,
+                                      group.by = group.by.aggregated[[i]],
+                                      assays = assay,
+                                      verbose = F,
+                                      ...)[[assay]]
+      })
 
 
     if(ncol(avg.exp[[i]][["All.genes"]]) == 1){
@@ -781,21 +782,20 @@ get.aggregated.profile <- function(object,
       }
     }
 
-    for(sl in names(avg.exp)){
       # add colnames if only one cell type is found
-      if(ncol(avg.exp[["Average"]][[i]][["All.genes"]]) == 1){
-          colnames(avg.exp[[sl]][[i]][["All.genes"]]) <-
-            unique(object@meta.data[!is.na(object@meta.data[[group.by.aggregated[[i]]]]),
-                                    group.by.aggregated[[i]]])
+    if(ncol(avg.exp[[i]][["All.genes"]]) == 1){
+        colnames(avg.exp[[i]][["All.genes"]]) <-
+          unique(object@meta.data[!is.na(object@meta.data[[group.by.aggregated[[i]]]]),
+                                  group.by.aggregated[[i]]])
       }
 
       # subset genes accroding to gene filter list
       for(e in names(gene.filter.list)){
         keep <- gene.filter.list[[e]][gene.filter.list[[e]] %in%
-                                        rownames(avg.exp[[sl]][[i]][["All.genes"]])]
-        avg.exp[[sl]][[i]][[e]] <- avg.exp[[sl]][[i]][["All.genes"]][keep, , drop = FALSE]
+                                        rownames(avg.exp[[i]][["All.genes"]])]
+        avg.exp[[i]][[e]] <- avg.exp[[i]][["All.genes"]][keep, , drop = FALSE]
       }
-    }
+
 
 
   }
@@ -998,9 +998,7 @@ get.GOList <- function(GO_accession = NULL,
 }
 
 
-#' Compute PCA of summarized data
-#'
-#' Compute PCA of summarized data
+#' Compute aggregation metrics of summarized data
 #'
 #'
 #' @param object List of Hit class object
