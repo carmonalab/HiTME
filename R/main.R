@@ -364,7 +364,6 @@ Run.HiTME <- function(object = NULL,
 #' @param name.additional.signatures Names of additional signatures as found in object metadata to take into account.
 #' @param clr_zero_impute_perc Parameter for internal \link{get.celltype.composition}.
 #' @param gene.filter List of genes to subset for aggregated expression. Parameter for internal \link{get.aggregated.profile}.
-#' @param nHVG Number of highly variable genes. Parameter for internal \link{get.aggregated.profile}.
 #' @param assay Parameter for internal \link{get.aggregated.profile}.
 #'
 #' @importFrom methods setClass new
@@ -383,7 +382,6 @@ get.HiTObject <- function(object,
                           useNA = FALSE,
                           clr_zero_impute_perc = 1,
                           gene.filter = NULL,
-                          nHVG = 1000,
                           assay = "RNA"
                           ){
 
@@ -483,7 +481,6 @@ get.HiTObject <- function(object,
   avg.expr <- get.aggregated.profile(object,
                                      group.by.aggregated = group.by,
                                      gene.filter = gene.filter,
-                                     nHVG = nHVG,
                                      assay = assay,
                                      useNA = useNA)
 
@@ -658,10 +655,9 @@ get.celltype.composition <- function(object = NULL,
 #' @param object A seurat object or a list of seurat objects
 #' @param group.by.aggregated The Seurat object metadata column(s) containing celltype annotations
 #' @param gene.filter Additional named list of genes to subset their aggregated expression, by default all genes,
-#'  highly variable genes (see \code{nHVG}), ribosomal genes, transcription factor (GO:0003700), cytokines (GO:0005125),
+#' ribosomal genes, transcription factor (GO:0003700), cytokines (GO:0005125),
 #'   cytokine receptors (GO:0004896), chemokines (GO:0008009), and chemokines receptors (GO:0004950) are subsetted.
 #' @param GO_accession Additional GO accessions to subset genes for aggregation, by default the list indicated in \code{gene.filter} are returned.
-#' @param nHVG Number of highly variable genes returned. By default 1000.
 #' @param assay Assay to retrieve information. By default "RNA".
 #' @param useNA logical whether to return aggregated profile for NA (undefined) cell types, default is FALSE.
 #' @param ... Extra parameters for internal Seurat functions: AverageExpression, AggregateExpression, FindVariableFeatures
@@ -675,7 +671,6 @@ get.aggregated.profile <- function(object,
                                    group.by.aggregated = NULL,
                                    gene.filter = NULL,
                                    GO_accession = NULL,
-                                   nHVG = 1000,
                                    assay = "RNA",
                                    useNA = FALSE,
                                    ...) {
