@@ -771,7 +771,7 @@ get.aggregated.profile <- function(object,
 
     if(ncol(avg.exp[[i]][["All.genes"]]) == 1){
       for(av in names(avg.exp)){
-        colnames(avg.exp[[av]][[i]][["All.genes"]]) <-
+        colnames(avg.exp[[i]][["All.genes"]]) <-
           unique(object@meta.data[!is.na(object@meta.data[[group.by.aggregated[[i]]]]),
                                   group.by.aggregated[[i]]])
       }
