@@ -9,7 +9,6 @@ get.aggregated.profile(
   group.by.aggregated = NULL,
   gene.filter = NULL,
   GO_accession = NULL,
-  nHVG = 1000,
   assay = "RNA",
   useNA = FALSE,
   ...
@@ -21,12 +20,10 @@ get.aggregated.profile(
 \item{group.by.aggregated}{The Seurat object metadata column(s) containing celltype annotations}
 
 \item{gene.filter}{Additional named list of genes to subset their aggregated expression, by default all genes,
-highly variable genes (see \code{nHVG}), ribosomal genes, transcription factor (GO:0003700), cytokines (GO:0005125),
+ribosomal genes, transcription factor (GO:0003700), cytokines (GO:0005125),
 cytokine receptors (GO:0004896), chemokines (GO:0008009), and chemokines receptors (GO:0004950) are subsetted.}
 
 \item{GO_accession}{Additional GO accessions to subset genes for aggregation, by default the list indicated in \code{gene.filter} are returned.}
-
-\item{nHVG}{Number of highly variable genes returned. By default 1000.}
 
 \item{assay}{Assay to retrieve information. By default "RNA".}
 
