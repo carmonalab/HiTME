@@ -159,25 +159,6 @@ StandardizeCellNames <- function(cell.names, dictionary = NULL){
 
 }
 
-#############################################################################################################
-# get pseudobulk count
-get.pseudobulk <- function(object = NULL, # seurat object
-                           group.by = NULL, # grouping variable
-                           assay = "RNA")
-  {
-  # extract matrix of counts
-  matrix <- object@assays[[assay]]@counts %>%
-            as.matrix()
-
-  # set grouping variable
-  group_factor <- factor(object@meta.data[[group.by]])
-
-  pseudobulk_matrix <- t(rowsum(t(matrix),
-                              group = group_factor))
-
-  return(pseudobulk_matrix)
-}
-
 
 
 
