@@ -11,8 +11,6 @@ get.aggregated.profile(
   GO_accession = NULL,
   nHVG = 1000,
   assay = "RNA",
-  layer = "data",
-  slot = "data",
   useNA = FALSE,
   ...
 )
@@ -31,10 +29,6 @@ cytokine receptors (GO:0004896), chemokines (GO:0008009), and chemokines recepto
 \item{nHVG}{Number of highly variable genes returned. By default 1000.}
 
 \item{assay}{Assay to retrieve information. By default "RNA".}
-
-\item{layer}{Layer to retrieve the data from to compute average expression.}
-
-\item{slot}{Deprecated slot in Seurat version under 5. Same use as layer.}
 
 \item{useNA}{logical whether to return aggregated profile for NA (undefined) cell types, default is FALSE.}
 
