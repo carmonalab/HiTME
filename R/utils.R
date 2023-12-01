@@ -167,8 +167,11 @@ StandardizeCellNames <- function(cell.names, dictionary = NULL){
 
 get.cluster.score <- function(matrix = NULL,
                               metadata = NULL,
-                              cluster.by = c("sample", "celltype"),
+                              cluster.by = c("celltype", "sample"),
                               ndim = 10,
+                              nVarGenes = 500,
+                              black.list = "default",
+                              ntests = 0,
                               score = c("silhouette"),
                               dist.method = "euclidean"
                               ){
@@ -191,31 +194,38 @@ get.cluster.score <- function(matrix = NULL,
   names(df.score) <- cnames
 
   # empty list to fill in the loop
-
   scores <- list()
 
-  # convert metadata grouping to numeric and factor
-  for(n in cluster.by){
-    metadata[[paste0(n,"N")]] <- as.numeric(as.factor(metadata[[n]]))
-  }
+  # compute common PCA space using DEseq2
+  # do formula for design with the cluster.by elements in order
+  dformula <- formula(paste("~", paste(cluster.by, collapse =  " + ")))
+  dds <- DESeq2::DESeqDataSetFromMatrix(countData = matrix,
+                                        colData = metadata,
+                                        design = dformula)
+  dds <- DESeq2::estimateSizeFactors(dds)
 
+  nsub <- min(1000,
+              sum(rowMeans(BiocGenerics::counts(dds, normalized=TRUE)) > 5 ))
+  # transform counts usign vst
+  vsd <- DESeq2::vst(dds, blind = T, nsub = nsub)
+  vsd <- SummarizedExperiment::assay(vsd)
 
-  # compute common PCA space
-
-  mat.scaled <- scale(matrix)
-
+  # get top variable genes
+  rv <- MatrixGenerics::rowVars(vsd)
+  select <- order(rv, decreasing=TRUE)[seq_len(min(nVarGenes, length(rv)))]
+  vsd <- vsd[select,]
 
   # remove samples with low variability if needed
   tryCatch({
-    pc <- stats::prcomp(t(mat.scaled))
+    pc <- stats::prcomp(t(vsd))
   },
   error = function(e){
-    near_zero_var <- caret::nearZeroVar(mat.scaled)
+    near_zero_var <- caret::nearZeroVar(vsd)
     if(length(near_zero_var) > 0){
-      mat.scaled <- mat.scaled[, -near_zero_var]
+      vsd <- vsd[, -near_zero_var]
       metadata <<- metadata[-near_zero_var, ]
-      pc <<- stats::prcomp(t(mat.scaled))
-    } else if (length(near_zero_var) == ncol(mat.scaled)) {
+      pc <<- stats::prcomp(t(vsd))
+    } else if (length(near_zero_var) == ncol(vsd)) {
       message("PCA compute not possible.\n")
     }
   }
@@ -237,30 +247,14 @@ get.cluster.score <- function(matrix = NULL,
                       "right", "none")
 
     if(df.score[x,3] == "silhouette"){
-      silh <- cluster::silhouette(as.numeric(as.factor(metadata[[paste0(gr.by,"N")]])),
-                          dist)
+      silh <- silhoutte_onelabel(metadata[[gr.by]],
+                                 dist = dist,
+                                 ntests = ntests)
 
-      sil.df <- as.data.frame(silh) %>%
-                dplyr::rename(!!paste0(gr.by,"N") := cluster) %>%
-                left_join(., dplyr::distinct(metadata[,c(paste0(gr.by,"N"), gr.by)]),
-                        by = paste0(gr.by,"N")) %>%
-                dplyr::group_by_at(dplyr::vars(!!gr.by)) %>%
-                dplyr::arrange(desc(sil_width), .by_group = T) %>%
-                dplyr::ungroup() %>%
-                dplyr::mutate(rowid = dplyr::row_number())
+      whole.mean <- mean(silh$cell$sil_width)
 
-      whole.mean <- mean(sil.df$sil_width)
-
-      g.df.sum <- sil.df %>%
-                    dplyr::group_by_at(dplyr::vars(!!gr.by)) %>%
-                    dplyr::reframe(
-                      size = n(),
-                      average.sil.width = mean(sil_width),
-                      !!gr.by := .data[[gr.by]]
-                      ) %>%
-                    dplyr::distinct()
-
-      gpl <- sil.df %>%
+      gpl <- silh$cell %>%
+        dplyr::rename(!!gr.by := cluster) %>%
         ggplot2::ggplot(ggplot2::aes(rowid, sil_width, fill = .data[[gr.by]])) +
         ggplot2::geom_col() +
         ggplot2::geom_hline(yintercept = whole.mean,
@@ -314,26 +308,6 @@ get.cluster.score <- function(matrix = NULL,
 
     }
 
-    # run dimensional reduction on distances
-    # mds <- stats::cmdscale(dist) %>%
-    #       as.data.frame() %>%
-    #       tibble::rownames_to_column("sample_celltype") %>%
-    #       left_join(., metadata %>% tibble::rownames_to_column("sample_celltype"),
-    #                 by = "sample_celltype")
-    # mds.pl <- mds %>%
-    #       ggplot2::ggplot(ggplot2::aes(V1, V2, color = .data[[gr.by]])) +
-    #       geom_point() +
-    #   ggplot2::guides(color=guide_legend(ncol=2))+
-    #   labs(title = paste0(gr.by, " - ", df.score[x, 2], " distance. Multidimensional scaling")) +
-    #   ggplot2::theme(
-    #     panel.background = element_rect(fill = "white"),
-    #     axis.text = element_blank(),
-    #     axis.title = element_blank(),
-    #     axis.ticks = element_blank(),
-    #     legend.position = leg.pos,
-    #     legend.key = element_rect(fill = "white")
-    #   )
-
     # # plot for PCA
     pc_sum <- summary(pc)
     PC1_varexpl <- pc_sum$importance[2,"PC1"]
@@ -363,7 +337,7 @@ get.cluster.score <- function(matrix = NULL,
 
     # return list
     ret <- list("whole_avgerage" = whole.mean,
-                "bygroup_average" = g.df.sum,
+                "bygroup_average" = silh$summary,
                 "plots" = pl.list)
 
     scores[[paste(df.score[x,], collapse = "_")]] <- ret
@@ -375,6 +349,103 @@ get.cluster.score <- function(matrix = NULL,
 
 }
 
+#############################################################################################################
+# Function for silhoutte one label
+
+silhoutte_onelabel <- function(labels = NULL, # vector of labels
+                               dist = NULL, # distance object
+                               ntests = 0, # number of shuffling events
+                               seed = 22){# seed for random suffling
+
+  if (is.null(labels) || !is.vector(labels)) {
+    stop("Please provide a vector of the labels")
+  }
+
+  if (is.null(dist) || !class(dist) == "dist") {
+    stop("Please provide a a dissimilarity object inheriting from class dist or coercible to one")
+  }
+
+  if (!is.numeric(ntests)) {
+    stop("Please provide a number of shuffling test for the random assignation of the label")
+  }
+
+  if (!is.numeric(seed)) {
+    stop("Please provide a number for setting seed")
+  }
+
+  tlabels <- unique(labels)
+
+  sil.all <- data.frame(matrix(nrow = 0, ncol = 3))
+  names(sil.all) <- c("cluster", "neighbor", "sil_width")
+
+
+  sil.sum <- data.frame(matrix(nrow = 0, ncol = 4))
+  names(sil.sum) <- c("cluster", "iteration", "size", "avg_sil_width")
+
+  len <- length(labels)
+
+  for(a in tlabels){
+    x_one <- ifelse(labels == a, 2, 1) %>%
+              as.factor() %>% as.numeric()
+
+    silh <- cluster::silhouette(x_one, dist)
+
+    # change names back to character
+    sil.res <- as.data.frame(silh) %>%
+              dplyr::filter(cluster == 2) %>%
+              dplyr::mutate(cluster = a)
+    #join for all samples
+    sil.all <- rbind(sil.all, sil.res)
+
+    size <- nrow(sil.res)
+
+    sil.sumA <- data.frame(cluster = a,
+                           iteration = "NO",
+                           size = size,
+                           avg_sil_width = mean(sil.res$sil_width))
+
+    sil.sum <- rbind(sil.sum, sil.sumA)
+
+    if(ntests > 0){
+    # perform the shuffling
+      for(u in 1:ntests){
+        # random vector
+        vec <- rep(1, length(labels))
+        # seeding for reproducibility
+        set.seed(seed+u)
+        random_sample <- sample(1:len, size)
+        vec[random_sample] <- 2
+        vec <- vec %>% as.factor() %>% as.numeric()
+
+        # run silhoutte
+        silh <- cluster::silhouette(vec, dist)
+        sil.res <- as.data.frame(silh) %>%
+                    dplyr::filter(cluster == 2)
+
+        sil.sumA <- data.frame(cluster = a,
+                               iteration = u,
+                               size = size,
+                               avg_sil_width = mean(sil.res$sil_width))
+
+        sil.sum <- rbind(sil.sum, sil.sumA)
+
+      }
+
+    }
+  }
+  # order silhoute width per cell type
+  sil.all <- sil.all %>%
+    dplyr::group_by(cluster) %>%
+    dplyr::arrange(desc(sil_width), .by_group = T) %>%
+    dplyr::ungroup() %>%
+    dplyr::mutate(rowid = dplyr::row_number())
+
+
+  ret.list <- list("cell" = sil.all,
+                   "summary" = sil.sum)
+
+  return(ret.list)
+}
 
 
 
