@@ -14,7 +14,7 @@ knit: (function(input_file, encoding) {
 renv::restore()
 
 # remotes::install_github("carmonalab/HiTME",
-#                         ref="master",
+#                         ref="dev",
 #                         auth_token = "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")
 
 # load packages
@@ -24,7 +24,8 @@ renv::restore()
 #            "SignatuR", "ProjecTILs",
 #            "scCustomize", "UCell", "ProjecTILs")
 
-pckgs <- c("tidyverse", "ProjecTILs", "HiTME"
+pckgs <- c("tidyverse", "ProjecTILs"
+           # "HiTME"
            )
 for(package in pckgs){
   tryCatch(
@@ -40,8 +41,8 @@ for(package in pckgs){
 
 options(timeout=4000) # increase time out for downloading
 
-# source("R/utils.R")
-# source("R/main.R")
+source("R/utils.R")
+source("R/main.R")
 
 
 #dataset testing
@@ -124,9 +125,10 @@ Now we will load the light (no small samples and downsampled) rds file for this 
 ```{r}
 rds <- imm.db %>%
         # get only whole tumor
-        filter(Enrichment_cell_types == "unbiased") %>% 
+        filter(Enrichment_cell_types %in% c("unbiased", "immune")) %>% 
+        filter(!grepl("SS2", RDS_id)) %>% 
         # get only datasets with >+ 10 samples/patients
-        filter(N_samples_light > 9) %>% 
+        # filter(N_samples_light > 9) %>% 
         select(RDS_id, CSI_Dataset_id) %>% 
         as.data.frame()
 
@@ -135,7 +137,7 @@ rds <- imm.db %>%
 ## Load immucanscdb selected datasets
 ```{r}
 # path to light rds
-light.path <- "~/Dropbox/CSI/Standardized_SingleCell_Datasets/immucanscdb/output/light_rds"
+light.path <- "~/Dropbox/CSI/Standardized_SingleCell_Datasets/immucanscdb/output/raw_light_rds/"
 
 #create a list to store the seurat objects
 seu <- list()
@@ -144,6 +146,7 @@ for(a in 1:nrow(rds)){
   # look for the rds in the light rds directory
   rds.file <- list.files(light.path, rds[a,1], full.names = T)
   #load file
+  if(length(rds.file)>0){
   tmp <- readRDS(rds.file)
   
   message("##### Loaded ", rds[a,2], "#####\n")
@@ -155,6 +158,7 @@ for(a in 1:nrow(rds)){
   
   # add to list
   seu[[rds[a,2]]] <- tmp
+  }
 }
 
 rm(tmp)
@@ -255,7 +259,7 @@ dev.off()
 
 ```{r}
 
-scGate_models_DB <- scGate::get_scGateDB(branch = "dev", force_update = F)
+#scGate_models_DB <- scGate::get_scGateDB(branch = "dev", force_update = F)
 # models.TME <- scGate_models_DB$human$TME_HiRes
 
 path_ref <- "~/Dropbox/CSI/reference_atlases" 
@@ -286,8 +290,8 @@ names(stime) <- c("Dataset", "Sample", "N_cells", "ncores", "user.self",
 ```
 
 
-```{r}
-ncores = 6
+```{r, eval = F}
+ncores = 7
 
 for(a in names(seu)){
   # split into samples/patients
@@ -300,7 +304,7 @@ for(a in names(seu)){
     # Run annotate cells
     tryCatch(
       {
-      message("Running Run.HiTME dataset", a, ". Sample: ", b)
+      message("\nRunning Run.HiTME dataset", a, ". Sample: ", b)
       
       time <- system.time(
         
@@ -344,9 +348,12 @@ for(a in names(seu)){
 ```
 
 
+
+
+
 ```{r}
-saveRDS(seu.list, "cache/20datasets_annotated.rds")
-saveRDS(hit.list, "cache/20hit_annotated.rds")
+saveRDS(seu.list, "cache/20datasets_annotated_raw.rds")
+saveRDS(hit.list, "cache/20hit_annotated_raw.rds")
 ```
 
 
@@ -551,6 +558,21 @@ hit.na <- Run.HiTME(t0$aml328d113,
                   ncores = 9, useNA = T)
 ```
 
+# test new aggregated profile
+```{r}
+ps <- Seurat::AggregateExpression(object,
+                                      group.by = group.by.aggregated[[1]],
+                                      assays = assay,
+                                      verbose = F)[[assay]]
+
+ps2 <- rowsum()
+
+
+tt <- get.aggregated.profile(object = dataset.list[[1]], 
+                       group.by.aggregated = "annotation")
+```
+
+
 
 # Cell type consistency analysis
 Load hit files
@@ -560,7 +582,7 @@ imm.db <- readxl::read_xlsx("data/Standarized_datasets_DB.xlsx")
 
 ```{r}
 require(tidyverse)
-hit <- readRDS("cache/20hit_annotated.rds")
+hit <- readRDS("cache/20hit_annotated_raw.rds")
 
 names(imm.db) <- tolower(names(imm.db))
 
@@ -572,8 +594,11 @@ for(a in names(hit)){
 ```
 
 ```{r}
-metadata <- c("cancer_type", "treatment_type")
-t <- get.PCA.samples(hit, metadata = metadata)
+metadata.vars <- c("cancer_type", "treatment_type")
+t <- get.cluster.samples(hit,
+                     group.by = c("scGate_multi",
+                                  "functional.cluster"),
+                     metadata.vars = metadata.vars)
 
 
 matrix <- t$aggregated$layer1$`GO:0004896_Cytokine_activity`
@@ -588,12 +613,62 @@ mean(pl$data$sil_width)
 
 
 ```{r}
+matrix <- t$aggregated$layer2$`GO:0004896_Cytokine_activity`
+metadata <- t$aggregated$layer2$metadata
+
+
 group.by <- c("sample", "celltype")
 param <- BiocParallel::MulticoreParam(workers =  8, progressbar = T)
 cc <- get.cluster.score(matrix,
                   metadata,
-                  group.by = group.by, bparam = param)
+                  group.by = group.by,
+                  dist.method = c("euclidean", "manhattan", "canberra"))
 ```
+Do a summarizing pdf
+```{r}
+metadata.vars <- c("cancer_type", "treatment_type")
+pd <- get.cluster.samples(hit,
+                     group.by = c("scGate_multi",
+                                  "functional.cluster"),
+                     metadata.vars = metadata.vars,
+                     dist.method = c("euclidean"))
+
+require(ggpubr)
+
+pdf("figs/clustering_tests_scaled.pdf", width = 27, height = 18)
+for(l in c("layer1", "layer2")){
+  
+  for(gf in names(pd$aggregated$layer1)){
+    gpl <- list()
+    if(gf == "metadata"){
+      next
+    }
+    
+    
+    set <- pd$aggregated[[l]][[gf]]$clustering
+    for(sc in names(set)){
+    gpl <- append(gpl, set[[sc]]$plots)
+    
+    # do barplot with silhoutte value per celltype
+    bdf <- set[[sc]]$bygroup_average
+    
+    bpl <- bdf %>% 
+      ggplot(aes_string("average_sil_width", names(bdf)[1],
+                        size = "size", fill = names(bdf)[1])) +
+      geom_col() +
+      theme_classic()
+    gpl <- append(gpl, list(bpl))
+  }
+ ggpubpl <- ggarrange(plotlist = gpl, ncol = 3, nrow = 4)
+ ggpubpl <- annotate_figure(ggpubpl, top = text_grob(gf, 
+               color = "black", face = "bold", size = 22))
+  print(ggpubpl)
+  }
+ 
+}
+dev.off()
+```
+
 
 
 
