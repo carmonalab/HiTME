@@ -469,14 +469,14 @@ get.HiTObject <- function(object,
 
 
   # Compute proportions
-  message("Computing cell type composition...\n")
+  message("\nComputing cell type composition...\n")
 
   comp.prop <- get.celltype.composition(object,
                                         group.by.composition = group.by,
                                         useNA = useNA,
                                         clr_zero_impute_perc = clr_zero_impute_perc)
   # Compute avg expression
-  message("Computing aggregated profile...\n")
+  message("\nComputing aggregated profile...\n")
 
   avg.expr <- get.aggregated.profile(object,
                                      group.by.aggregated = group.by,
@@ -1003,6 +1003,8 @@ get.GOList <- function(GO_accession = NULL,
 #' @param score Score to compute clustering of samples based on cell type prediction, either Silhoutte or modularity.
 #' @param dist.method Method to compute distance between celltypes, default euclidean.
 #' @param ndim Number of dimensions to be use for PCA clustering metrics.
+#' @param nVarGenes Number of variable genes to assess samples.
+#' @param black.list List of genes to discard from clustering, if "default"
 #' @param ncores The number of cores to use
 #' @param bparam A \code{BiocParallel::bpparam()} object that tells how to parallelize. If provided, it overrides the `ncores` parameter.
 #' @param progressbar Whether to show a progressbar or not
@@ -1013,6 +1015,10 @@ get.GOList <- function(GO_accession = NULL,
 #' @importFrom tibble rownames_to_column
 #' @importFrom caret nearZeroVar
 #' @importFrom ggplot2 aes geom_point guides theme geom_col labs geom_hline guide_legend
+#' @importFrom DEseq2 DESeqDataSetFromMatrix vst estimateSizeFactors
+#' @importFrom MatrixGenerics rowVars
+#' @importFrom SummarizedExperiment assay
+#' @importFrom BiocGenerics counts
 
 #' @return List of genes for each GO accession requested. If named vector is provided, lists output are named as GO:accession.ID_named (e.g. "GO:0004950_cytokine_receptor_activity")
 #' @export get.cluster.samples
@@ -1027,6 +1033,8 @@ get.cluster.samples <- function(object,
                             score = c("silhouette"),
                             dist.method = "euclidean",
                             ndim = 10,
+                            nVarGenes = 500,
+                            black.list = "default",
                             ncores = parallelly::availableCores() - 2,
                             bparam = NULL,
                             progressbar = TRUE
@@ -1172,7 +1180,7 @@ get.cluster.samples <- function(object,
 
       # get gene subsets
       gene.filter <- unique(unlist(lapply(object, function(x){
-                      names(x@aggregated_profile$Gene_expression$Average[[gb]])
+                      names(x@aggregated_profile$Pseudobulk[[gb]])
                      })))
       # list for each gene subset
 
@@ -1187,7 +1195,9 @@ get.cluster.samples <- function(object,
                     tab <- object[[x]]@composition[[gb]]$cell_counts
                     names(tab) <- gsub("-", "_", names(tab))
                     keep <- names(tab)[tab>=min.cells]
-                    dat <- object[[x]]@aggregated_profile$Gene_expression$Aggregated[[gb]][[y]]
+
+                    if(length(keep) > 0){
+                    dat <- object[[x]]@aggregated_profile$Pseudobulk[[gb]][[y]]
                     # in case _ and - are not match
                     colnames(dat) <- gsub("-", "_", colnames(dat))
 
@@ -1205,7 +1215,13 @@ get.cluster.samples <- function(object,
                                      celltype = celltype)
                     return(list("data" = dat,
                                 "metadata" = md))
+                    } else {
+                      return(NULL)
+                    }
             })
+            # remove NULL if generated
+            gf <- gf[!sapply(gf, is.null)]
+
             data.all <- lapply(gf, function(x) x[["data"]]) %>%
                     reduce(full_join, by = "gene") %>%
             # convert NA to 0
@@ -1231,12 +1247,18 @@ get.cluster.samples <- function(object,
       # there seems to be problems in running this in pararlel...
       message("\nComputing clustering metrics of aggregated for ", gb)
       for(c in names(join.list[["aggregated"]][[gb]])){
+
         message("Computing clustering metrics of aggregated for ", gb, " ", c)
+
         cc <- get.cluster.score(matrix = join.list[["aggregated"]][[gb]][[c]]$data,
                                 metadata = join.list[["aggregated"]][[gb]][[c]]$metadata,
-                                cluster.by = c("sample", "celltype"),
+                                cluster.by = c("celltype", "sample"),
                                 score = score,
+                                ndim = ndim,
+                                ntests = 10,
+                                nVarGenes = nVarGenes,
                                 dist.method = dist.method)
+
         join.list[["aggregated"]][[gb]][[c]][["clustering"]] <- cc
       }
 
