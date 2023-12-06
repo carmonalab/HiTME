@@ -14,6 +14,7 @@
 #' @param useNA Whether to include not annotated cells or not (labelled as "NA" in the group.by.composition) when summarizing into HiT object.
 #' @param remerge When setting split.by, if remerge = TRUE one object will be returned. If remerge = FALSE a list of objects will be returned.
 #' @param ncores The number of cores to use
+#' @param ncores.limit Whether or not to limit ncores for large datasets
 #' @param bparam A \code{BiocParallel::bpparam()} object that tells Run.HiTME how to parallelize. If provided, it overrides the `ncores` parameter.
 #' @param progressbar Whether to show a progressbar or not
 #'
@@ -65,6 +66,7 @@ Run.HiTME <- function(object = NULL,
                        species = "human",
                        bparam = NULL,
                        ncores = parallelly::availableCores() - 2,
+                       ncores.limit = TRUE,
                        progressbar = TRUE
                        ){
 
@@ -133,8 +135,10 @@ Run.HiTME <- function(object = NULL,
 
   # Reduce number of cores if file is huge
   if(sum(unlist(lapply(object, ncol)))>=30000){
-    ncores <- 2
-    message("Huge Seurat object, reducing number of cores to avoid memory issues to", ncores)
+    if(ncores.limit){
+      ncores <- 2
+      message("Huge Seurat object, reducing number of cores to avoid memory issues to", ncores)
+    }
   }
 
 
