@@ -168,7 +168,7 @@ StandardizeCellNames <- function(cell.names, dictionary = NULL){
 get.cluster.score <- function(matrix = NULL,
                               metadata = NULL,
                               cluster.by = c("celltype", "sample"),
-                              ndim = 10,
+                              ndim = NULL,
                               nVarGenes = 500,
                               black.list = "default",
                               ntests = 0,
@@ -183,6 +183,15 @@ get.cluster.score <- function(matrix = NULL,
   if(is.null(metadata) || !is.data.frame(metadata)){
     stop("Please provide a metadata object as dataframe")
   }
+
+  # Get black list
+  if(is.null(black.list) | black.list == "default"){
+    black.list <- data("default_black_list")
+  }
+  black.list <- unlist(black.list)
+
+  # Remove black listed genes from the matrix
+  matrix <- matrix[!rownames(matrix) %in% black.list,]
 
 
 
@@ -232,6 +241,26 @@ get.cluster.score <- function(matrix = NULL,
   )
 
 
+  # produce scree plot to know how many dimensions to use
+  eigen_val <- pc$sdev^2
+  # Filter only eigen values above 1 (Kaiser rule)
+  eigen_val <- eigen_val[eigen_val > 1]
+  prop_var <- eigen_val / sum(eigen_val)
+  # compute the accumulation of the proportional variance
+  prop_var_cum <- cumsum(prop_var)
+
+  plot_var <- data.frame(Proportion_variance = prop_var_cum,
+                         PC = 1:length(eigen_val)) %>%
+    ggplot2::ggplot(ggplot2::aes(PC, Proportion_variance)) +
+    ggplot2::geom_col(color = "lightblue")+
+    ggplot2::geom_line()+
+    ggplot2::geom_vline(xintercept = ndim,
+                        color = "red",
+                        linetype = 2) +
+    ggplot2::geom_label(ggplot2::aes(label = ifelse(PC == ndim,
+                                                 round(Proportion_variance,2), NA))) +
+    ggplot2::theme_bw() +
+    ggtitle(paste0(ndim, " first PC"))
 
   # compute distance
   for(x in 1:nrow(df.score)){
@@ -321,7 +350,7 @@ get.cluster.score <- function(matrix = NULL,
 
     pc.pl <- pc.df %>%
       ggplot2::ggplot(ggplot2::aes(PC1, PC2, color = .data[[gr.by]])) +
-      geom_point() +
+      ggplot2::geom_point() +
       ggplot2::guides(color=guide_legend(ncol=2))+
       labs(title = paste0(gr.by, " - ", " PCA"),
            y = paste0("PC2 (", PC2_varexpl*100, " %)"),
@@ -333,7 +362,27 @@ get.cluster.score <- function(matrix = NULL,
       )
   score.type <- as.character(df.score[x,3])
   pl.list <- list( score.type = gpl,
-                  "PCA" = pc.pl)
+                  "PCA" = pc.pl,
+                  "Scree_plot" = plot_var)
+
+
+  # plot of bootstraping
+  conf.pl <- silh$summary %>%
+              dplyr::filter(iteration != "NO") %>%
+              ggplot2::ggplot(ggplot2::aes(x = avg_sil_width,
+                                           y = ..density..,
+                                           fill = cluster)) +
+              ggplot2::geom_density(alpha = 0.6, show.legend = F) +
+              ggplot2::geom_ribbon(aes(ymin = 0, ymax = ..density..), alpha = 0.05)
+              ggplot2::facet_wrap(~cluster, ncol = 2) +
+              ggplot2::theme_bw()
+
+              ggplot2::geom_vline(aes(xintercept = ifelse(iteration == "NO",
+                                                      avg_sil_width, NA)),
+                                  color = "Avg Silhoutte width"),
+                                  lty = 2, show.legend = T)
+              ggplot2::geom_vline(xintercept = quantile(cof_before[,2], c(0.05,0.95))[1],
+                             color = "Bootstrap"), lty = 2, show.legend = T)
 
     # return list
     ret <- list("whole_avgerage" = whole.mean,
@@ -404,7 +453,8 @@ silhoutte_onelabel <- function(labels = NULL, # vector of labels
                            size = size,
                            avg_sil_width = mean(sil.res$sil_width))
 
-    sil.sum <- rbind(sil.sum, sil.sumA)
+    bots.df <- data.frame(matrix(nrow = 0, ncol = 4))
+    names(bots.df) <- c("cluster", "iteration", "size", "avg_sil_width")
 
     if(ntests > 0){
     # perform the shuffling
@@ -422,14 +472,22 @@ silhoutte_onelabel <- function(labels = NULL, # vector of labels
         sil.res <- as.data.frame(silh) %>%
                     dplyr::filter(cluster == 2)
 
-        sil.sumA <- data.frame(cluster = a,
+        sil.sumB <- data.frame(cluster = a,
                                iteration = u,
                                size = size,
                                avg_sil_width = mean(sil.res$sil_width))
 
-        sil.sum <- rbind(sil.sum, sil.sumA)
+        bots.df <- rbind(bots.df, sil.sumB)
 
       }
+
+      # run wilcox.test in case distribution is not normal (possible)
+      wt <-
+
+      bots.df <- bots.df %>%
+                  mutate(conf.int.95 = I(list(quantile(avg_sil_width, c(0.025,0.975)))))
+
+
 
     }
   }
