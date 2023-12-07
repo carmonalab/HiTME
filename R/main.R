@@ -13,7 +13,7 @@
 #' @param group.by If return.Seurat = F, variables to be used to summarize HiTME classification data in HiT object.
 #' @param useNA Whether to include not annotated cells or not (labelled as "NA" in the group.by.composition) when summarizing into HiT object.
 #' @param remerge When setting split.by, if remerge = TRUE one object will be returned. If remerge = FALSE a list of objects will be returned.
-#' @param ncores The number of cores to use
+#' @param ncores The number of cores to use, by default all available cores minus 2 are used.
 #' @param bparam A \code{BiocParallel::bpparam()} object that tells Run.HiTME how to parallelize. If provided, it overrides the `ncores` parameter.
 #' @param progressbar Whether to show a progressbar or not
 #'
@@ -129,13 +129,12 @@ Run.HiTME <- function(object = NULL,
 
   if(ncores >= parallelly::availableCores()){
     ncores <- parallelly::availableCores() - 1
-    message("Using all or more cores available in this computer, reducing number of cores to ", ncores)
+    warning("Using all or more cores available in this computer, reducing number of cores to ", ncores)
   }
 
-  # Reduce number of cores if file is huge
-  if(sum(unlist(lapply(object, ncol)))>=30000){
-    ncores <- 2
-    message("Huge Seurat object, reducing number of cores to avoid memory issues to", ncores)
+  # Warning to reduce number of cores if file is huge
+  if(any(lapply(object, ncol))>=30000){
+    warning("Huge Seurat object, consider reducing number of cores to avoid memory issues")
   }
 
 
@@ -1004,7 +1003,7 @@ get.GOList <- function(GO_accession = NULL,
 #' @param dist.method Method to compute distance between celltypes, default euclidean.
 #' @param ndim Number of dimensions to be use for PCA clustering metrics.
 #' @param nVarGenes Number of variable genes to assess samples.
-#' @param black.list List of genes to discard from clustering, if "default"
+#' @param black.list List of genes to discard from clustering, if "default" object "default_black_list" object is used. Alternative black listed genes can be provided as a vector or list.
 #' @param ncores The number of cores to use
 #' @param bparam A \code{BiocParallel::bpparam()} object that tells how to parallelize. If provided, it overrides the `ncores` parameter.
 #' @param progressbar Whether to show a progressbar or not
@@ -1014,7 +1013,7 @@ get.GOList <- function(GO_accession = NULL,
 #' @importFrom parallelly availableCores
 #' @importFrom tibble rownames_to_column
 #' @importFrom caret nearZeroVar
-#' @importFrom ggplot2 aes geom_point guides theme geom_col labs geom_hline guide_legend
+#' @importFrom ggplot2 aes geom_point guides theme geom_col labs geom_hline guide_legend geom_vline theme_bw
 #' @importFrom DEseq2 DESeqDataSetFromMatrix vst estimateSizeFactors
 #' @importFrom MatrixGenerics rowVars
 #' @importFrom SummarizedExperiment assay
@@ -1256,6 +1255,7 @@ get.cluster.samples <- function(object,
                                 score = score,
                                 ndim = ndim,
                                 ntests = 10,
+                                black.list = black.list,
                                 nVarGenes = nVarGenes,
                                 dist.method = dist.method)
 
