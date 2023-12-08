@@ -123,14 +123,6 @@ Run.HiTME <- function(object = NULL,
     object <- list(object)
   }
 
-  if(is.null(ncores)){
-    ncores <- 1
-  }
-
-  if(ncores >= parallelly::availableCores()){
-    ncores <- parallelly::availableCores() - 1
-    warning("Using all or more cores available in this computer, reducing number of cores to ", ncores)
-  }
 
   # Warning to reduce number of cores if file is huge
   if(any(lapply(object, ncol))>=30000){
@@ -139,15 +131,9 @@ Run.HiTME <- function(object = NULL,
 
 
   # set paralelization parameters
-  if (is.null(bparam)) {
-    if (ncores>1) {
-      param <- BiocParallel::MulticoreParam(workers =  ncores, progressbar = progressbar)
-    } else {
-      param <- SerialParam()
-    }
-  } else {
-    param <- bparam
-  }
+  param <- set_paralel_params(ncores = ncores,
+                               bparam = bparam,
+                               progressbar = progressbar)
 
 
   # Get default additional signatures
@@ -653,10 +639,6 @@ get.celltype.composition <- function(object = NULL,
 #'
 #' @param object A seurat object or a list of seurat objects
 #' @param group.by.aggregated The Seurat object metadata column(s) containing celltype annotations
-#' @param gene.filter Additional named list of genes to subset their aggregated expression, by default all genes,
-#' ribosomal genes, transcription factor (GO:0003700), cytokines (GO:0005125),
-#'   cytokine receptors (GO:0004896), chemokines (GO:0008009), and chemokines receptors (GO:0004950) are subsetted.
-#' @param GO_accession Additional GO accessions to subset genes for aggregation, by default the list indicated in \code{gene.filter} are returned.
 #' @param assay Assay to retrieve information. By default "RNA".
 #' @param useNA logical whether to return aggregated profile for NA (undefined) cell types, default is FALSE.
 #' @param ... Extra parameters for internal Seurat functions: AverageExpression, AggregateExpression, FindVariableFeatures
@@ -668,8 +650,6 @@ get.celltype.composition <- function(object = NULL,
 
 get.aggregated.profile <- function(object,
                                    group.by.aggregated = NULL,
-                                   gene.filter = NULL,
-                                   GO_accession = NULL,
                                    assay = "RNA",
                                    useNA = FALSE,
                                    ...) {
@@ -705,50 +685,12 @@ get.aggregated.profile <- function(object,
     message("Only found ", paste(group.by.aggregated, collapse = ", ") , " as grouping variables.")
   }
 
-  if(!is.null(gene.filter) && !is.list(gene.filter)){
-      gene.filter <- list(gene.filter)
-  }
-
-
-  gene.filter.list <- list()
-  # make a list of default subsetting genes
-
-  # Dorothea transcription factors
-  # data("entire_database", package = "dorothea")
-  # gene.filter.list[["Dorothea_Transcription_Factors"]] <- entire_database$tf %>% unique()
-
-  # Ribosomal genes
-  gene.filter.list[["Ribosomal"]] <- SignatuR::GetSignature(SignatuR::SignatuR$Hs$Compartments$Ribo)
-
-  # Add list genes from GO accessions
-  # check if indicted additional GO accessions
-  if(!is.null(GO_accession)){
-    GO_additional <- get.GOList(GO_accession, ...)
-  } else {
-    GO_additional <- NULL
-  }
-
-  #default gene list
-  data("GO_accession_default")
-  gene.filter.list <- c(gene.filter.list, GO_default, GO_additional)
-
-  # Add defined list of genes to filter
-  for(a in seq_along(gene.filter)){
-    if(is.null(names(gene.filter[[a]]))){
-      i.name <- paste0("GeneList_", a)
-    } else {
-      i.name <- names(gene.filter[[a]])
-    }
-    gene.filter.list[[i.name]] <- gene.filter[[a]]
-  }
-
 
   avg.exp <- list()
 
   # loop over different grouping
 
   for(i in names(group.by.aggregated)){
-    avg.exp[[i]] <- list()
 
     # if useNA = TRUE, transform NA to character
     if(useNA){
@@ -759,7 +701,7 @@ get.aggregated.profile <- function(object,
   # compute pseudobulk
     suppressWarnings(
       {
-        avg.exp[[i]][["All.genes"]] <-
+        avg.exp[[i]]  <-
           Seurat::AggregateExpression(object,
                                       group.by = group.by.aggregated[[i]],
                                       assays = assay,
@@ -768,30 +710,20 @@ get.aggregated.profile <- function(object,
       })
 
 
-    if(ncol(avg.exp[[i]][["All.genes"]]) == 1){
+    if(ncol(avg.exp[[i]]) == 1){
       for(av in names(avg.exp)){
-        colnames(avg.exp[[i]][["All.genes"]]) <-
+        colnames(avg.exp[[i]]) <-
           unique(object@meta.data[!is.na(object@meta.data[[group.by.aggregated[[i]]]]),
                                   group.by.aggregated[[i]]])
       }
     }
 
       # add colnames if only one cell type is found
-    if(ncol(avg.exp[[i]][["All.genes"]]) == 1){
-        colnames(avg.exp[[i]][["All.genes"]]) <-
+    if(ncol(avg.exp[[i]] ) == 1){
+        colnames(avg.exp[[i]] ) <-
           unique(object@meta.data[!is.na(object@meta.data[[group.by.aggregated[[i]]]]),
                                   group.by.aggregated[[i]]])
       }
-
-      # subset genes accroding to gene filter list
-      for(e in names(gene.filter.list)){
-        keep <- gene.filter.list[[e]][gene.filter.list[[e]] %in%
-                                        rownames(avg.exp[[i]][["All.genes"]])]
-        avg.exp[[i]][[e]] <- avg.exp[[i]][["All.genes"]][keep, , drop = FALSE]
-      }
-
-
-
   }
 
 
@@ -1003,21 +935,26 @@ get.GOList <- function(GO_accession = NULL,
 #' @param dist.method Method to compute distance between celltypes, default euclidean.
 #' @param ndim Number of dimensions to be use for PCA clustering metrics.
 #' @param nVarGenes Number of variable genes to assess samples.
+#' @param gene.filter Additional named list of genes to subset their aggregated expression, if "default" is indicated, all genes,
+#' ribosomal genes, transcription factor (GO:0003700), cytokines (GO:0005125),
+#'   cytokine receptors (GO:0004896), chemokines (GO:0008009), and chemokines receptors (GO:0004950) are subsetted and accounted for.
+#' @param GO_accession Additional GO accessions to subset genes for aggregation, by default the list indicated in \code{gene.filter} are returned.
 #' @param black.list List of genes to discard from clustering, if "default" object "default_black_list" object is used. Alternative black listed genes can be provided as a vector or list.
-#' @param ncores The number of cores to use
+#' @param ncores The number of cores to use, by default, all available cores - 2.
 #' @param bparam A \code{BiocParallel::bpparam()} object that tells how to parallelize. If provided, it overrides the `ncores` parameter.
 #' @param progressbar Whether to show a progressbar or not
 
 #' @importFrom dplyr mutate filter %>% coalesce mutate_all full_join
 #' @importFrom BiocParallel MulticoreParam bplapply
 #' @importFrom parallelly availableCores
-#' @importFrom tibble rownames_to_column
+#' @importFrom tibble rownames_to_column column_to_rownames
 #' @importFrom caret nearZeroVar
-#' @importFrom ggplot2 aes geom_point guides theme geom_col labs geom_hline guide_legend geom_vline theme_bw
+#' @importFrom ggplot2 aes geom_point guides theme geom_col labs geom_hline guide_legend geom_vline theme_bw ggtitle
 #' @importFrom DEseq2 DESeqDataSetFromMatrix vst estimateSizeFactors
 #' @importFrom MatrixGenerics rowVars
 #' @importFrom SummarizedExperiment assay
 #' @importFrom BiocGenerics counts
+#' @importFrom data.table rbindlist
 
 #' @return List of genes for each GO accession requested. If named vector is provided, lists output are named as GO:accession.ID_named (e.g. "GO:0004950_cytokine_receptor_activity")
 #' @export get.cluster.samples
@@ -1033,6 +970,8 @@ get.cluster.samples <- function(object,
                             dist.method = "euclidean",
                             ndim = 10,
                             nVarGenes = 500,
+                            gene.filter = NULL,
+                            GO_accession = NULL,
                             black.list = "default",
                             ncores = parallelly::availableCores() - 2,
                             bparam = NULL,
@@ -1113,26 +1052,9 @@ get.cluster.samples <- function(object,
 
 
 # set paralelization parameters
-  if(is.null(ncores)){
-    ncores <- 1
-  }
-
-  if(ncores >= parallelly::availableCores()){
-    ncores <- parallelly::availableCores() - 1
-    message("Using all or more cores available in this computer, reducing number of cores to ", ncores)
-  }
-
-  # set paralelization parameters
-  if (is.null(bparam)) {
-    if (ncores>1) {
-      param <- BiocParallel::MulticoreParam(workers =  ncores,
-                                            progressbar = progressbar)
-    } else {
-      param <- SerialParam()
-    }
-  } else {
-    param <- bparam
-  }
+  param <- set_paralel_params(ncores = ncores,
+                              bparam = bparam,
+                              progressbar = progressbar)
 
 # prepare metadata
   md.all <- sapply(metadata.vars, function(x){
@@ -1177,94 +1099,78 @@ get.cluster.samples <- function(object,
 
       message("Computing metrics for aggregated profile of " , gb, "...")
 
-      # get gene subsets
-      gene.filter <- unique(unlist(lapply(object, function(x){
-                      names(x@aggregated_profile$Pseudobulk[[gb]])
-                     })))
       # list for each gene subset
 
-      join.list[["aggregated"]][[gb]] <-
-        BiocParallel::bplapply(X = gene.filter,
-                               BPPARAM = param,
-                               FUN =function(y){
-                gf <- lapply(
-                  X = layer.present,
-                  FUN = function(x){
-                    # remove cells with less than min.cells
-                    tab <- object[[x]]@composition[[gb]]$cell_counts
-                    names(tab) <- gsub("-", "_", names(tab))
-                    keep <- names(tab)[tab>=min.cells]
 
-                    if(length(keep) > 0){
-                    dat <- object[[x]]@aggregated_profile$Pseudobulk[[gb]][[y]]
-                    # in case _ and - are not match
-                    colnames(dat) <- gsub("-", "_", colnames(dat))
+    gf <- BiocParallel::bplapply(
+      X = layer.present,
+      BPPARAM = param,
+      FUN = function(x){
+        # remove cells with less than min.cells
+        tab <- object[[x]]@composition[[gb]]$cell_counts
+        names(tab) <- gsub("-", "_", names(tab))
+        keep <- names(tab)[tab>=min.cells]
 
-                    #keep only cell type with more than min.cells
-                    dat <- dat[, keep, drop = F]
-                    celltype <- colnames(dat)[colnames(dat)!= "gene"]
+        if(length(keep) > 0){
+        dat <- object[[x]]@aggregated_profile$Pseudobulk[[gb]]
+        # in case _ and - are not match
+        colnames(dat) <- gsub("-", "_", colnames(dat))
 
-                    # accommodate colnames to merge then
-                    colnames(dat) <- paste(colnames(dat), x, sep = "_")
-                    dat <- dat %>%
-                            as.data.frame() %>%
-                            tibble::rownames_to_column("gene")
-                    md <- data.frame(rn = colnames(dat)[colnames(dat)!= "gene"],
-                                     sample = rep(x, ncol(dat)-1),
-                                     celltype = celltype)
-                    return(list("data" = dat,
-                                "metadata" = md))
-                    } else {
-                      return(NULL)
-                    }
-            })
-            # remove NULL if generated
-            gf <- gf[!sapply(gf, is.null)]
+        #keep only cell type with more than min.cells
+        dat <- dat[, keep, drop = F]
+        celltype <- colnames(dat)[colnames(dat)!= "gene"]
 
-            data.all <- lapply(gf, function(x) x[["data"]]) %>%
+        # accommodate colnames to merge then
+        colnames(dat) <- paste(colnames(dat), x, sep = "_")
+        dat <- dat %>%
+                as.data.frame() %>%
+                tibble::rownames_to_column("gene")
+        md <- data.frame(rn = colnames(dat)[colnames(dat)!= "gene"],
+                         sample = rep(x, ncol(dat)-1),
+                         celltype = celltype)
+        return(list("data" = dat,
+                    "metadata" = md))
+        } else {
+          return(NULL)
+        }
+      })
+      # remove NULL if generated
+      gf <- gf[!sapply(gf, is.null)]
+
+      data.all <- lapply(gf, function(x) x[["data"]]) %>%
                     reduce(full_join, by = "gene") %>%
-            # convert NA to 0
-            mutate_if(is.numeric, ~ifelse(is.na(.), 0, .)) %>%
-            tibble::column_to_rownames("gene") %>%
-            as.matrix()
+                    # convert NA to 0
+                    mutate_if(is.numeric, ~ifelse(is.na(.), 0, .)) %>%
+                    tibble::column_to_rownames("gene") %>%
+                    as.matrix()
 
-            ## Summarize metadata
-            md.all <- lapply(gf, function(x) x[["metadata"]]) %>%
-                  data.table::rbindlist() %>%
-                  left_join(., md.all, by = "sample") %>%
-                  as.data.frame() %>%
-                  tibble::column_to_rownames("rn")
+      ## Summarize metadata
+      md.all <- lapply(gf, function(x) x[["metadata"]]) %>%
+            data.table::rbindlist() %>%
+            left_join(., md.all, by = "sample") %>%
+            as.data.frame() %>%
+            tibble::column_to_rownames("rn")
 
-            # compute clustering metrics
-            # return list
-            return(list("data" = data.all,
-                        "metadata" = md.all))
-        })
-      # give names to list
-      names(join.list[["aggregated"]][[gb]]) <- gene.filter
+      join.list[["aggregated"]][[gb]] <- list("data" = data.all,
+                                              "metadata" = md.all)
+
 
       # there seems to be problems in running this in pararlel...
       message("\nComputing clustering metrics of aggregated for ", gb)
-      for(c in names(join.list[["aggregated"]][[gb]])){
 
-        message("Computing clustering metrics of aggregated for ", gb, " ", c)
+      cc <- get.cluster.score(matrix = join.list[["aggregated"]][[gb]]$data,
+                              metadata = join.list[["aggregated"]][[gb]]$metadata,
+                              cluster.by = c("celltype", "sample"),
+                              score = score,
+                              ndim = ndim,
+                              ntests = 10,
+                              gene.filter = gene.filter,
+                              GO_accession = GO_accession,
+                              black.list = black.list,
+                              nVarGenes = nVarGenes,
+                              dist.method = dist.method)
 
-        cc <- get.cluster.score(matrix = join.list[["aggregated"]][[gb]][[c]]$data,
-                                metadata = join.list[["aggregated"]][[gb]][[c]]$metadata,
-                                cluster.by = c("celltype", "sample"),
-                                score = score,
-                                ndim = ndim,
-                                ntests = 10,
-                                black.list = black.list,
-                                nVarGenes = nVarGenes,
-                                dist.method = dist.method)
-
-        join.list[["aggregated"]][[gb]][[c]][["clustering"]] <- cc
-      }
-
-      md <- join.list[["aggregated"]][[gb]][[1]]$metadata %>% data.frame()
-      data <- lapply(join.list[["aggregated"]][[gb]], function(x) {x[-which(names(x) == "metadata") ]})
-      join.list[["aggregated"]][[gb]] <- c(data,list("metadata" = md))
+      join.list[["aggregated"]][[gb]][["clustering"]] <- cc
 
 
   }
