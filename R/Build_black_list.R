@@ -41,6 +41,6 @@ sigs[["Ygenes"]] <-c("AMELY", "DAZ1", "PRKY", "RBMY1A1", "RBMY1HP", "RPS4Y1", "S
                   "BPY2", "VCY", "CDY1", "EIF1AY", "TMSB4Y","CDY2A", "NLGN4Y",
                   "PCDH11Y", "HSFY1", "TGIF2LY", "TBL1Y", "RPS4Y2", "HSFY2",
                   "CDY2B", "TXLNGY","CDY1B", "DAZ3", "DAZ2", "DAZ4")
-
+black.list <- sigs
 # save object
-save(sigs, file = "data/default_black_list.rda")
+save(black.list, file = "data/default_black_list.RData")
