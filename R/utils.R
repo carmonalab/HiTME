@@ -170,6 +170,8 @@ get.cluster.score <- function(matrix = NULL,
                               cluster.by = c("celltype", "sample"),
                               ndim = NULL,
                               nVarGenes = 500,
+                              gene.filter = NULL,
+                              GO_accession = NULL,
                               black.list = "default",
                               ntests = 0,
                               score = c("silhouette"),
@@ -186,7 +188,7 @@ get.cluster.score <- function(matrix = NULL,
 
   # Get black list
   if(is.null(black.list) | black.list == "default"){
-    black.list <- data("default_black_list")
+    data("default_black_list")
   }
   black.list <- unlist(black.list)
 
@@ -224,6 +226,50 @@ get.cluster.score <- function(matrix = NULL,
   select <- order(rv, decreasing=TRUE)[seq_len(min(nVarGenes, length(rv)))]
   vsd <- vsd[select,]
 
+  # if(!is.null(gene.filter) && !is.list(gene.filter)){
+  #   gene.filter <- list(gene.filter)
+  # }
+  #
+  #
+  # gene.filter.list <- list()
+  # # make a list of default subsetting genes
+  #
+  # # Dorothea transcription factors
+  # # data("entire_database", package = "dorothea")
+  # # gene.filter.list[["Dorothea_Transcription_Factors"]] <- entire_database$tf %>% unique()
+  #
+  # # Ribosomal genes
+  # gene.filter.list[["Ribosomal"]] <- SignatuR::GetSignature(SignatuR::SignatuR$Hs$Compartments$Ribo)
+  #
+  # # Add list genes from GO accessions
+  # # check if indicted additional GO accessions
+  # if(!is.null(GO_accession)){
+  #   GO_additional <- get.GOList(GO_accession, ...)
+  # } else {
+  #   GO_additional <- NULL
+  # }
+  #
+  # #default gene list
+  # data("GO_accession_default")
+  # gene.filter.list <- c(gene.filter.list, GO_default, GO_additional)
+  #
+  # # Add defined list of genes to filter
+  # for(a in seq_along(gene.filter)){
+  #   if(is.null(names(gene.filter[[a]]))){
+  #     i.name <- paste0("GeneList_", a)
+  #   } else {
+  #     i.name <- names(gene.filter[[a]])
+  #   }
+  #   gene.filter.list[[i.name]] <- gene.filter[[a]]
+  # }
+
+  # subset genes accroding to gene filter list
+  # for(e in names(gene.filter.list)){
+  #   keep <- gene.filter.list[[e]][gene.filter.list[[e]] %in%
+  #                                   rownames(avg.exp[[i]] )]
+  #   avg.exp[[i]][[e]] <- avg.exp[[i]] [keep, , drop = FALSE]
+  # }
+
   # remove samples with low variability if needed
   tryCatch({
     pc <- stats::prcomp(t(vsd))
@@ -260,7 +306,7 @@ get.cluster.score <- function(matrix = NULL,
     ggplot2::geom_label(ggplot2::aes(label = ifelse(PC == ndim,
                                                  round(Proportion_variance,2), NA))) +
     ggplot2::theme_bw() +
-    ggtitle(paste0(ndim, " first PC"))
+    ggplot2::ggtitle(paste0(ndim, " first PC"))
 
   # compute distance
   for(x in 1:nrow(df.score)){
@@ -367,22 +413,27 @@ get.cluster.score <- function(matrix = NULL,
 
 
   # plot of bootstraping
-  conf.pl <- silh$summary %>%
-              dplyr::filter(iteration != "NO") %>%
-              ggplot2::ggplot(ggplot2::aes(x = avg_sil_width,
-                                           y = ..density..,
-                                           fill = cluster)) +
-              ggplot2::geom_density(alpha = 0.6, show.legend = F) +
-              ggplot2::geom_ribbon(aes(ymin = 0, ymax = ..density..), alpha = 0.05)
-              ggplot2::facet_wrap(~cluster, ncol = 2) +
-              ggplot2::theme_bw()
+  # conf.pl <- silh$summary %>%
+  #             dplyr::filter(iteration != "NO") %>%
+  #             ggplot2::ggplot(ggplot2::aes(x = avg_sil_width,
+  #                                          y = ..density..,
+  #                                          fill = cluster)) +
+  #             ggplot2::geom_density(alpha = 0.6, show.legend = F) +
+  #             ggplot2::geom_ribbon(aes(ymin = 0, ymax = ..density..), alpha = 0.05)
+  #             ggplot2::facet_wrap(~cluster, ncol = 2) +
+  #             ggplot2::theme_bw()
+  #
+  #             ggplot2::geom_vline(aes(xintercept = ifelse(iteration == "NO",
+  #                                                     avg_sil_width, NA)),
+  #                                 color = "Avg Silhoutte width"),
+  #                                 lty = 2, show.legend = T)
+  #             ggplot2::geom_vline(xintercept = quantile(cof_before[,2], c(0.05,0.95))[1],
+  #                            color = "Bootstrap"), lty = 2, show.legend = T)
 
-              ggplot2::geom_vline(aes(xintercept = ifelse(iteration == "NO",
-                                                      avg_sil_width, NA)),
-                                  color = "Avg Silhoutte width"),
-                                  lty = 2, show.legend = T)
-              ggplot2::geom_vline(xintercept = quantile(cof_before[,2], c(0.05,0.95))[1],
-                             color = "Bootstrap"), lty = 2, show.legend = T)
+  # Build plot list
+  pl.list <- list( score.type = gpl,
+                   "PCA" = pc.pl,
+                   "Scree_plot" = plot_var)
 
     # return list
     ret <- list("whole_avgerage" = whole.mean,
@@ -404,7 +455,10 @@ get.cluster.score <- function(matrix = NULL,
 silhoutte_onelabel <- function(labels = NULL, # vector of labels
                                dist = NULL, # distance object
                                ntests = 0, # number of shuffling events
-                               seed = 22){# seed for random suffling
+                               seed = 22, # seed for random suffling
+                               ncores = parallelly::availableCores() - 2,
+                               bparam = NULL,
+                               progressbar = TRUE){
 
   if (is.null(labels) || !is.vector(labels)) {
     stop("Please provide a vector of the labels")
@@ -422,6 +476,11 @@ silhoutte_onelabel <- function(labels = NULL, # vector of labels
     stop("Please provide a number for setting seed")
   }
 
+  # set paralelization parameters
+  param <- set_paralel_params(ncores = ncores,
+                              bparam = bparam,
+                              progressbar = progressbar)
+
   tlabels <- unique(labels)
 
   sil.all <- data.frame(matrix(nrow = 0, ncol = 3))
@@ -433,7 +492,11 @@ silhoutte_onelabel <- function(labels = NULL, # vector of labels
 
   len <- length(labels)
 
-  for(a in tlabels){
+  sils <- BiocParallel::bplapply(
+    X = tlabels,
+    BPPARAM = param,
+    function(a){
+
     x_one <- ifelse(labels == a, 2, 1) %>%
               as.factor() %>% as.numeric()
 
@@ -443,8 +506,7 @@ silhoutte_onelabel <- function(labels = NULL, # vector of labels
     sil.res <- as.data.frame(silh) %>%
               dplyr::filter(cluster == 2) %>%
               dplyr::mutate(cluster = a)
-    #join for all samples
-    sil.all <- rbind(sil.all, sil.res)
+
 
     size <- nrow(sil.res)
 
@@ -462,7 +524,8 @@ silhoutte_onelabel <- function(labels = NULL, # vector of labels
         # random vector
         vec <- rep(1, length(labels))
         # seeding for reproducibility
-        set.seed(seed+u)
+        seed <- seed + which(tlabels == a)
+        set.seed(seed)
         random_sample <- sample(1:len, size)
         vec[random_sample] <- 2
         vec <- vec %>% as.factor() %>% as.numeric()
@@ -490,7 +553,13 @@ silhoutte_onelabel <- function(labels = NULL, # vector of labels
 
 
     }
-  }
+    }
+  )
+
+  # join results
+  sill.all <-
+
+
   # order silhoute width per cell type
   sil.all <- sil.all %>%
     dplyr::group_by(cluster) %>%
@@ -506,6 +575,38 @@ silhoutte_onelabel <- function(labels = NULL, # vector of labels
 }
 
 
+
+###################################################################################################
+# Function to set the paralalization parameters using Biocparalel
+
+set_paralel_params <- function(ncores,
+                               bparam,
+                               progressbar)
+                              {
+  if(is.null(ncores)){
+    ncores <- 1
+  }
+
+  if(ncores >= parallelly::availableCores()){
+    ncores <- parallelly::availableCores() - 1
+    message("Using all or more cores available in this computer, reducing number of cores to ", ncores)
+  }
+
+  # set paralelization parameters
+  if (is.null(bparam)) {
+    if (ncores>1) {
+      param <- BiocParallel::MulticoreParam(workers =  ncores,
+                                            progressbar = progressbar)
+    } else {
+      param <- BiocParallel::SerialParam()
+    }
+  } else {
+    param <- bparam
+  }
+
+  return(param)
+
+}
 
 
 
