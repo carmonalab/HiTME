@@ -944,7 +944,7 @@ get.GOList <- function(GO_accession = NULL,
 #' @param bparam A \code{BiocParallel::bpparam()} object that tells how to parallelize. If provided, it overrides the `ncores` parameter.
 #' @param progressbar Whether to show a progressbar or not
 
-#' @importFrom dplyr mutate filter %>% coalesce mutate_all full_join
+#' @importFrom dplyr mutate filter %>% coalesce mutate_all full_join row_number
 #' @importFrom BiocParallel MulticoreParam bplapply
 #' @importFrom parallelly availableCores
 #' @importFrom tibble rownames_to_column column_to_rownames
@@ -1137,6 +1137,7 @@ get.cluster.samples <- function(object,
       # remove NULL if generated
       gf <- gf[!sapply(gf, is.null)]
 
+      # join all gene expression matrices using full_join
       data.all <- lapply(gf, function(x) x[["data"]]) %>%
                     reduce(full_join, by = "gene") %>%
                     # convert NA to 0
@@ -1155,7 +1156,7 @@ get.cluster.samples <- function(object,
                                               "metadata" = md.all)
 
 
-      # there seems to be problems in running this in pararlel...
+
       message("\nComputing clustering metrics of aggregated for ", gb)
 
       cc <- get.cluster.score(matrix = join.list[["aggregated"]][[gb]]$data,
@@ -1163,7 +1164,7 @@ get.cluster.samples <- function(object,
                               cluster.by = c("celltype", "sample"),
                               score = score,
                               ndim = ndim,
-                              ntests = 10,
+                              ntests = 100,
                               gene.filter = gene.filter,
                               GO_accession = GO_accession,
                               black.list = black.list,
