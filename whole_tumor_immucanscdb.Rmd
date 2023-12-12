@@ -586,10 +586,19 @@ hit <- readRDS("cache/20hit_annotated_raw.rds")
 
 names(imm.db) <- tolower(names(imm.db))
 
+only.all = T
 # accommodate metdata
 for(a in names(hit)){
   hit[[a]]@metadata <- left_join(hit[[a]]@metadata,
                                  imm.db, by = "csi_dataset_id")
+  # keep only
+  if(only.all){
+    for(l in names(hit[[a]]@aggregated_profile$Pseudobulk)){
+      
+      hit[[a]]@aggregated_profile$Pseudobulk[[l]] <- hit[[a]]@aggregated_profile$Pseudobulk[[l]][["All.genes"]]
+      
+    }
+  }
 }
 ```
 
@@ -624,6 +633,7 @@ cc <- get.cluster.score(matrix,
                   group.by = group.by,
                   dist.method = c("euclidean", "manhattan", "canberra"))
 ```
+
 Do a summarizing pdf
 ```{r}
 metadata.vars <- c("cancer_type", "treatment_type")
@@ -668,6 +678,26 @@ for(l in c("layer1", "layer2")){
 }
 dev.off()
 ```
+
+```{r}
+cc <- get.cluster.score(matrix = matrix,
+                        metadata = metadata,
+                        cluster.by = c("celltype", "sample"),
+                        ntests = 10,
+                        ndim = 10)
+
+
+```
+
+```{r}
+df <- cc$sample_euclidean_silhouette$bygroup_average
+
+png("figs/confScore_silhoutte_scGate_sample.png", width = 800, height = 500)
+plot.score(df, type = "barplot")
+dev.off()
+```
+
+
 
 
 
