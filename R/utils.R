@@ -172,7 +172,7 @@ get.cluster.score <- function(matrix = NULL,
                               nVarGenes = 500,
                               gene.filter = NULL,
                               GO_accession = NULL,
-                              black.list = "default",
+                              black.list = NULL,
                               ntests = 0,
                               score = c("silhouette"),
                               dist.method = "euclidean"
@@ -187,7 +187,7 @@ get.cluster.score <- function(matrix = NULL,
   }
 
   # Get black list
-  if(is.null(black.list) | black.list == "default"){
+  if(is.null(black.list)){
     data("default_black_list")
   }
   black.list <- unlist(black.list)
@@ -328,7 +328,12 @@ get.cluster.score <- function(matrix = NULL,
 
       whole.mean <- mean(silh$cell$sil_width)
 
+      # levels of cells for factors
+      lev_cells <- unique(silh$cell$cluster)
+
       gpl <- silh$cell %>%
+        mutate(cluster = factor(cluster,
+                                levels = lev_cells)) %>%
         dplyr::rename(!!gr.by := cluster) %>%
         ggplot2::ggplot(ggplot2::aes(rowid, sil_width, fill = .data[[gr.by]])) +
         ggplot2::geom_col() +
@@ -393,6 +398,7 @@ get.cluster.score <- function(matrix = NULL,
       tibble::rownames_to_column("sample_celltype") %>%
       left_join(., metadata %>% tibble::rownames_to_column("sample_celltype"),
                 by = "sample_celltype")
+    pc.df[[gr.by]] <-  factor(pc.df[[gr.by]], levels = lev_cells)
 
     pc.pl <- pc.df %>%
       ggplot2::ggplot(ggplot2::aes(PC1, PC2, color = .data[[gr.by]])) +
@@ -483,10 +489,7 @@ silhoutte_onelabel <- function(labels = NULL, # vector of labels
 
   tlabels <- unique(labels)
 
-  sil.all <- data.frame(matrix(nrow = 0, ncol = 3))
-  names(sil.all) <- c("cluster", "neighbor", "sil_width")
-
-
+  # dataframe for average siloutte
   sil.sum <- data.frame(matrix(nrow = 0, ncol = 4))
   names(sil.sum) <- c("cluster", "iteration", "size", "avg_sil_width")
 
@@ -502,19 +505,22 @@ silhoutte_onelabel <- function(labels = NULL, # vector of labels
 
     silh <- cluster::silhouette(x_one, dist)
 
+    # silhoutte score for each sample
     # change names back to character
-    sil.res <- as.data.frame(silh) %>%
+    sil.res.cell <- as.data.frame(silh) %>%
               dplyr::filter(cluster == 2) %>%
-              dplyr::mutate(cluster = a)
+              dplyr::mutate(cluster = a) %>%
+              arrange(desc(sil_width))
 
 
-    size <- nrow(sil.res)
+    size <- nrow(sil.res.cell)
 
     sil.sumA <- data.frame(cluster = a,
                            iteration = "NO",
                            size = size,
-                           avg_sil_width = mean(sil.res$sil_width))
+                           avg_sil_width = mean(sil.res.cell$sil_width))
 
+    # dataframe for results of each iteration of shuffling
     bots.df <- data.frame(matrix(nrow = 0, ncol = 4))
     names(bots.df) <- c("cluster", "iteration", "size", "avg_sil_width")
 
@@ -544,34 +550,110 @@ silhoutte_onelabel <- function(labels = NULL, # vector of labels
 
       }
 
-      # run wilcox.test in case distribution is not normal (possible)
-      wt <-
-
+      # compute p-value
+      sil.sumA$p_val <- p.val_zscore(obs = sil.sumA$avg_sil_width,
+                                     random.values = bots.df$avg_sil_width)
+      sil.sumA$conf.int.95 <- NA
+      # Compute confidence interval
       bots.df <- bots.df %>%
                   mutate(conf.int.95 = I(list(quantile(avg_sil_width, c(0.025,0.975)))))
+      bots.df$p_val <- NA
 
-
+      sil.sum <- rbind(sil.sum, sil.sumA, bots.df)
 
     }
+
+    return(list("cell" = sil.res.cell, # silhoutte score for each sample
+                "summary" = sil.sum))
     }
   )
 
   # join results
-  sill.all <-
+  sil.all <- lapply(sils, function(x){x[[1]]}) %>%
+                data.table::rbindlist()
+
+  sil.sum <- lapply(sils, function(x){x[[2]]}) %>%
+                data.table::rbindlist()
 
 
   # order silhoute width per cell type
   sil.all <- sil.all %>%
-    dplyr::group_by(cluster) %>%
-    dplyr::arrange(desc(sil_width), .by_group = T) %>%
-    dplyr::ungroup() %>%
-    dplyr::mutate(rowid = dplyr::row_number())
+              dplyr::mutate(rowid = dplyr::row_number())
 
 
   ret.list <- list("cell" = sil.all,
                    "summary" = sil.sum)
 
   return(ret.list)
+}
+
+
+###################################################################################################
+# Function to compute p-value based on z score
+p.val_zscore <- function(obs = NULL,
+                          random.values = NULL){
+
+  mean <- mean(random.values)
+  sd <- sd(random.values)
+  z_score <- (obs - mean) / sd
+  p_value <- 1-pnorm(z_score)
+  return(p_value)
+}
+
+
+###################################################################################################
+# Function plot shuffling interval confidence
+plot.score <- function(df = NULL,
+                       type = "density"){
+  if(type == "density") {
+  spl <- split(df, df$cluster)
+  pl.list <- list()
+  for(a in names(spl)){
+    it <- spl[[a]] %>% filter(iteration != "NO")
+    xit <- data.frame(vline_x = unlist(it[1,"conf.int.95"]))
+    obs <- spl[[a]] %>% filter(iteration == "NO")
+    xobs <- data.frame(vline_x = obs$avg_sil_width)
+
+    pl.list[[a]] <- it %>%
+          ggplot(aes(x=avg_sil_width)) +
+          geom_density(fill = "grey") +
+          geom_vline(data = xit,
+                     aes(xintercept = vline_x,
+                     color = "confidence_interval95"),
+                     linetype = 2) +
+          geom_vline(data = xobs,
+                     aes(xintercept = vline_x,
+                         color = "Observed_value"),
+                     linetype = 2) +
+          geom_text(x = mean(c(xit$vline_x[2], xobs$vline_x)),
+                    y = max(density(it$avg_sil_width)$y)*0.7,
+                    label = paste("pval:",round(obs$p_val,2)),
+                    vjust = 1.5, hjust = 0.5) +
+          theme_bw() +
+      scale_color_manual(name = "linetypes" ,
+                         values = c(Observed_value = "blue",
+                                    confidence_interval95 = "red")) +
+          ggtitle(paste(a, "- Number of samples:", obs$size))
+  }
+
+  # arrange plots together
+  pl <- ggpubr::ggarrange(plotlist = pl.list, common.legend = T)
+
+  } else if (type == "barplot") {
+
+    df0 <- df %>%
+      filter(iteration == "NO") %>%
+      mutate(p_val = ifelse(is.nan(p_val), 1, p_val),
+              Sign = ifelse(p_val < 0.05, "Sig", "Not_Sig"))
+
+    pl <- df0 %>%
+          ggplot(aes(cluster, avg_sil_width,
+                     fill = Sign)) +
+          geom_col() +
+          theme_bw()
+  }
+
+  return(pl)
 }
 
 
