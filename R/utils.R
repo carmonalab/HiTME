@@ -175,7 +175,11 @@ get.cluster.score <- function(matrix = NULL,
                               black.list = NULL,
                               ntests = 0,
                               score = c("silhouette"),
-                              dist.method = "euclidean"
+                              dist.method = "euclidean",
+                              hclust.method = "complete",
+                              ncores = parallelly::availableCores() - 2,
+                              bparam = NULL,
+                              progressbar = TRUE
                               ){
 
   if(is.null(matrix) || !is.matrix(matrix)){
@@ -286,6 +290,8 @@ get.cluster.score <- function(matrix = NULL,
   }
   )
 
+  # get ndim or max dimensions PCA
+  ndim <- min(ndim, ncol(pc$x))
 
   # produce scree plot to know how many dimensions to use
   eigen_val <- pc$sdev^2
@@ -317,14 +323,37 @@ get.cluster.score <- function(matrix = NULL,
     dist <- stats::dist(pc$x[,1:ndim],
                         method = df.score[x, 2])
 
+    # plot dendogram
+    pc2 <- pc$x[,1:ndim] %>%
+      as.data.frame() %>%
+      mutate(cluster = metadata[[df.score[x, 1]]])
+
+    # Calculate the row-wise average grouping by row names
+    pc2 <- aggregate(. ~ cluster, data = pc2, FUN = mean) %>%
+                      tibble::column_to_rownames("cluster") %>%
+                      as.matrix()
+
+    dist_group <- stats::dist(pc2,
+                              method = df.score[x, 2])
+    hclust <- stats::hclust(dist_group,
+                            method = hclust.method)
+    dendo <- ggdendro::ggdendrogram(as.dendrogram(hclust)) +
+            ggtitle(paste0("Hierarchical clustering dendrogram - ",
+                           hclust.method))
+
     # do not show legend if too many groups
-    leg.pos <- ifelse(length(unique(metadata[[gr.by]])) < 30,
+    leg.pos <- ifelse(length(unique(metadata[[gr.by]])) < 40,
                       "right", "none")
 
     if(df.score[x,3] == "silhouette"){
+      message("Computing Silhoutte score")
+
       silh <- silhoutte_onelabel(metadata[[gr.by]],
                                  dist = dist,
-                                 ntests = ntests)
+                                 ntests = ntests,
+                                 ncores = ncores,
+                                 bparam = bparam,
+                                 progressbar = progressbar)
 
       whole.mean <- mean(silh$cell$sil_width)
 
@@ -342,7 +371,7 @@ get.cluster.score <- function(matrix = NULL,
                             linetype = 2) +
         ggplot2::labs(y = "Silhouette width",
              title = paste0(gr.by, " - ", df.score[x, 2], "\nAverage Silhoutte width: ", round(whole.mean, 3))) +
-        ggplot2::guides(fill=guide_legend(ncol=3))+
+        ggplot2::guides(fill=guide_legend(ncol=4))+
         ggplot2::theme(
           panel.background = element_rect(fill = "white"),
           axis.text.x = element_blank(),
@@ -354,6 +383,7 @@ get.cluster.score <- function(matrix = NULL,
     }
 
     if(df.score[x,3] == "modularity"){
+      message("Computing Modularity score")
       # transform to network the distance
       graph <- graph.adjacency(
                                 as.matrix(as.dist(cor(matrix,
@@ -413,9 +443,7 @@ get.cluster.score <- function(matrix = NULL,
         legend.key = element_rect(fill = "white")
       )
   score.type <- as.character(df.score[x,3])
-  pl.list <- list( score.type = gpl,
-                  "PCA" = pc.pl,
-                  "Scree_plot" = plot_var)
+
 
 
   # plot of bootstraping
@@ -439,7 +467,8 @@ get.cluster.score <- function(matrix = NULL,
   # Build plot list
   pl.list <- list( score.type = gpl,
                    "PCA" = pc.pl,
-                   "Scree_plot" = plot_var)
+                   "Scree_plot" = plot_var,
+                   "Dendogram" = dendo)
 
     # return list
     ret <- list("whole_avgerage" = whole.mean,
@@ -488,10 +517,6 @@ silhoutte_onelabel <- function(labels = NULL, # vector of labels
                               progressbar = progressbar)
 
   tlabels <- unique(labels)
-
-  # dataframe for average siloutte
-  sil.sum <- data.frame(matrix(nrow = 0, ncol = 4))
-  names(sil.sum) <- c("cluster", "iteration", "size", "avg_sil_width")
 
   len <- length(labels)
 
@@ -553,26 +578,30 @@ silhoutte_onelabel <- function(labels = NULL, # vector of labels
       # compute p-value
       sil.sumA$p_val <- p.val_zscore(obs = sil.sumA$avg_sil_width,
                                      random.values = bots.df$avg_sil_width)
+      sil.sumA$p_val_adj <- p.adjust(sil.sumA$p_val,
+                                       method = "fdr",
+                                       n = length(tlabels))
       sil.sumA$conf.int.95 <- NA
       # Compute confidence interval
       bots.df <- bots.df %>%
                   mutate(conf.int.95 = I(list(quantile(avg_sil_width, c(0.025,0.975)))))
       bots.df$p_val <- NA
+      bots.df$p_val_adj <- NA
 
-      sil.sum <- rbind(sil.sum, sil.sumA, bots.df)
+      sil.sumA <- rbind(sil.sumA, bots.df)
 
     }
 
     return(list("cell" = sil.res.cell, # silhoutte score for each sample
-                "summary" = sil.sum))
+                "summary" = sil.sumA))
     }
   )
 
   # join results
-  sil.all <- lapply(sils, function(x){x[[1]]}) %>%
+  sil.all <- lapply(sils, function(x){x[["cell"]]}) %>%
                 data.table::rbindlist()
 
-  sil.sum <- lapply(sils, function(x){x[[2]]}) %>%
+  sil.sum <- lapply(sils, function(x){x[["summary"]]}) %>%
                 data.table::rbindlist()
 
 
@@ -605,46 +634,49 @@ p.val_zscore <- function(obs = NULL,
 # Function plot shuffling interval confidence
 plot.score <- function(df = NULL,
                        type = "density"){
-  if(type == "density") {
-  spl <- split(df, df$cluster)
-  pl.list <- list()
-  for(a in names(spl)){
-    it <- spl[[a]] %>% filter(iteration != "NO")
-    xit <- data.frame(vline_x = unlist(it[1,"conf.int.95"]))
-    obs <- spl[[a]] %>% filter(iteration == "NO")
-    xobs <- data.frame(vline_x = obs$avg_sil_width)
 
-    pl.list[[a]] <- it %>%
-          ggplot(aes(x=avg_sil_width)) +
-          geom_density(fill = "grey") +
-          geom_vline(data = xit,
-                     aes(xintercept = vline_x,
-                     color = "confidence_interval95"),
-                     linetype = 2) +
-          geom_vline(data = xobs,
-                     aes(xintercept = vline_x,
-                         color = "Observed_value"),
-                     linetype = 2) +
-          geom_text(x = mean(c(xit$vline_x[2], xobs$vline_x)),
-                    y = max(density(it$avg_sil_width)$y)*0.7,
-                    label = paste("pval:",round(obs$p_val,2)),
-                    vjust = 1.5, hjust = 0.5) +
-          theme_bw() +
-      scale_color_manual(name = "linetypes" ,
-                         values = c(Observed_value = "blue",
-                                    confidence_interval95 = "red")) +
-          ggtitle(paste(a, "- Number of samples:", obs$size))
+  if(type == "density") {
+    spl <- split(df, df$cluster)
+    pl.list <- list()
+    for(a in names(spl)){
+
+      it <- spl[[a]] %>% filter(iteration != "NO") %>%
+            mutate(adj_p_val = NA)
+      obs <- spl[[a]] %>% filter(iteration == "NO")
+      xit <- data.frame(vline_x = unlist(it[1,"conf.int.95"]))
+      xobs <- data.frame(vline_x = obs$avg_sil_width)
+      pl.list[[a]] <- it %>%
+            ggplot(aes(x=avg_sil_width)) +
+            geom_density(fill = "grey") +
+            geom_vline(data = xit,
+                       aes(xintercept = vline_x,
+                       color = "confidence_interval95"),
+                       linetype = 2) +
+            geom_vline(data = xobs,
+                       aes(xintercept = vline_x,
+                           color = "Observed_value"),
+                       linetype = 2) +
+            geom_text(x = mean(c(xit$vline_x[2], xobs$vline_x)),
+                      y = max(density(it$avg_sil_width)$y)*0.7,
+                      label = paste("adj_pval:",round(obs$adj_p_val,2)),
+                      vjust = 1, hjust = 1.5) +
+            theme_bw() +
+        scale_color_manual(name = "linetypes" ,
+                           values = c(Observed_value = "blue",
+                                      confidence_interval95 = "red")) +
+            ggtitle(paste(a, "- Number of samples:", obs$size))
+
+    }
+    pl <- ggpubr::ggarrange(plotlist = pl.list, common.legend = T)
+
   }
 
-  # arrange plots together
-  pl <- ggpubr::ggarrange(plotlist = pl.list, common.legend = T)
-
-  } else if (type == "barplot") {
+  if (type == "barplot") {
 
     df0 <- df %>%
       filter(iteration == "NO") %>%
-      mutate(p_val = ifelse(is.nan(p_val), 1, p_val),
-              Sign = ifelse(p_val < 0.05, "Sig", "Not_Sig"))
+      mutate(adj_p_val = ifelse(is.nan(adj_p_val), 1, adj_p_val),
+              Sign = ifelse(adj_p_val < 0.05, "Sig", "Not_Sig"))
 
     pl <- df0 %>%
           ggplot(aes(cluster, avg_sil_width,
