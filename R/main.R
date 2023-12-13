@@ -944,10 +944,10 @@ get.GOList <- function(GO_accession = NULL,
 #' @param bparam A \code{BiocParallel::bpparam()} object that tells how to parallelize. If provided, it overrides the `ncores` parameter.
 #' @param progressbar Whether to show a progressbar or not
 
-#' @importFrom dplyr mutate filter %>% coalesce mutate_all full_join row_number
+#' @importFrom dplyr mutate mutate_if filter %>% coalesce mutate_all full_join row_number
 #' @importFrom BiocParallel MulticoreParam bplapply
 #' @importFrom parallelly availableCores
-#' @importFrom tibble rownames_to_column column_to_rownames
+#' @importFrom tibble rownames_to_column column_to_rownames remove_rownames
 #' @importFrom caret nearZeroVar
 #' @importFrom ggplot2 aes geom_point guides theme geom_col labs geom_hline guide_legend geom_vline theme_bw ggtitle
 #' @importFrom DEseq2 DESeqDataSetFromMatrix vst estimateSizeFactors
@@ -955,6 +955,7 @@ get.GOList <- function(GO_accession = NULL,
 #' @importFrom SummarizedExperiment assay
 #' @importFrom BiocGenerics counts
 #' @importFrom data.table rbindlist
+#' @importFrom ggdendro ggdendrogram
 
 #' @return List of genes for each GO accession requested. If named vector is provided, lists output are named as GO:accession.ID_named (e.g. "GO:0004950_cytokine_receptor_activity")
 #' @export get.cluster.samples
@@ -972,11 +973,13 @@ get.cluster.samples <- function(object,
                             nVarGenes = 500,
                             gene.filter = NULL,
                             GO_accession = NULL,
-                            black.list = "default",
+                            ntests = 100,
+                            black.list = NULL,
                             ncores = parallelly::availableCores() - 2,
                             bparam = NULL,
                             progressbar = TRUE
                             ){
+
 
   if (is.null(object) || !is.list(object)) {
     stop("Please provide a list of HiT object containing more than one sample")
@@ -1066,7 +1069,6 @@ get.cluster.samples <- function(object,
     ) %>% unlist()
   }) %>% as.data.frame() %>%
     dplyr::mutate(sample = names(object))
-
 # Join data from all HiT objects
 
   # list to store joined data for each grouping variable
@@ -1089,13 +1091,12 @@ get.cluster.samples <- function(object,
         }) %>%
         data.table::rbindlist(., use.names = T, fill = T) %>%
         # convert NA to 0
-        mutate_if(is.numeric, ~ifelse(is.na(.), 0, .)) %>%
+        dplyr::mutate_if(is.numeric, ~ifelse(is.na(.), 0, .)) %>%
         tibble::column_to_rownames("sample") %>%
         t() %>% as.matrix()
 
       join.list[["composition"]][[gb]] <- list("Composition" = count,
-                                               "Metadata" = md.all %>%
-                                                            tibble::column_to_rownames("sample"))
+                                               "Metadata" = md.all)
 
       message("Computing metrics for aggregated profile of " , gb, "...")
 
@@ -1146,14 +1147,14 @@ get.cluster.samples <- function(object,
                     as.matrix()
 
       ## Summarize metadata
-      md.all <- lapply(gf, function(x) x[["metadata"]]) %>%
+      md.agg <- lapply(gf, function(x) x[["metadata"]]) %>%
             data.table::rbindlist() %>%
             left_join(., md.all, by = "sample") %>%
             as.data.frame() %>%
             tibble::column_to_rownames("rn")
 
       join.list[["aggregated"]][[gb]] <- list("data" = data.all,
-                                              "metadata" = md.all)
+                                              "metadata" = md.agg)
 
 
 
