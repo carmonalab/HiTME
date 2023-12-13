@@ -690,12 +690,69 @@ cc <- get.cluster.score(matrix = matrix,
 ```
 
 ```{r}
-df <- cc$sample_euclidean_silhouette$bygroup_average
+metadata.vars <- c("cancer_type", "treatment_type")
+pd <- get.cluster.samples(hit,
+                     group.by = c("scGate_multi",
+                                  "functional.cluster"),
+                     metadata.vars = metadata.vars,
+                     dist.method = c("euclidean"),
+                     ncores = 9)
+```
 
-png("figs/confScore_silhoutte_scGate_sample.png", width = 800, height = 500)
+
+```{r}
+
+df <- pd$aggregated$layer2$clustering$sample_euclidean_silhouette$bygroup_average
+
+png("figs/confScore_silhoutte_scGate_sample.png", width = 1000, height = 600)
 plot.score(df, type = "barplot")
 dev.off()
+
+# treeplot
+d <- get.cluster.score(matrix = pd$aggregated$layer1$data,
+                       metadata = pd$aggregated$layer1$metadata,
+                       ntests = 100,
+                       ndim = 10,
+                       ncores = 6)
 ```
+
+## Upset plot
+Try to see if the higher clustering of sample correlate with the cell types found within each sample
+```{r}
+library(UpSetR)
+
+layer <- "layer1"
+
+# get significant samples
+sigs <- pd$aggregated[[layer]]$clustering$sample_euclidean_silhouette$bygroup_average %>% 
+        filter(iteration == "NO" & p_val_adj >= 0.05) %>% 
+        pull(cluster)
+
+df.up <- data.frame(matrix(nrow=0, ncol = 2))
+names(df.up) <- c("celltype", "sample")
+for(a in sigs){
+  v <- hit[[a]]@composition[[layer]]$cell_counts
+  va <- names(v)[v>=10]
+  df <- data.frame(celltype = va,
+                   sample = rep(a, length(va)))
+  df.up <- rbind(df.up, df)
+}
+
+up.list <- split(df.up, df.up$celltype)
+
+up.list <- lapply(up.list, function(x){
+            x$sample
+})
+
+# Create the upset plot
+up.pl <- upset(fromList(up.list), order.by = "freq", nsets = length(up.list))
+
+png("figs/upset_sample_scGate_notsig.png", width = 1400, height = 1000)
+up.pl
+dev.off()
+
+```
+
 
 
 
