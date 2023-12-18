@@ -290,8 +290,6 @@ get.cluster.score <- function(matrix = NULL,
   }
   )
 
-  # get ndim or max dimensions PCA
-  ndim <- min(ndim, ncol(pc$x))
 
   # produce scree plot to know how many dimensions to use
   eigen_val <- pc$sdev^2
@@ -326,11 +324,11 @@ get.cluster.score <- function(matrix = NULL,
     # plot dendogram
     pc2 <- pc$x[,1:ndim] %>%
       as.data.frame() %>%
-      mutate(cluster = metadata[[df.score[x, 1]]])
+      mutate(celltype = metadata[[df.score[x, 1]]])
 
     # Calculate the row-wise average grouping by row names
-    pc2 <- aggregate(. ~ cluster, data = pc2, FUN = mean) %>%
-                      tibble::column_to_rownames("cluster") %>%
+    pc2 <- aggregate(. ~ celltype, data = pc2, FUN = mean) %>%
+                      tibble::column_to_rownames("celltype") %>%
                       as.matrix()
 
     dist_group <- stats::dist(pc2,
