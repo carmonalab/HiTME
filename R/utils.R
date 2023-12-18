@@ -196,9 +196,6 @@ get.cluster.score <- function(matrix = NULL,
   }
   black.list <- unlist(black.list)
 
-  # Remove black listed genes from the matrix
-  matrix <- matrix[!rownames(matrix) %in% black.list,]
-
 
 
   # dataframe to store score result
@@ -224,6 +221,9 @@ get.cluster.score <- function(matrix = NULL,
   # transform counts usign vst
   vsd <- DESeq2::vst(dds, blind = T, nsub = nsub)
   vsd <- SummarizedExperiment::assay(vsd)
+
+  # Remove black listed genes from the matrix
+  vsd <- vsd[!rownames(vsd) %in% black.list,]
 
   # get top variable genes
   rv <- MatrixGenerics::rowVars(vsd)
