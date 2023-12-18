@@ -13,10 +13,6 @@ knit: (function(input_file, encoding) {
 ```{r load_packages_functions, message=F, warning=F}
 renv::restore()
 
-# remotes::install_github("carmonalab/HiTME",
-#                         ref="dev",
-#                         auth_token = "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")
-
 # load packages
 # pckgs <- c("tidyverse", "Seurat", "scGate",
 #            "Matrix", "patchwork",
@@ -696,7 +692,7 @@ pd <- get.cluster.samples(hit,
                                   "functional.cluster"),
                      metadata.vars = metadata.vars,
                      dist.method = c("euclidean"),
-                     ncores = 9)
+                     ncores = 6)
 ```
 
 
