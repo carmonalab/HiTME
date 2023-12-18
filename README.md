@@ -1,6 +1,6 @@
 # HiTME :dart: :facepunch:
 
-High-resolution Tumor Micro-Environment cell type classification for single-cell RNA-seq
+High-resolution Tumor Micro-Environment cell type classification and compositional analysis for single-cell RNA-seq
 
 # TO DO ❗
 
