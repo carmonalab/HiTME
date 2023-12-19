@@ -12,13 +12,13 @@ Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.2.3
 Imports:
-  bioc::BiocGenerics,
-  bioc::BiocParallel,
-  bioc::biomaRt
-  bioc::DESeq2,
-  bioc::SummarizedExperiment,
+  BiocGenerics,
+  BiocParallel,
+  biomaRt
+  DESeq2,
+  SummarizedExperiment,
   Hotelling,
-  bioc::MatrixGenerics,
+  MatrixGenerics,
   parallelly,
   scGate,
   ProjecTILs,
