@@ -950,7 +950,7 @@ get.GOList <- function(GO_accession = NULL,
 #' @importFrom tibble rownames_to_column column_to_rownames remove_rownames
 #' @importFrom caret nearZeroVar
 #' @importFrom ggplot2 aes geom_point guides theme geom_col labs geom_hline guide_legend geom_vline theme_bw ggtitle
-#' @importFrom DEseq2 DESeqDataSetFromMatrix vst estimateSizeFactors
+#' @importFrom DESeq2 DESeqDataSetFromMatrix vst estimateSizeFactors
 #' @importFrom MatrixGenerics rowVars
 #' @importFrom SummarizedExperiment assay
 #' @importFrom BiocGenerics counts
