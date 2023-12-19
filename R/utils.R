@@ -208,7 +208,7 @@ get.cluster.score <- function(matrix = NULL,
   # empty list to fill in the loop
   scores <- list()
 
-  # compute common PCA space using DEseq2
+  # compute common PCA space using DESeq2
   # do formula for design with the cluster.by elements in order
   dformula <- formula(paste("~", paste(cluster.by, collapse =  " + ")))
   dds <- DESeq2::DESeqDataSetFromMatrix(countData = matrix,
