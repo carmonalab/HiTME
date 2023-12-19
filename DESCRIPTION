@@ -14,7 +14,7 @@ RoxygenNote: 7.2.3
 Imports:
   BiocGenerics,
   BiocParallel,
-  biomaRt
+  biomaRt,
   DESeq2,
   SummarizedExperiment,
   Hotelling,
