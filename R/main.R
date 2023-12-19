@@ -22,6 +22,8 @@
 #' @importFrom dplyr mutate filter %>%
 #' @importFrom tibble column_to_rownames
 #' @importFrom scGate scGate get_scGateDB
+#' @import SignatuR
+#' @import scGate
 #' @import ProjecTILs
 #' @importFrom Seurat SplitObject
 #' @importFrom data.table rbindlist setDT
