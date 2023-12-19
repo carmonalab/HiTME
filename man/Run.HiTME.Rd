@@ -47,7 +47,7 @@ Run.HiTME(
 
 \item{bparam}{A \code{BiocParallel::bpparam()} object that tells Run.HiTME how to parallelize. If provided, it overrides the \code{ncores} parameter.}
 
-\item{ncores}{The number of cores to use}
+\item{ncores}{The number of cores to use, by default all available cores minus 2 are used.}
 
 \item{progressbar}{Whether to show a progressbar or not}
 }

@@ -12,6 +12,11 @@ get.cluster.samples(
   score = c("silhouette"),
   dist.method = "euclidean",
   ndim = 10,
+  nVarGenes = 500,
+  gene.filter = NULL,
+  GO_accession = NULL,
+  ntests = 100,
+  black.list = NULL,
   ncores = parallelly::availableCores() - 2,
   bparam = NULL,
   progressbar = TRUE
@@ -32,7 +37,17 @@ get.cluster.samples(
 
 \item{ndim}{Number of dimensions to be use for PCA clustering metrics.}
 
-\item{ncores}{The number of cores to use}
+\item{nVarGenes}{Number of variable genes to assess samples.}
+
+\item{gene.filter}{Additional named list of genes to subset their aggregated expression, if "default" is indicated, all genes,
+ribosomal genes, transcription factor (GO:0003700), cytokines (GO:0005125),
+cytokine receptors (GO:0004896), chemokines (GO:0008009), and chemokines receptors (GO:0004950) are subsetted and accounted for.}
+
+\item{GO_accession}{Additional GO accessions to subset genes for aggregation, by default the list indicated in \code{gene.filter} are returned.}
+
+\item{black.list}{List of genes to discard from clustering, if "default" object "default_black_list" object is used. Alternative black listed genes can be provided as a vector or list.}
+
+\item{ncores}{The number of cores to use, by default, all available cores - 2.}
 
 \item{bparam}{A \code{BiocParallel::bpparam()} object that tells how to parallelize. If provided, it overrides the \code{ncores} parameter.}
 

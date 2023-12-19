@@ -7,8 +7,6 @@
 get.aggregated.profile(
   object,
   group.by.aggregated = NULL,
-  gene.filter = NULL,
-  GO_accession = NULL,
   assay = "RNA",
   useNA = FALSE,
   ...
@@ -18,12 +16,6 @@ get.aggregated.profile(
 \item{object}{A seurat object or a list of seurat objects}
 
 \item{group.by.aggregated}{The Seurat object metadata column(s) containing celltype annotations}
-
-\item{gene.filter}{Additional named list of genes to subset their aggregated expression, by default all genes,
-ribosomal genes, transcription factor (GO:0003700), cytokines (GO:0005125),
-cytokine receptors (GO:0004896), chemokines (GO:0008009), and chemokines receptors (GO:0004950) are subsetted.}
-
-\item{GO_accession}{Additional GO accessions to subset genes for aggregation, by default the list indicated in \code{gene.filter} are returned.}
 
 \item{assay}{Assay to retrieve information. By default "RNA".}
 
