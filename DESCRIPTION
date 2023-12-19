@@ -22,6 +22,7 @@ Imports:
   parallelly,
   scGate,
   ProjecTILs,
+  SignatuR,
   dplyr,
   ggplot2,
   Seurat,
