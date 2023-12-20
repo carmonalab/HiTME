@@ -5,7 +5,7 @@
 \title{Compute aggregation metrics of summarized data}
 \usage{
 get.cluster.samples(
-  object,
+  object = NULL,
   group.by = list(layer1 = c("scGate_multi"), layer2 = c("functional.cluster")),
   min.cells = 10,
   metadata.vars = NULL,
