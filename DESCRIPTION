@@ -18,7 +18,7 @@ Authors@R: c(
     role = c('aut'),
     comment = c(ORCID = '0000-0002-2495-0671'))
     )
-Description: 
+Description: HiTME enables cell type prediction on single-cell RNA-seq datasets from Tumor microenvirontment samples. HiTME's classification exploits [scGate](https://github.com/carmonalab/scGate) for coarse cell type classification, later when reference map for those coarse cell type is available uses [ProjecTILs](https://github.com/carmonalab/ProjecTILs) to define cell type at finer level. Additionally, HiTME package is envisioned to compare cell type classification in multiple samples of different type and source, hence it offers tool to evaluate predictions consistency across samples and comparison between different classification methods.
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.2.3
