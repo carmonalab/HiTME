@@ -54,7 +54,7 @@ cytokine receptors (GO:0004896), chemokines (GO:0008009), and chemokines recepto
 \item{progressbar}{Whether to show a progressbar or not}
 }
 \value{
-List of genes for each GO accession requested. If named vector is provided, lists output are named as GO:accession.ID_named (e.g. "GO:0004950_cytokine_receptor_activity")
+Summarize of pseudobulk metrics for each celltype based on different predictions across all samples provided.
 }
 \description{
 Compute aggregation metrics of summarized data

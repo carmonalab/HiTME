@@ -27,7 +27,7 @@
 \item{type}{Type of plot to render. Either "tile" (default) as a confusion matrixs or "barplot".}
 }
 \value{
-List of genes for each GO accession requested. If named vector is provided, lists output are named as GO:accession.ID_named (e.g. "GO:0004950_cytokine_receptor_activity")
+Plots to evaluate the correspondance between different classification methods.
 }
 \description{
 Built confusion matrix-like plots between different cell type classification approaches

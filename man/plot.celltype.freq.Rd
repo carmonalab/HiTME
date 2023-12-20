@@ -21,7 +21,7 @@
 \item{by.x}{Determine which variable show on x-axis, if celltype it shows boxplots of the number of each cell type for each sample. If sample is indicated a barplot is shown with the relative proportions of each celltype within each sample.}
 }
 \value{
-List of genes for each GO accession requested. If named vector is provided, lists output are named as GO:accession.ID_named (e.g. "GO:0004950_cytokine_receptor_activity")
+Plots showing the compositional cell type data across the different samples.
 }
 \description{
 Render plots summarizing celltype proportions and distribution in samples

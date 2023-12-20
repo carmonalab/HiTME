@@ -959,7 +959,7 @@ get.GOList <- function(GO_accession = NULL,
 #' @importFrom data.table rbindlist
 #' @importFrom ggdendro ggdendrogram
 
-#' @return List of genes for each GO accession requested. If named vector is provided, lists output are named as GO:accession.ID_named (e.g. "GO:0004950_cytokine_receptor_activity")
+#' @return Summarize of pseudobulk metrics for each celltype based on different predictions across all samples provided.
 #' @export get.cluster.samples
 #'
 
@@ -1203,7 +1203,7 @@ get.cluster.samples <- function(object = NULL,
 #' @importFrom ggplot2 aes geom_point facet_wrap geom_col labs geom_boxplot theme_bw
 #' @importFrom data.table rbindlist
 
-#' @return List of genes for each GO accession requested. If named vector is provided, lists output are named as GO:accession.ID_named (e.g. "GO:0004950_cytokine_receptor_activity")
+#' @return Plots showing the compositional cell type data across the different samples.
 #' @export plot.celltype.freq
 #'
 
@@ -1391,8 +1391,8 @@ plot.celltype.freq <- function(object = NULL,
 #' @importFrom cowplot theme_cowplot
 #' @importFrom data.table rbindlist
 
-#' @return List of genes for each GO accession requested. If named vector is provided, lists output are named as GO:accession.ID_named (e.g. "GO:0004950_cytokine_receptor_activity")
-#' @export plot.celltype.freq
+#' @return Plots to evaluate the correspondance between different classification methods.
+#' @export plot.confusion.matrix
 #'
 
 plot.confusion.matrix <- function(object = NULL,
