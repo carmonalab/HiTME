@@ -1,34 +1,55 @@
 Package: HiTME
 Title: Classify Cell Types in the Tumor Microenvironment
-Version: 0.1
+Version: 1.1.0
 Authors@R: c(
-  person(given = 'Josep', family = 'Garnica', email = 'josep.garnica@unil.ch', role = c('aut'), comment = c(ORCID = '0000-0001-9493-1321')),
-  person(given = 'Christian', family = 'Halter', email = 'christian.halter@unil.ch', role = c('aut'), comment = c(ORCID = '0009-0009-5479-2246')),
-  person(given = 'Massimo', family = 'Andreatta', email = 'massimo.andreatta@unil.ch', role = c('aut','cre'), comment = c(ORCID = '0000-0002-8036-2647')),
-  person(given = 'Santiago', family = 'Carmona', email = 'santiago.carmona@unil.ch', role = c('aut'), comment = c(ORCID = '0000-0002-2495-0671')))
-Description: What the package does (one paragraph).
-License: GPL (>= 3)
+  person(given = 'Josep', family = 'Garnica',
+    email = 'josep.garnica@unil.ch',
+    role = c('aut', 'cre'),
+    comment = c(ORCID = '0000-0001-9493-1321')),
+  person(given = 'Christian', family = 'Halter',
+    email = 'christian.halter@unil.ch', role = c('aut'),
+    comment = c(ORCID = '0009-0009-5479-2246')),
+  person(given = 'Massimo', family = 'Andreatta',
+    email = 'massimo.andreatta@unil.ch',
+    role = c('aut'),
+    comment = c(ORCID = '0000-0002-8036-2647')),
+  person(given = 'Santiago', family = 'Carmona',
+    email = 'santiago.carmona@unil.ch',
+    role = c('aut'),
+    comment = c(ORCID = '0000-0002-2495-0671'))
+    )
+Description: 
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.2.3
+VignetteBuilder: knitr
+URL: https://github.com/carmonalab/HiTME
+BugReports: https://github.com/carmonalab/HiTME/issues
+License: 
+LazyData: true
+biocViews:
+Depends: R (>= 4.3.1)
 Imports:
-  BiocGenerics,
-  BiocParallel,
-  biomaRt,
-  DESeq2,
-  SummarizedExperiment,
-  Hotelling,
-  MatrixGenerics,
-  parallelly,
-  scGate,
-  ProjecTILs,
-  SignatuR,
-  dplyr,
-  ggplot2,
-  Seurat,
-  stringr,
-  caret,
-  data.table,
-  ggdendro,
-  methods,
-  tibble
+  BiocParallel (>= 1.34.2),
+  biomaRt (>= 2.56.1),
+  DESeq2 (>= 1.40.2),
+  SummarizedExperiment (>= 1.30.2),
+  Hotelling (>= 1.0-8),
+  MatrixGenerics (>= 1.12.3),
+  parallelly (>= 1.36.0),
+  scGate (>= 1.6.0),
+  ProjecTILs (>= 3.2.1),
+  SignatuR (>= 0.1.2),
+  dplyr (>= 1.1.4),
+  ggplot2 (>= 3.4.4),
+  Seurat (>= 5.0.0),
+  SeuratObject (>= 5.0.0),
+  stringr (>= 1.5.1),
+  caret (>= 6.0-94),
+  data.table (>= 1.14.8),
+  ggdendro (>= 0.1.23),
+  methods (>= 4.3.1),
+  tibble (>= 3.2.1)
+Suggests: 
+  knitr,
+  rmarkdown
