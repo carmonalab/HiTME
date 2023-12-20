@@ -5,13 +5,13 @@
 #' @param object A seurat object or a list of seurat objects
 #' @param scGate.model The scGate model to use (use get_scGateDB() to get a list of available models), by default fetch the HiTME models: \code{ scGate::get_scGateDB(branch = scGate.model.branch)[[species]][["HiTME"]]}.
 #' @param scGate.model.branch From which branch Run.HiTME fetch the scGate models, by default models are retrieved from \code{master} branch.
-#' @param additional.signatures UCell additional signatures to compute on each cell, by default \code{SignatuR} Programs are included.
+#' @param additional.signatures UCell additional signatures to compute on each cell, by default \code{SignatuR} programs are included.
 #' @param ref.maps A named list of the ProjecTILs reference maps to use. They ought to be Seurat objects. It is recommended to add in reference object slost \code{misc} the identifier connecting to layer 1 classification (scGate): \code{ref.map@misc$layer1_link}
 #' @param split.by A Seurat object metadata column to split by (e.g. sample names).
-#' @param layer1_link Column of metadata linking layer1 prediction (e.g. scGate ~ scGate_multi) in order to perform subsetting for second layer classification.
+#' @param layer1_link Column of metadata linking layer1 prediction (e.g. scGate ~ CellOntology_ID) in order to perform subsetting for second layer classification.
 #' @param return.Seurat Whether to return a Hit object or add the data into Seurat object metadata
-#' @param group.by If return.Seurat = F, variables to be used to summarize HiTME classification data in HiT object.
-#' @param useNA Whether to include not annotated cells or not (labelled as "NA" in the group.by.composition) when summarizing into HiT object.
+#' @param group.by If return.Seurat = F, variables to be used to summarize HiTME classification data in HiT object. See \link{get.HiTObject} for more information.
+#' @param useNA Whether to include not annotated cells or not (labelled as "NA" in the group.by.composition) when summarizing into HiT object. Can be "no", "ifany", or "always". See \code{?table} and \link{get.celltype.composition} for more information. Default is "ifany".
 #' @param remerge When setting split.by, if remerge = TRUE one object will be returned. If remerge = FALSE a list of objects will be returned.
 #' @param ncores The number of cores to use, by default all available cores minus 2 are used.
 #' @param bparam A \code{BiocParallel::bpparam()} object that tells Run.HiTME how to parallelize. If provided, it overrides the `ncores` parameter.
@@ -86,7 +86,7 @@ Run.HiTME <- function(object = NULL,
       stop("Split.by argument not supported when providing a list of Seurat objects. Set split.by = NULL or merge list.")
     }
     if(!split.by %in% names(object@meta.data)){
-      stop(paste("split.by argument:", split.by, "is not a metadata column in this Seurat object"))
+      stop(paste("split.by argument: ", split.by, " is not a metadata column in this Seurat object"))
     }
     object <- Seurat::SplitObject(object, split.by = split.by)
 
@@ -963,7 +963,7 @@ get.GOList <- function(GO_accession = NULL,
 #' @export get.cluster.samples
 #'
 
-get.cluster.samples <- function(object,
+get.cluster.samples <- function(object = NULL,
                             group.by = list("layer1" = c("scGate_multi"),
                                             "layer2" = c("functional.cluster")
                             ),
@@ -1013,7 +1013,7 @@ get.cluster.samples <- function(object,
   }
 
   if(suppressWarnings(!all(lapply(object, function(x){any(group.by %in% names(x@metadata))})))) {
-    stop("Not all supplied HiT object contain", paste(group.by, collapse = ", "),
+    stop("Not all supplied HiT object contain ", paste(group.by, collapse = ", "),
          "group.by elements in their metadata")
   } else {
     message("\n#### Group by ####")
@@ -1036,7 +1036,7 @@ get.cluster.samples <- function(object,
   if(!is.null(metadata.vars)){
     message("\n#### Metadata ####")
     if(suppressWarnings(!all(lapply(object, function(x){any(metadata.vars %in% names(x@metadata))})))) {
-      message("Not all supplied HiT object contain", paste(metadata.vars, collapse = ", "),
+      message("Not all supplied HiT object contain ", paste(metadata.vars, collapse = ", "),
            "metadata elements in their metadata")
     }
       in.md <- sapply(metadata.vars,
@@ -1189,6 +1189,300 @@ get.cluster.samples <- function(object,
 
 
 
+
+#' Render plots summarizing celltype proportions and distribution in samples
+#'
+#'
+#' @param object List of Hit class object
+#' @param group.by Grouping variable for
+#' @param split.by If desired, indicate how to split plots by metadata variable.
+#' @param by.x Determine which variable show on x-axis, if celltype it shows boxplots of the number of each cell type for each sample. If sample is indicated a barplot is shown with the relative proportions of each celltype within each sample.
+
+
+#' @importFrom dplyr mutate group_by distinct
+#' @importFrom ggplot2 aes geom_point facet_wrap geom_col labs geom_boxplot theme_bw
+#' @importFrom data.table rbindlist
+
+#' @return List of genes for each GO accession requested. If named vector is provided, lists output are named as GO:accession.ID_named (e.g. "GO:0004950_cytokine_receptor_activity")
+#' @export plot.celltype.freq
+#'
+
+plot.celltype.freq <- function(object = NULL,
+                                group.by = list("layer1" = c("scGate_multi"),
+                                                "layer2" = c("functional.cluster")
+                                ),
+                                split.by = NULL,
+                                by.x = "celltype"
+){
+
+
+  if (is.null(object)) {
+    stop("Please provide a single one or a list of HiT object")
+  }
+
+  if(!is.list(object)){
+    object <- list(object)
+  }
+
+  if(suppressWarnings(!all(lapply(object, function(x){class(x) == "HiT"})))){
+    stop("Not all components of the list are HiT objects.")
+  }
+
+  #give name to list of hit objects
+  for(v in seq_along(object)){
+    if(is.null(names(object)[[v]]) || is.na(names(object)[[v]])){
+      names(object)[[v]] <- paste0("Sample", v)
+    }
+  }
+
+
+  if(is.null(group.by)){
+    stop("Please provide at least one grouping variable for cell type classification common in all elements of the list of Hit objects")
+  } else {
+    if(!is.list(group.by)){
+      group.by <- as.list(group.by)
+    }
+    # give name to list of grouping.by variables
+    for(v in seq_along(group.by)){
+      if(is.null(names(group.by)[[v]]) || is.na(names(group.by)[[v]])){
+        names(group.by)[[v]] <- paste0("layer", v)
+      }
+    }
+  }
+
+  if(suppressWarnings(!all(lapply(object, function(x){any(group.by %in% names(x@metadata))})))) {
+    stop("Not all supplied HiT object contain ", paste(group.by, collapse = ", "),
+         " group.by elements in their metadata")
+}
+  # remove group by if not present in any sample
+    present <- sapply(group.by,
+                      function(char){
+                        any(unlist(lapply(object,
+                                      function(df) {char %in% colnames(df@metadata)}
+                        )))
+
+                      }
+    )
+    if(length(group.by[present]) != length(group.by)){
+      warning("Celltype classification for ", paste(as.vector(group.by[!present]), collapse = ", "),
+              " not present in any object")
+
+      group.by <- group.by[present]
+    }
+
+
+  # check splitting by variables
+  if(!is.null(split.by)){
+    if(suppressWarnings(!all(lapply(object, function(x){any(split.by %in% names(x@metadata))})))) {
+      warning("Not all supplied HiT objects contain ", paste(split.by, collapse = ", "),
+              " metadata elements in their metadata")
+    }
+    present <- sapply(split.by,
+                    function(char){
+                      any(unlist(lapply(object,
+                                    function(df) {char %in% colnames(df@metadata)}
+                      )))
+
+                    }
+    )
+    if(length(split.by[present]) != length(split.by)){
+      warning("Metadata variable ", paste(as.vector(split.by[!present]), collapse = ", "),
+              " not present in any object")
+      split.by <- split.by[present]
+    }
+  }
+
+  # build all table
+  df <- lapply(names(object), function(y){
+    sel <- names(object[[y]]@metadata) %in% c(group.by, split.by)
+    a <- object[[y]]@metadata[,sel, drop = F] %>%
+          dplyr::mutate(sample = y)
+    return(a)
+  }) %>%
+    data.table::rbindlist(fill = T) %>% as.data.frame()
+
+  # compute counts
+  c.list <- list()
+  for(gr.by in as.vector(group.by)){
+    #keep only needed columns
+    rm <- group.by[group.by != gr.by] %>% as.character()
+    kp <- which(!names(df) %in% rm)
+
+    # count celltypes
+    c.list[[gr.by]] <- df[ , kp] %>%
+      dplyr::group_by(.data[[gr.by]], sample) %>%
+      dplyr::mutate(count = dplyr::n()) %>%
+      dplyr::distinct() %>%
+      dplyr::group_by(sample) %>%
+      dplyr::mutate(Freq = count/sum(count))
+
+
+  }
+
+  # list to store plots
+  pl.list <- list()
+  if(by.x == "celltype"){
+    # count number of celltypes
+    for(gr.by in as.vector(group.by)){
+      pos <- ggplot2::position_dodge(width = .9)
+      pl.list[[gr.by]] <-
+        c.list[[gr.by]] %>%
+        ggplot2::ggplot(ggplot2::aes(.data[[gr.by]], Freq,
+                                     fill = .data[[gr.by]])) +
+        ggplot2::geom_boxplot(outlier.colour = NA,
+                              position = pos,
+                              show.legend = F,
+                              width = 0.6) +
+        ggplot2::geom_point(position = pos,
+                            show.legend = F) +
+        ggplot2::labs(title = paste0(gr.by), " classification") +
+        ggplot2::theme_bw()
+
+
+    }
+
+
+  } else if(by.x == "sample"){
+    for(gr.by in as.vector(group.by)){
+      pl.list[[gr.by]] <-
+        c.list[[gr.by]] %>%
+        ggplot2::ggplot(ggplot2::aes(sample, Freq, fill = .data[[gr.by]])) +
+        ggplot2::geom_col() +
+        ggplot2::labs(title = paste0(gr.by), " classification") +
+        ggplot2::theme_bw()
+
+
+    }
+  }
+
+  for(spl in split.by){
+    pl.list <- lapply(pl.list, function(x){
+      x + ggplot2::facet_wrap(~.data[[spl]])
+    })
+  }
+
+
+
+  return(pl.list)
+
+}
+
+
+
+#' Built confusion matrix-like plots between different cell type classification approaches
+#'
+#'
+#' @param object List of Hit class object
+#' @param var.1 1st of grouping variables on the x-axis. If using \code{relative = TRUE} proportions will be normalized to this variable.
+#' @param var.2 2nd of grouping variables on the x-axis.
+#' @param relative Wheter to show absolute number of cells, or relative number cells out of the 1st variable indicted. Default is FALSE.
+#' @param useNA Whether to include not annotated cells or not (labelled as "NA"). Can be "no", "ifany", or "always". See \code{?table} for more information. Default is "ifany".
+#' @param type Type of plot to render. Either "tile" (default) as a confusion matrixs or "barplot".
+
+#' @importFrom dplyr mutate group_by distinct
+#' @importFrom ggplot2 aes geom_point geom_tile geom_col scale_fill_gradient labs geom_label theme
+#' @importFrom cowplot theme_cowplot
+#' @importFrom data.table rbindlist
+
+#' @return List of genes for each GO accession requested. If named vector is provided, lists output are named as GO:accession.ID_named (e.g. "GO:0004950_cytokine_receptor_activity")
+#' @export plot.celltype.freq
+#'
+
+plot.confusion.matrix <- function(object = NULL,
+                                  var.1 = NULL,
+                                  var.2 = NULL,
+                                  relative = FALSE,
+                                  useNA = "ifany",
+                                  type = "tile"
+){
+
+
+  if (is.null(object)) {
+    stop("Please provide a single one or a list of HiT object")
+  }
+
+  if(!is.list(object)){
+    object <- list(object)
+  }
+
+  if(suppressWarnings(!all(lapply(object, function(x){class(x) == "HiT"})))){
+    stop("Not all components of the list are HiT objects.")
+  }
+
+  #give name to list of hit objects
+  for(v in seq_along(object)){
+    if(is.null(names(object)[[v]]) || is.na(names(object)[[v]])){
+      names(object)[[v]] <- paste0("Sample", v)
+    }
+  }
+
+  # join vars to plot
+  vars <- c(var.1, var.2)
+
+  if(any(is.null(vars))){
+    stop("Please provide 2 cell type classification labels common in all elements of the list of Hit objects: var.1 and var.2")
+  }
+
+  if(suppressWarnings(!all(lapply(object, function(x){any(vars %in% names(x@metadata))})))) {
+    stop("Not all supplied HiT object contain ", paste(vars, collapse = ", "),
+         " group.by elements in their metadata")
+  }
+
+
+  # build all table
+  data <- lapply(names(object), function(y){
+    sel <- names(object[[y]]@metadata) %in% vars
+    a <- object[[y]]@metadata[,sel, drop = F] %>%
+      dplyr::mutate(sample = y)
+    return(a)
+  }) %>%
+    data.table::rbindlist(fill = T) %>% as.data.frame()
+
+  # Get counts for every group
+  pz <- table(data[[var.1]],
+              data[[var.2]],
+              useNA = useNA)
+  if(relative){
+    pz <- pz %>% prop.table(margin = 1)
+    legend <- "Relative counts"
+  } else {
+    legend <- "Absolute counts"
+  }
+
+
+  if(tolower(type) == "tile"){
+  plot <- pz %>% as.data.frame() %>%
+    ggplot2::ggplot(ggplot2::aes(Var1, Var2,
+               fill = Freq)) +
+    ggplot2::geom_tile() +
+    ggplot2::scale_fill_gradient(name = legend,
+                                  low = "#FFFFC8",
+                                  high = "#7D0025") +
+    ggplot2::labs(x = var.1,
+                  y = var.2) +
+    ggplot2::geom_label(ggplot2::aes(label = round(Freq,1)),
+                        color = "white",
+                        alpha = 0.6,
+                        fill = "black") +
+    cowplot::theme_cowplot()
+  } else if(grepl("bar|col", type, ignore.case = T)){
+    plot <- pz %>% as.data.frame() %>%
+      ggplot2::ggplot(ggplot2::aes(Var1, Freq,
+                                   fill = Var2)) +
+      ggplot2::labs(x = var.1,
+                    y = legend,
+                    fill = var.2) +
+      ggplot2::geom_col() +
+      ggplot2::theme_bw()
+  }
+
+  plot <- plot +
+          ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45,
+                                                             hjust = 1,
+                                                             vjust = 1))
+
+  return(plot)
+}
 
 
 #' Save object list to disk, in parallel
