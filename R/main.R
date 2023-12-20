@@ -1355,6 +1355,13 @@ plot.celltype.freq <- function(object = NULL,
     }
   }
 
+  # rotat x-axis label
+  pl.list <- lapply(pl.list, function(x){
+    x + ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45,
+                                                       hjust = 1,
+                                                       vjust = 1))
+  })
+
   for(spl in split.by){
     pl.list <- lapply(pl.list, function(x){
       x + ggplot2::facet_wrap(~.data[[spl]])
