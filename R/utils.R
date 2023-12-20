@@ -25,9 +25,6 @@ ProjecTILs.classifier.multi <- function(object,
     map.celltypes <- lapply(ref.maps,
                             function(x){
                               ct <- x@misc$layer1_link
-                              # collpase if multiple cell types, such as MoMac
-                              if(length(ct)>1){ct <- paste(ct, collapse = "_")}
-
                               nrow(object@meta.data[object@meta.data[[layer1_link]] %in% ct,])
                             })
     present <- names(ref.maps[map.celltypes > 0])
