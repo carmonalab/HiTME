@@ -1467,7 +1467,9 @@ plot.confusion.matrix <- function(object = NULL,
                                   high = "#7D0025") +
     ggplot2::labs(x = var.1,
                   y = var.2) +
-    ggplot2::geom_label(ggplot2::aes(label = round(Freq,1)),
+    ggplot2::geom_label(ggplot2::aes(label = ifelse(Freq>0,
+                                                    round(Freq,1),
+                                                    NA)),
                         color = "white",
                         alpha = 0.6,
                         fill = "black") +
