@@ -27,7 +27,7 @@ ProjecTILs.classifier.multi <- function(object,
                               ct <- x@misc$layer1_link
                               nrow(object@meta.data[object@meta.data[[layer1_link]] %in% ct,])
                             })
-    present <- names(ref.maps[map.celltypes > 0])
+    present <- names(ref.maps[map.celltypes > 1])
     no.present <- names(ref.maps)[!names(ref.maps) %in% present]
 
     if(length(present) == 0){
