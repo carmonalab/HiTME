@@ -3750,14 +3750,14 @@
     },
     "scGate": {
       "Package": "scGate",
-      "Version": "1.6.0",
+      "Version": "1.6.1",
       "Source": "GitHub",
       "RemoteType": "github",
       "RemoteHost": "api.github.com",
       "RemoteRepo": "scGate",
       "RemoteUsername": "carmonalab",
-      "RemoteRef": "dev",
-      "RemoteSha": "2cdd776ed49c294a3ad5135735c71e1162564add",
+      "RemoteRef": "HEAD",
+      "RemoteSha": "ed9c73f0db693c25c074301cc20af662bbaf6077",
       "Requirements": [
         "BiocParallel",
         "R",
@@ -3772,7 +3772,7 @@
         "stats",
         "utils"
       ],
-      "Hash": "e793bbd0ffe2dd672d806c5a8c13a035"
+      "Hash": "8b0b2d71ab7c06e7df35cb62f8ebaa0f"
     },
     "scales": {
       "Package": "scales",
