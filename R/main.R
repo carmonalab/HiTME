@@ -450,7 +450,7 @@ get.HiTObject <- function(object,
   if(any(group.by == "functional.cluster")){
     layer.pt <- names(group.by[group.by == "functional.cluster"])
     pred.list[[layer.pt]][["functional.cluster"]] <- object@meta.data[,"functional.cluster", drop = F]
-    pred.list[[layer.pt]][["functional.cluster.conf"]] <- object@meta.data[,"functional.cluster.conf", drop = F]
+    pred.list[[layer.pt]][["functional.cluster.conf"]] <- object@meta.data[,"functional.cluster.conf"]
 
   }
 
