@@ -21,6 +21,8 @@ get.HiTObject(
 
 \item{name.additional.signatures}{Names of additional signatures as found in object metadata to take into account.}
 
+\item{useNA}{logical whether to return aggregated profile for NA (undefined) cell types, default is FALSE.}
+
 \item{clr_zero_impute_perc}{Parameter for internal \link{get.celltype.composition}.}
 
 \item{gene.filter}{List of genes to subset for aggregated expression. Parameter for internal \link{get.aggregated.profile}.}
