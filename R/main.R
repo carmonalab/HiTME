@@ -349,6 +349,7 @@ Run.HiTME <- function(object = NULL,
 #' @param object A Seurat object
 #' @param group.by List with one or multiple Seurat object metadata columns with cell type predictions to group by (e.g. layer 1 cell type classification)
 #' @param name.additional.signatures Names of additional signatures as found in object metadata to take into account.
+#' @param useNA logical whether to return aggregated profile for NA (undefined) cell types, default is FALSE.
 #' @param clr_zero_impute_perc Parameter for internal \link{get.celltype.composition}.
 #' @param gene.filter List of genes to subset for aggregated expression. Parameter for internal \link{get.aggregated.profile}.
 #' @param assay Parameter for internal \link{get.aggregated.profile}.
