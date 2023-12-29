@@ -5,16 +5,15 @@
 #' @param object A seurat object or a list of seurat objects
 #' @param scGate.model The scGate model to use (use get_scGateDB() to get a list of available models), by default fetch the HiTME models: \code{ scGate::get_scGateDB(branch = scGate.model.branch)[[species]][["HiTME"]]}.
 #' @param scGate.model.branch From which branch Run.HiTME fetch the scGate models, by default models are retrieved from \code{master} branch.
-#' @param additional.signatures UCell additional signatures to compute on each cell, by default \code{SignatuR} Programs are included.
+#' @param additional.signatures UCell additional signatures to compute on each cell, by default \code{SignatuR} programs are included.
 #' @param ref.maps A named list of the ProjecTILs reference maps to use. They ought to be Seurat objects. It is recommended to add in reference object slost \code{misc} the identifier connecting to layer 1 classification (scGate): \code{ref.map@misc$layer1_link}
 #' @param split.by A Seurat object metadata column to split by (e.g. sample names).
-#' @param layer1_link Column of metadata linking layer1 prediction (e.g. scGate ~ scGate_multi) in order to perform subsetting for second layer classification.
+#' @param layer1_link Column of metadata linking layer1 prediction (e.g. scGate ~ CellOntology_ID) in order to perform subsetting for second layer classification.
 #' @param return.Seurat Whether to return a Hit object or add the data into Seurat object metadata
-#' @param group.by If return.Seurat = F, variables to be used to summarize HiTME classification data in HiT object.
-#' @param useNA Whether to include not annotated cells or not (labelled as "NA" in the group.by.composition) when summarizing into HiT object.
+#' @param group.by If return.Seurat = F, variables to be used to summarize HiTME classification data in HiT object. See \link{get.HiTObject} for more information.
+#' @param useNA Whether to include not annotated cells or not (labelled as "NA" in the group.by.composition) when summarizing into HiT object. Can be "no", "ifany", or "always". See \code{?table} and \link{get.celltype.composition} for more information. Default is "ifany".
 #' @param remerge When setting split.by, if remerge = TRUE one object will be returned. If remerge = FALSE a list of objects will be returned.
-#' @param ncores The number of cores to use
-#' @param ncores.limit Whether or not to limit ncores for large datasets
+#' @param ncores The number of cores to use, by default all available cores minus 2 are used.
 #' @param bparam A \code{BiocParallel::bpparam()} object that tells Run.HiTME how to parallelize. If provided, it overrides the `ncores` parameter.
 #' @param progressbar Whether to show a progressbar or not
 #'
@@ -23,6 +22,9 @@
 #' @importFrom dplyr mutate filter %>%
 #' @importFrom tibble column_to_rownames
 #' @importFrom scGate scGate get_scGateDB
+#' @import SignatuR
+#' @import scGate
+#' @import ProjecTILs
 #' @importFrom Seurat SplitObject
 #' @importFrom data.table rbindlist setDT
 #'
@@ -85,7 +87,7 @@ Run.HiTME <- function(object = NULL,
       stop("Split.by argument not supported when providing a list of Seurat objects. Set split.by = NULL or merge list.")
     }
     if(!split.by %in% names(object@meta.data)){
-      stop(paste("split.by argument:", split.by, "is not a metadata column in this Seurat object"))
+      stop(paste("split.by argument: ", split.by, " is not a metadata column in this Seurat object"))
     }
     object <- Seurat::SplitObject(object, split.by = split.by)
 
@@ -124,34 +126,17 @@ Run.HiTME <- function(object = NULL,
     object <- list(object)
   }
 
-  if(is.null(ncores)){
-    ncores <- 1
-  }
 
-  if(ncores >= parallelly::availableCores()){
-    ncores <- parallelly::availableCores() - 1
-    message("Using all or more cores available in this computer, reducing number of cores to ", ncores)
-  }
-
-  # Reduce number of cores if file is huge
-  if(sum(unlist(lapply(object, ncol)))>=30000){
-    if(ncores.limit){
-      ncores <- 2
-      message("Huge Seurat object, reducing number of cores to avoid memory issues to", ncores)
-    }
+  # Warning to reduce number of cores if file is huge
+  if(any(lapply(object, ncol))>=30000){
+    warning("Huge Seurat object, consider reducing number of cores to avoid memory issues")
   }
 
 
   # set paralelization parameters
-  if (is.null(bparam)) {
-    if (ncores>1) {
-      param <- BiocParallel::MulticoreParam(workers =  ncores, progressbar = progressbar)
-    } else {
-      param <- SerialParam()
-    }
-  } else {
-    param <- bparam
-  }
+  param <- set_paralel_params(ncores = ncores,
+                               bparam = bparam,
+                               progressbar = progressbar)
 
 
   # Get default additional signatures
@@ -365,11 +350,10 @@ Run.HiTME <- function(object = NULL,
 #' @param object A Seurat object
 #' @param group.by List with one or multiple Seurat object metadata columns with cell type predictions to group by (e.g. layer 1 cell type classification)
 #' @param name.additional.signatures Names of additional signatures as found in object metadata to take into account.
+#' @param useNA logical whether to return aggregated profile for NA (undefined) cell types, default is FALSE.
 #' @param clr_zero_impute_perc Parameter for internal \link{get.celltype.composition}.
 #' @param gene.filter List of genes to subset for aggregated expression. Parameter for internal \link{get.aggregated.profile}.
-#' @param nHVG Number of highly variable genes. Parameter for internal \link{get.aggregated.profile}.
 #' @param assay Parameter for internal \link{get.aggregated.profile}.
-#' @param layer Parameter for internal \link{get.aggregated.profile}.
 #'
 #' @importFrom methods setClass new
 #' @import SeuratObject
@@ -387,9 +371,7 @@ get.HiTObject <- function(object,
                           useNA = FALSE,
                           clr_zero_impute_perc = 1,
                           gene.filter = NULL,
-                          nHVG = 1000,
-                          assay = "RNA",
-                          layer = "data"
+                          assay = "RNA"
                           ){
 
 
@@ -476,21 +458,19 @@ get.HiTObject <- function(object,
 
 
   # Compute proportions
-  message("Computing cell type composition...\n")
+  message("\nComputing cell type composition...\n")
 
   comp.prop <- get.celltype.composition(object,
                                         group.by.composition = group.by,
                                         useNA = useNA,
                                         clr_zero_impute_perc = clr_zero_impute_perc)
   # Compute avg expression
-  message("Computing aggregated profile...\n")
+  message("\nComputing aggregated profile...\n")
 
   avg.expr <- get.aggregated.profile(object,
                                      group.by.aggregated = group.by,
                                      gene.filter = gene.filter,
-                                     nHVG = nHVG,
                                      assay = assay,
-                                     layer = layer,
                                      useNA = useNA)
 
   aggr.signature <- get.aggregated.signature(object,
@@ -502,7 +482,7 @@ get.HiTObject <- function(object,
   hit <- methods::new("HiT",
                        metadata = object@meta.data,
                        predictions = pred.list,
-                       aggregated_profile = list("Gene_expression" = avg.expr,
+                       aggregated_profile = list("Pseudobulk" = avg.expr,
                                                  "Signatures" = aggr.signature),
                        composition = comp.prop
                       )
@@ -663,14 +643,7 @@ get.celltype.composition <- function(object = NULL,
 #'
 #' @param object A seurat object or a list of seurat objects
 #' @param group.by.aggregated The Seurat object metadata column(s) containing celltype annotations
-#' @param gene.filter Additional named list of genes to subset their aggregated expression, by default all genes,
-#'  highly variable genes (see \code{nHVG}), ribosomal genes, transcription factor (GO:0003700), cytokines (GO:0005125),
-#'   cytokine receptors (GO:0004896), chemokines (GO:0008009), and chemokines receptors (GO:0004950) are subsetted.
-#' @param GO_accession Additional GO accessions to subset genes for aggregation, by default the list indicated in \code{gene.filter} are returned.
-#' @param nHVG Number of highly variable genes returned. By default 1000.
 #' @param assay Assay to retrieve information. By default "RNA".
-#' @param layer Layer to retrieve the data from to compute average expression.
-#' @param slot Deprecated slot in Seurat version under 5. Same use as layer.
 #' @param useNA logical whether to return aggregated profile for NA (undefined) cell types, default is FALSE.
 #' @param ... Extra parameters for internal Seurat functions: AverageExpression, AggregateExpression, FindVariableFeatures
 
@@ -681,12 +654,7 @@ get.celltype.composition <- function(object = NULL,
 
 get.aggregated.profile <- function(object,
                                    group.by.aggregated = NULL,
-                                   gene.filter = NULL,
-                                   GO_accession = NULL,
-                                   nHVG = 1000,
                                    assay = "RNA",
-                                   layer = "data",
-                                   slot = "data",
                                    useNA = FALSE,
                                    ...) {
 
@@ -721,61 +689,12 @@ get.aggregated.profile <- function(object,
     message("Only found ", paste(group.by.aggregated, collapse = ", ") , " as grouping variables.")
   }
 
-  if(!is.null(gene.filter) && !is.list(gene.filter)){
-      gene.filter <- list(gene.filter)
-  }
-
-
-  gene.filter.list <- list()
-  # make a list of default subsetting genes
-
-  # Dorothea transcription factors
-  # data("entire_database", package = "dorothea")
-  # gene.filter.list[["Dorothea_Transcription_Factors"]] <- entire_database$tf %>% unique()
-
-  # Ribosomal genes
-  gene.filter.list[["Ribosomal"]] <- SignatuR::GetSignature(SignatuR::SignatuR$Hs$Compartments$Ribo)
-
-  # Highly variable genes (HVG)
-  gene.filter.list[["HVG"]] <- Seurat::FindVariableFeatures(object,
-                                                            nfeatures = nHVG,
-                                                            assay = assay,
-                                                            verbose = F
-                                                            )[[assay]]@var.features
-
-  # Add list genes from GO accessions
-  # check if indicted additional GO accessions
-  if(!is.null(GO_accession)){
-    GO_additional <- get.GOList(GO_accession, ...)
-  } else {
-    GO_additional <- NULL
-  }
-
-  #default gene list
-  data("GO_accession_default")
-  gene.filter.list <- c(gene.filter.list, GO_default, GO_additional)
-
-  # Add defined list of genes to filter
-  for(a in seq_along(gene.filter)){
-    if(is.null(names(gene.filter[[a]]))){
-      i.name <- paste0("GeneList_", a)
-    } else {
-      i.name <- names(gene.filter[[a]])
-    }
-    gene.filter.list[[i.name]] <- gene.filter[[a]]
-  }
-
 
   avg.exp <- list()
-  avg.exp[["Average"]] <- list()
-  avg.exp[["Aggregated"]] <- list()
 
   # loop over different grouping
 
   for(i in names(group.by.aggregated)){
-    # Create list for average and aggregated
-    avg.exp[["Average"]][[i]] <- list()
-    avg.exp[["Aggregated"]][[i]] <- list()
 
     # if useNA = TRUE, transform NA to character
     if(useNA){
@@ -783,55 +702,32 @@ get.aggregated.profile <- function(object,
                        group.by.aggregated[[i]]] <- "NA"
     }
 
-  # compute average
+  # compute pseudobulk
     suppressWarnings(
       {
-    avg.exp[["Average"]][[i]][["All.genes"]] <-
-      Seurat::AverageExpression(object,
-                                group.by = group.by.aggregated[[i]],
-                                assays = assay,
-                                layer = layer,
-                                slot = layer,
-                                verbose = F,
-                                ...
-                                )[[assay]]
-
-
-    # compute average
-    avg.exp[["Aggregated"]][[i]][["All.genes"]] <-
-      Seurat::AggregateExpression(object,
-                                group.by = group.by.aggregated[[i]],
-                                assays = assay,
-                                verbose = F,
-                                ...
-                                )[[assay]]
+        avg.exp[[i]]  <-
+          Seurat::AggregateExpression(object,
+                                      group.by = group.by.aggregated[[i]],
+                                      assays = assay,
+                                      verbose = F,
+                                      ...)[[assay]]
       })
 
-    if(ncol(avg.exp[["Average"]][[i]][["All.genes"]]) == 1){
+
+    if(ncol(avg.exp[[i]]) == 1){
       for(av in names(avg.exp)){
-        colnames(avg.exp[[av]][[i]][["All.genes"]]) <-
+        colnames(avg.exp[[i]]) <-
           unique(object@meta.data[!is.na(object@meta.data[[group.by.aggregated[[i]]]]),
                                   group.by.aggregated[[i]]])
       }
     }
 
-    for(sl in names(avg.exp)){
       # add colnames if only one cell type is found
-      if(ncol(avg.exp[["Average"]][[i]][["All.genes"]]) == 1){
-          colnames(avg.exp[[sl]][[i]][["All.genes"]]) <-
-            unique(object@meta.data[!is.na(object@meta.data[[group.by.aggregated[[i]]]]),
-                                    group.by.aggregated[[i]]])
+    if(ncol(avg.exp[[i]] ) == 1){
+        colnames(avg.exp[[i]] ) <-
+          unique(object@meta.data[!is.na(object@meta.data[[group.by.aggregated[[i]]]]),
+                                  group.by.aggregated[[i]]])
       }
-
-      # subset genes accroding to gene filter list
-      for(e in names(gene.filter.list)){
-        keep <- gene.filter.list[[e]][gene.filter.list[[e]] %in%
-                                        rownames(avg.exp[[sl]][[i]][["All.genes"]])]
-        avg.exp[[sl]][[i]][[e]] <- avg.exp[[sl]][[i]][["All.genes"]][keep, , drop = FALSE]
-      }
-    }
-
-
   }
 
 
@@ -1031,6 +927,573 @@ get.GOList <- function(GO_accession = NULL,
 
 }
 
+
+#' Compute aggregation metrics of summarized data
+#'
+#'
+#' @param object List of Hit class object
+#' @param group.by Grouping variable for
+#' @param min.cells Minimum number of cells to consider for aggregated expression.
+#' @param metadata.vars Variables to show as metadata
+#' @param score Score to compute clustering of samples based on cell type prediction, either Silhoutte or modularity.
+#' @param dist.method Method to compute distance between celltypes, default euclidean.
+#' @param ndim Number of dimensions to be use for PCA clustering metrics.
+#' @param nVarGenes Number of variable genes to assess samples.
+#' @param gene.filter Additional named list of genes to subset their aggregated expression, if "default" is indicated, all genes,
+#' ribosomal genes, transcription factor (GO:0003700), cytokines (GO:0005125),
+#'   cytokine receptors (GO:0004896), chemokines (GO:0008009), and chemokines receptors (GO:0004950) are subsetted and accounted for.
+#' @param GO_accession Additional GO accessions to subset genes for aggregation, by default the list indicated in \code{gene.filter} are returned.
+#' @param black.list List of genes to discard from clustering, if "default" object "default_black_list" object is used. Alternative black listed genes can be provided as a vector or list.
+#' @param ncores The number of cores to use, by default, all available cores - 2.
+#' @param bparam A \code{BiocParallel::bpparam()} object that tells how to parallelize. If provided, it overrides the `ncores` parameter.
+#' @param progressbar Whether to show a progressbar or not
+
+#' @importFrom dplyr mutate mutate_if filter %>% coalesce mutate_all full_join row_number
+#' @importFrom BiocParallel MulticoreParam bplapply
+#' @importFrom parallelly availableCores
+#' @importFrom tibble rownames_to_column column_to_rownames remove_rownames
+#' @importFrom caret nearZeroVar
+#' @importFrom ggplot2 aes geom_point guides theme geom_col labs geom_hline guide_legend geom_vline theme_bw ggtitle
+#' @importFrom DESeq2 DESeqDataSetFromMatrix vst estimateSizeFactors
+#' @importFrom MatrixGenerics rowVars
+#' @importFrom SummarizedExperiment assay
+#' @importFrom BiocGenerics counts
+#' @importFrom data.table rbindlist
+#' @importFrom ggdendro ggdendrogram
+
+#' @return Summarize of pseudobulk metrics for each celltype based on different predictions across all samples provided.
+#' @export get.cluster.samples
+#'
+
+get.cluster.samples <- function(object = NULL,
+                            group.by = list("layer1" = c("scGate_multi"),
+                                            "layer2" = c("functional.cluster")
+                            ),
+                            min.cells = 10,
+                            metadata.vars = NULL,
+                            score = c("silhouette"),
+                            dist.method = "euclidean",
+                            ndim = 10,
+                            nVarGenes = 500,
+                            gene.filter = NULL,
+                            GO_accession = NULL,
+                            ntests = 100,
+                            black.list = NULL,
+                            ncores = parallelly::availableCores() - 2,
+                            bparam = NULL,
+                            progressbar = TRUE
+                            ){
+
+
+  if (is.null(object) || !is.list(object)) {
+    stop("Please provide a list of HiT object containing more than one sample")
+    if(suppressWarnings(!all(lapply(object, function(x){class(x) == "HiT"})))){
+      stop("Not all components of the list are HiT objects.")
+    }
+  }
+
+  #give name to list of hit objects
+  for(v in seq_along(object)){
+    if(is.null(names(object)[[v]]) || is.na(names(object)[[v]])){
+      names(object)[[v]] <- paste0("Sample", v)
+    }
+  }
+
+
+  if(is.null(group.by)){
+    stop("Please provide at least one grouping variable for cell type classification common in all elements of the list of Hit objects")
+  } else {
+    if(!is.list(group.by)){
+      group.by <- as.list(group.by)
+    }
+  # give name to list of grouping.by variables
+    for(v in seq_along(group.by)){
+      if(is.null(names(group.by)[[v]]) || is.na(names(group.by)[[v]])){
+        names(group.by)[[v]] <- paste0("layer", v)
+      }
+    }
+  }
+
+  if(suppressWarnings(!all(lapply(object, function(x){any(group.by %in% names(x@metadata))})))) {
+    stop("Not all supplied HiT object contain ", paste(group.by, collapse = ", "),
+         "group.by elements in their metadata")
+  } else {
+    message("\n#### Group by ####")
+    present <- sapply(group.by,
+                      function(char){
+                        unlist(lapply(object,
+                                   function(df) {char %in% colnames(df@metadata)}
+                                   ))
+
+                        }
+                      )
+    present.sum <- colSums(present)
+
+    for(l in names(group.by)){
+      message("** ", l, " present in ", present.sum[[l]], " / ", length(object), " HiT objects.")
+    }
+
+  }
+
+  if(!is.null(metadata.vars)){
+    message("\n#### Metadata ####")
+    if(suppressWarnings(!all(lapply(object, function(x){any(metadata.vars %in% names(x@metadata))})))) {
+      message("Not all supplied HiT object contain ", paste(metadata.vars, collapse = ", "),
+           "metadata elements in their metadata")
+    }
+      in.md <- sapply(metadata.vars,
+                        function(char){
+                          unlist(lapply(object,
+                                        function(df) {char %in% colnames(df@metadata)}
+                          ))
+
+                        }
+      )
+      in.md.sum <- colSums(in.md)
+
+      for(l in metadata.vars){
+        message("** ", l, " present in ", in.md.sum[[l]], " / ", length(object), " HiT objects.")
+      }
+
+    }
+
+
+# set paralelization parameters
+  param <- set_paralel_params(ncores = ncores,
+                              bparam = bparam,
+                              progressbar = progressbar)
+
+# prepare metadata
+  md.all <- sapply(metadata.vars, function(x){
+    BiocParallel::bplapply(X = names(object),
+                           BPPARAM = param,
+                           FUN =function(y){
+                             unique(object[[y]]@metadata[[x]])
+                           }
+    ) %>% unlist()
+  }) %>% as.data.frame() %>%
+    dplyr::mutate(sample = names(object))
+# Join data from all HiT objects
+
+  # list to store joined data for each grouping variable
+  join.list <- list()
+  join.list[["aggregated"]] <- list()
+  join.list[["composition"]] <- list()
+
+  for(gb in names(group.by)){
+
+    layer.present <- rownames(present)[present[,gb]]
+    message("Computing metrics for composition of " , gb, "...")
+      count  <-
+        BiocParallel::bplapply(
+          X = layer.present,
+          BPPARAM = param,
+          FUN = function(x){
+              mat <- object[[x]]@composition[[gb]]$freq %>%
+                      dplyr::mutate(sample = x)
+              return(mat)
+        }) %>%
+        data.table::rbindlist(., use.names = T, fill = T) %>%
+        # convert NA to 0
+        dplyr::mutate_if(is.numeric, ~ifelse(is.na(.), 0, .)) %>%
+        tibble::column_to_rownames("sample") %>%
+        t() %>% as.matrix()
+
+      join.list[["composition"]][[gb]] <- list("Composition" = count,
+                                               "Metadata" = md.all)
+
+      message("Computing metrics for aggregated profile of " , gb, "...")
+
+      # list for each gene subset
+
+
+    gf <- BiocParallel::bplapply(
+      X = layer.present,
+      BPPARAM = param,
+      FUN = function(x){
+        # remove cells with less than min.cells
+        tab <- object[[x]]@composition[[gb]]$cell_counts
+        names(tab) <- gsub("-", "_", names(tab))
+        keep <- names(tab)[tab>=min.cells]
+
+        if(length(keep) > 0){
+        dat <- object[[x]]@aggregated_profile$Pseudobulk[[gb]]
+        # in case _ and - are not match
+        colnames(dat) <- gsub("-", "_", colnames(dat))
+
+        #keep only cell type with more than min.cells
+        dat <- dat[, keep, drop = F]
+        celltype <- colnames(dat)[colnames(dat)!= "gene"]
+
+        # accommodate colnames to merge then
+        colnames(dat) <- paste(colnames(dat), x, sep = "_")
+        dat <- dat %>%
+                as.data.frame() %>%
+                tibble::rownames_to_column("gene")
+        md <- data.frame(rn = colnames(dat)[colnames(dat)!= "gene"],
+                         sample = rep(x, ncol(dat)-1),
+                         celltype = celltype)
+        return(list("data" = dat,
+                    "metadata" = md))
+        } else {
+          return(NULL)
+        }
+      })
+      # remove NULL if generated
+      gf <- gf[!sapply(gf, is.null)]
+
+      # join all gene expression matrices using full_join
+      data.all <- lapply(gf, function(x) x[["data"]]) %>%
+                    reduce(full_join, by = "gene") %>%
+                    # convert NA to 0
+                    mutate_if(is.numeric, ~ifelse(is.na(.), 0, .)) %>%
+                    tibble::column_to_rownames("gene") %>%
+                    as.matrix()
+
+      ## Summarize metadata
+      md.agg <- lapply(gf, function(x) x[["metadata"]]) %>%
+            data.table::rbindlist() %>%
+            left_join(., md.all, by = "sample") %>%
+            as.data.frame() %>%
+            tibble::column_to_rownames("rn")
+
+      join.list[["aggregated"]][[gb]] <- list("data" = data.all,
+                                              "metadata" = md.agg)
+
+
+
+      message("\nComputing clustering metrics of aggregated for ", gb)
+
+      cc <- get.cluster.score(matrix = join.list[["aggregated"]][[gb]]$data,
+                              metadata = join.list[["aggregated"]][[gb]]$metadata,
+                              cluster.by = c("celltype", "sample"),
+                              score = score,
+                              ndim = ndim,
+                              ntests = 100,
+                              gene.filter = gene.filter,
+                              GO_accession = GO_accession,
+                              black.list = black.list,
+                              nVarGenes = nVarGenes,
+                              dist.method = dist.method)
+
+      join.list[["aggregated"]][[gb]][["clustering"]] <- cc
+
+
+  }
+
+
+
+
+
+  return(join.list)
+
+}
+
+
+
+
+#' Render plots summarizing celltype proportions and distribution in samples
+#'
+#'
+#' @param object List of Hit class object
+#' @param group.by Grouping variable for
+#' @param split.by If desired, indicate how to split plots by metadata variable.
+#' @param by.x Determine which variable show on x-axis, if celltype it shows boxplots of the number of each cell type for each sample. If sample is indicated a barplot is shown with the relative proportions of each celltype within each sample.
+
+
+#' @importFrom dplyr mutate group_by distinct
+#' @importFrom ggplot2 aes geom_point facet_wrap geom_col labs geom_boxplot theme_bw
+#' @importFrom data.table rbindlist
+
+#' @return Plots showing the compositional cell type data across the different samples.
+#' @export plot.celltype.freq
+#'
+
+plot.celltype.freq <- function(object = NULL,
+                                group.by = list("layer1" = c("scGate_multi"),
+                                                "layer2" = c("functional.cluster")
+                                ),
+                                split.by = NULL,
+                                by.x = "celltype"
+){
+
+
+  if (is.null(object)) {
+    stop("Please provide a single one or a list of HiT object")
+  }
+
+  if(!is.list(object)){
+    object <- list(object)
+  }
+
+  if(suppressWarnings(!all(lapply(object, function(x){class(x) == "HiT"})))){
+    stop("Not all components of the list are HiT objects.")
+  }
+
+  #give name to list of hit objects
+  for(v in seq_along(object)){
+    if(is.null(names(object)[[v]]) || is.na(names(object)[[v]])){
+      names(object)[[v]] <- paste0("Sample", v)
+    }
+  }
+
+
+  if(is.null(group.by)){
+    stop("Please provide at least one grouping variable for cell type classification common in all elements of the list of Hit objects")
+  } else {
+    if(!is.list(group.by)){
+      group.by <- as.list(group.by)
+    }
+    # give name to list of grouping.by variables
+    for(v in seq_along(group.by)){
+      if(is.null(names(group.by)[[v]]) || is.na(names(group.by)[[v]])){
+        names(group.by)[[v]] <- paste0("layer", v)
+      }
+    }
+  }
+
+  if(suppressWarnings(!all(lapply(object, function(x){any(group.by %in% names(x@metadata))})))) {
+    stop("Not all supplied HiT object contain ", paste(group.by, collapse = ", "),
+         " group.by elements in their metadata")
+}
+  # remove group by if not present in any sample
+    present <- sapply(group.by,
+                      function(char){
+                        any(unlist(lapply(object,
+                                      function(df) {char %in% colnames(df@metadata)}
+                        )))
+
+                      }
+    )
+    if(length(group.by[present]) != length(group.by)){
+      warning("Celltype classification for ", paste(as.vector(group.by[!present]), collapse = ", "),
+              " not present in any object")
+
+      group.by <- group.by[present]
+    }
+
+
+  # check splitting by variables
+  if(!is.null(split.by)){
+    if(suppressWarnings(!all(lapply(object, function(x){any(split.by %in% names(x@metadata))})))) {
+      warning("Not all supplied HiT objects contain ", paste(split.by, collapse = ", "),
+              " metadata elements in their metadata")
+    }
+    present <- sapply(split.by,
+                    function(char){
+                      any(unlist(lapply(object,
+                                    function(df) {char %in% colnames(df@metadata)}
+                      )))
+
+                    }
+    )
+    if(length(split.by[present]) != length(split.by)){
+      warning("Metadata variable ", paste(as.vector(split.by[!present]), collapse = ", "),
+              " not present in any object")
+      split.by <- split.by[present]
+    }
+  }
+
+  # build all table
+  df <- lapply(names(object), function(y){
+    sel <- names(object[[y]]@metadata) %in% c(group.by, split.by)
+    a <- object[[y]]@metadata[,sel, drop = F] %>%
+          dplyr::mutate(sample = y)
+    return(a)
+  }) %>%
+    data.table::rbindlist(fill = T) %>% as.data.frame()
+
+  # compute counts
+  c.list <- list()
+  for(gr.by in as.vector(group.by)){
+    #keep only needed columns
+    rm <- group.by[group.by != gr.by] %>% as.character()
+    kp <- which(!names(df) %in% rm)
+
+    # count celltypes
+    c.list[[gr.by]] <- df[ , kp] %>%
+      dplyr::group_by(.data[[gr.by]], sample) %>%
+      dplyr::mutate(count = dplyr::n()) %>%
+      dplyr::distinct() %>%
+      dplyr::group_by(sample) %>%
+      dplyr::mutate(Freq = count/sum(count))
+
+
+  }
+
+  # list to store plots
+  pl.list <- list()
+  if(by.x == "celltype"){
+    # count number of celltypes
+    for(gr.by in as.vector(group.by)){
+      pos <- ggplot2::position_dodge(width = .9)
+      pl.list[[gr.by]] <-
+        c.list[[gr.by]] %>%
+        ggplot2::ggplot(ggplot2::aes(.data[[gr.by]], Freq,
+                                     fill = .data[[gr.by]])) +
+        ggplot2::geom_boxplot(outlier.colour = NA,
+                              position = pos,
+                              show.legend = F,
+                              width = 0.6) +
+        ggplot2::geom_point(position = pos,
+                            show.legend = F) +
+        ggplot2::labs(title = paste0(gr.by), " classification") +
+        ggplot2::theme_bw()
+
+
+    }
+
+
+  } else if(by.x == "sample"){
+    for(gr.by in as.vector(group.by)){
+      pl.list[[gr.by]] <-
+        c.list[[gr.by]] %>%
+        ggplot2::ggplot(ggplot2::aes(sample, Freq, fill = .data[[gr.by]])) +
+        ggplot2::geom_col() +
+        ggplot2::labs(title = paste0(gr.by), " classification") +
+        ggplot2::theme_bw()
+
+
+    }
+  }
+
+  # rotat x-axis label
+  pl.list <- lapply(pl.list, function(x){
+    x + ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45,
+                                                       hjust = 1,
+                                                       vjust = 1))
+  })
+
+  for(spl in split.by){
+    pl.list <- lapply(pl.list, function(x){
+      x + ggplot2::facet_wrap(~.data[[spl]])
+    })
+  }
+
+
+
+  return(pl.list)
+
+}
+
+
+
+#' Built confusion matrix-like plots between different cell type classification approaches
+#'
+#'
+#' @param object List of Hit class object
+#' @param var.1 1st of grouping variables on the x-axis. If using \code{relative = TRUE} proportions will be normalized to this variable.
+#' @param var.2 2nd of grouping variables on the x-axis.
+#' @param relative Wheter to show absolute number of cells, or relative number cells out of the 1st variable indicted. Default is FALSE.
+#' @param useNA Whether to include not annotated cells or not (labelled as "NA"). Can be "no", "ifany", or "always". See \code{?table} for more information. Default is "ifany".
+#' @param type Type of plot to render. Either "tile" (default) as a confusion matrixs or "barplot".
+
+#' @importFrom dplyr mutate group_by distinct
+#' @importFrom ggplot2 aes geom_point geom_tile geom_col scale_fill_gradient labs geom_label theme
+#' @importFrom cowplot theme_cowplot
+#' @importFrom data.table rbindlist
+
+#' @return Plots to evaluate the correspondance between different classification methods.
+#' @export plot.confusion.matrix
+#'
+
+plot.confusion.matrix <- function(object = NULL,
+                                  var.1 = NULL,
+                                  var.2 = NULL,
+                                  relative = FALSE,
+                                  useNA = "ifany",
+                                  type = "tile"
+){
+
+
+  if (is.null(object)) {
+    stop("Please provide a single one or a list of HiT object")
+  }
+
+  if(!is.list(object)){
+    object <- list(object)
+  }
+
+  if(suppressWarnings(!all(lapply(object, function(x){class(x) == "HiT"})))){
+    stop("Not all components of the list are HiT objects.")
+  }
+
+  #give name to list of hit objects
+  for(v in seq_along(object)){
+    if(is.null(names(object)[[v]]) || is.na(names(object)[[v]])){
+      names(object)[[v]] <- paste0("Sample", v)
+    }
+  }
+
+  # join vars to plot
+  vars <- c(var.1, var.2)
+
+  if(any(is.null(vars))){
+    stop("Please provide 2 cell type classification labels common in all elements of the list of Hit objects: var.1 and var.2")
+  }
+
+  if(suppressWarnings(!all(lapply(object, function(x){any(vars %in% names(x@metadata))})))) {
+    stop("Not all supplied HiT object contain ", paste(vars, collapse = ", "),
+         " group.by elements in their metadata")
+  }
+
+
+  # build all table
+  data <- lapply(names(object), function(y){
+    sel <- names(object[[y]]@metadata) %in% vars
+    a <- object[[y]]@metadata[,sel, drop = F] %>%
+      dplyr::mutate(sample = y)
+    return(a)
+  }) %>%
+    data.table::rbindlist(fill = T) %>% as.data.frame()
+
+  # Get counts for every group
+  pz <- table(data[[var.1]],
+              data[[var.2]],
+              useNA = useNA)
+  if(relative){
+    pz <- pz %>% prop.table(margin = 1)
+    legend <- "Relative counts"
+  } else {
+    legend <- "Absolute counts"
+  }
+
+
+  if(tolower(type) == "tile"){
+  plot <- pz %>% as.data.frame() %>%
+    ggplot2::ggplot(ggplot2::aes(Var1, Var2,
+               fill = Freq)) +
+    ggplot2::geom_tile() +
+    ggplot2::scale_fill_gradient(name = legend,
+                                  low = "#FFFFC8",
+                                  high = "#7D0025") +
+    ggplot2::labs(x = var.1,
+                  y = var.2) +
+    ggplot2::geom_label(ggplot2::aes(label = ifelse(Freq>0,
+                                                    round(Freq,1),
+                                                    NA)),
+                        color = "white",
+                        alpha = 0.6,
+                        fill = "black") +
+    cowplot::theme_cowplot()
+  } else if(grepl("bar|col", type, ignore.case = T)){
+    plot <- pz %>% as.data.frame() %>%
+      ggplot2::ggplot(ggplot2::aes(Var1, Freq,
+                                   fill = Var2)) +
+      ggplot2::labs(x = var.1,
+                    y = legend,
+                    fill = var.2) +
+      ggplot2::geom_col() +
+      ggplot2::theme_bw()
+  }
+
+  plot <- plot +
+          ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45,
+                                                             hjust = 1,
+                                                             vjust = 1))
+
+  return(plot)
+}
 
 
 #' Save object list to disk, in parallel

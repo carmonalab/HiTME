@@ -2,22 +2,6 @@
 
 High-resolution Tumor Micro-Environment cell type classification and compositional analysis for single-cell RNA-seq
 
-# TO DO ❗
-
-``` r
-# Installation for devs. From Rstudio Terminal, run the following code:
-# R CMD build /directory_of_your_downloaded_project_/HiTME
-# R CMD install HiTME_0.1.tar.gz
-
-# Then load as usual
-library(HiTME)
-```
-
--   Provide better example dataset for public use.
--   Update example plots
-
-<br>
-
 ### Installation
 
 ``` r
@@ -53,7 +37,15 @@ ref.maps <- list(CD8 = load.reference.map(file.path(path_ref, "CD8T_human_ref_v1
                  DC = load.reference.map(file.path(path_ref, "DC_human_ref_v1.rds")),
                  MoMac = load.reference.map(file.path(path_ref, "MoMac_human_v1.rds"))
                  )
+```
 
+<br>
+
+By default [scGate](https://github.com/carmonalab/scGate) (layer 1) will return the [cell ontology ID](https://www.ebi.ac.uk/ols4/ontologies/cl) for each predicted cell type. This ID will be then used to link each coarse cell type with its respective reference map for finer cell type classification using [ProjecTILs](https://github.com/carmonalab/ProjecTILs). Hence, we need to indicate each respective cell ontology ID(s) for each reference map.
+
+If alternative cell type link are used between the coarse and finer cell type classification, this must be specified in `Run.HiTME` using `layer1_link` parameter.
+
+``` r
 # add scGate_link to ref.maps
 # Include a slot in @misc with the cell name output by scGate
 # By default scGate returns cell ontology ID
@@ -67,17 +59,29 @@ layer1.links <- list("CD8" = "CL:0000625",
 for(a in names(ref.maps)){
   ref.maps[[a]]@misc$layer1_link <- layer1.links[[a]]
 }
+```
 
+``` r
 # Run HiTME
 annotated.obj <- Run.HiTME(object = obj,
                 scGate.model = models.TME,
                 ref.maps = ref.maps)
 
-# Alternatively HiTME can be run splitting by sample
-annotated.obj <- Run.HiTME(object = obj,
-                          scGate.model = models.TME,
-                          ref.maps = ref.maps,
-                          split.by = "sample")
+annotated.obj <- Run.HiTME(obj,
+                            scGate.model = models.TME,
+                            ref.maps = ref.maps,
+                            # already split object
+                            split.by = NULL,
+                            # if splitting or providing list, whether to return a single merged object
+                            remerge = FALSE,
+                            # link between scGate and ProjecTILs
+                            layer1_link = "CellOntology_ID",
+                            # extra signatures to be computed per celltype
+                            additional.signatures = additional.signatures, 
+                            # paralelization parameters
+                            ncores = 4,
+                            progressbar = TRUE
+                            )
 ```
 
 <br>
@@ -86,7 +90,7 @@ annotated.obj <- Run.HiTME(object = obj,
 
 `Run.HiTME` will return the Seurat object or list of them with new metadata indicating cell type annotation.
 
-Annotated Seurat objects can be summarized into HiT objects using `get.HiTObject` function. For this function the grouping variable `group.by` resulting from `Run.HiTME` annotation or additional annotations need to be indicated. Compositional cell type distribution and aggregated transcriptomic profile are returned for each sample.
+Annotated Seurat objects can be summarized into **HiT objects** using `get.HiTObject` function. For this function the grouping variable `group.by` resulting from `Run.HiTME` annotation or additional annotations need to be indicated. Compositional cell type distribution and aggregated transcriptomic profile (pseudobulk) are returned for each sample.
 
 ``` r
 HiT_summary <- get.HiTObject(annotated.obj ,
@@ -98,68 +102,30 @@ Alternatively, HiT summarizing object can be obtained directly using `Run.HiTME`
 
 ``` r
 HiT_summary <- Run.HiTME(object = obj,
-                scGate.model = models.TME,
-                ref.maps = ref.maps,
-                return.Seurat = FALSE)
+                        scGate.model = models.TME,
+                        ref.maps = ref.maps,
+                        return.Seurat = FALSE)
 ```
 
 ## Hit Object content
 
 The Hit object summarize the cell type annotation and contain the following slots:
 
-1.  Seurat object metadata: `metadata`
+1.  Seurat object metadata (dataframe): `metadata`
 
-2.  Cell type predictions for each cell in the data set: `predictions`
+2.  Cell type predictions for each cell in the data set (list): `predictions`
 
 3.  Cell type composition for each layer of cell type prediction: `composition`. Including:
 
-    3.1.  cell counts 
-    
-    3.2.  cell proportions 
-    
-    3.3.  Centered log ratio (CLR)-transformed cell counts
-    
 
-    ``` r
-    # Run by
+    3.1. cell counts
 
-    get.celltype.composition(object = NULL,
-                            group.by.composition = NULL,
-                            split.by = NULL,
-                            min.cells = 10,
-                            useNA = FALSE,
-                            clr_zero_impute_perc = 1
-                            )
-    ```
+    3.2. frequency
+
+    3.3. CLR (Central log ratio)-transformed frequency
 
 4.  Aggregated profile of predicted cell types: `aggregated_profile`. Including:
 
     4.1. Average and aggregated expression per cell type of all genes in the dataset and a subset of them.
 
-    ``` r
-    # Run by
-
-    get.aggregated.profile(object,
-                          group.by.aggregated = NULL,
-                          gene.filter = NULL, # list of genes to subset
-                          GO_accession = NULL, # GO accessions to fetch for subsetting
-                          nHVG = 1000, # number of highly variable genes to subset
-                          assay = "RNA",
-                          layer = "data",
-                          useNA = FALSE,
-                        )
-
-    ```
-
-    4.2. Mean of signature scores per cell type, if additional signatures are provided, for example from [SignatuR](https://github.com/carmonalab/SignatuR).
-
-    ``` r
-    # Run by
-
-    get.aggregated.signature(object,
-                            group.by.aggregated = NULL,
-                            name.additional.signatures = NULL,
-                            fun = mean, # function for aggregating cell-wise signature scores
-                            useNA = FALSE
-                            )
-    ```
+    4.2. Mean of [UCell](https://github.com/carmonalab/UCell) scores per cell type, if additional signatures are provided, for example from [SignatuR](https://github.com/carmonalab/SignatuR).

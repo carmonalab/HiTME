@@ -11,9 +11,7 @@ get.HiTObject(
   useNA = FALSE,
   clr_zero_impute_perc = 1,
   gene.filter = NULL,
-  nHVG = 1000,
-  assay = "RNA",
-  layer = "data"
+  assay = "RNA"
 )
 }
 \arguments{
@@ -23,15 +21,13 @@ get.HiTObject(
 
 \item{name.additional.signatures}{Names of additional signatures as found in object metadata to take into account.}
 
+\item{useNA}{logical whether to return aggregated profile for NA (undefined) cell types, default is FALSE.}
+
 \item{clr_zero_impute_perc}{Parameter for internal \link{get.celltype.composition}.}
 
 \item{gene.filter}{List of genes to subset for aggregated expression. Parameter for internal \link{get.aggregated.profile}.}
 
-\item{nHVG}{Number of highly variable genes. Parameter for internal \link{get.aggregated.profile}.}
-
 \item{assay}{Parameter for internal \link{get.aggregated.profile}.}
-
-\item{layer}{Parameter for internal \link{get.aggregated.profile}.}
 }
 \value{
 HiT object summarizing cell type classification and aggregated profiles.

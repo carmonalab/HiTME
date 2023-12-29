@@ -29,25 +29,25 @@ Run.HiTME(
 
 \item{scGate.model.branch}{From which branch Run.HiTME fetch the scGate models, by default models are retrieved from \code{master} branch.}
 
-\item{additional.signatures}{UCell additional signatures to compute on each cell, by default \code{SignatuR} Programs are included.}
+\item{additional.signatures}{UCell additional signatures to compute on each cell, by default \code{SignatuR} programs are included.}
 
 \item{ref.maps}{A named list of the ProjecTILs reference maps to use. They ought to be Seurat objects. It is recommended to add in reference object slost \code{misc} the identifier connecting to layer 1 classification (scGate): \code{ref.map@misc$layer1_link}}
 
 \item{split.by}{A Seurat object metadata column to split by (e.g. sample names).}
 
-\item{layer1_link}{Column of metadata linking layer1 prediction (e.g. scGate ~ scGate_multi) in order to perform subsetting for second layer classification.}
+\item{layer1_link}{Column of metadata linking layer1 prediction (e.g. scGate ~ CellOntology_ID) in order to perform subsetting for second layer classification.}
 
 \item{return.Seurat}{Whether to return a Hit object or add the data into Seurat object metadata}
 
-\item{group.by}{If return.Seurat = F, variables to be used to summarize HiTME classification data in HiT object.}
+\item{group.by}{If return.Seurat = F, variables to be used to summarize HiTME classification data in HiT object. See \link{get.HiTObject} for more information.}
 
-\item{useNA}{Whether to include not annotated cells or not (labelled as "NA" in the group.by.composition) when summarizing into HiT object.}
+\item{useNA}{Whether to include not annotated cells or not (labelled as "NA" in the group.by.composition) when summarizing into HiT object. Can be "no", "ifany", or "always". See \code{?table} and \link{get.celltype.composition} for more information. Default is "ifany".}
 
 \item{remerge}{When setting split.by, if remerge = TRUE one object will be returned. If remerge = FALSE a list of objects will be returned.}
 
 \item{bparam}{A \code{BiocParallel::bpparam()} object that tells Run.HiTME how to parallelize. If provided, it overrides the \code{ncores} parameter.}
 
-\item{ncores}{The number of cores to use}
+\item{ncores}{The number of cores to use, by default all available cores minus 2 are used.}
 
 \item{progressbar}{Whether to show a progressbar or not}
 }

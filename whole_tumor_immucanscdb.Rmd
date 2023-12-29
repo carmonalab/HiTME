@@ -13,8 +13,6 @@ knit: (function(input_file, encoding) {
 ```{r load_packages_functions, message=F, warning=F}
 renv::restore()
 
-#remotes::install_github("carmonalab/scGate", ref="dev")
-
 # load packages
 # pckgs <- c("tidyverse", "Seurat", "scGate",
 #            "Matrix", "patchwork",
@@ -22,7 +20,8 @@ renv::restore()
 #            "SignatuR", "ProjecTILs",
 #            "scCustomize", "UCell", "ProjecTILs")
 
-pckgs <- c("tidyverse", "ProjecTILs", "HiTME"
+pckgs <- c("tidyverse", "ProjecTILs"
+           # "HiTME"
            )
 for(package in pckgs){
   tryCatch(
@@ -38,12 +37,12 @@ for(package in pckgs){
 
 options(timeout=4000) # increase time out for downloading
 
-# source("R/utils.R")
-# source("R/main.R")
+source("R/utils.R")
+source("R/main.R")
 
 
 #dataset testing
-seu <- list("Galen_2019_30827681" = readRDS("data/galen_Test.rds"))
+#seu <- list("Galen_2019_30827681" = readRDS("data/galen_Test.rds"))
 
 my_seed <- 321
 set.seed(my_seed)
@@ -79,7 +78,7 @@ The list of datasets from https://immucanscdb.vital-it.ch/ are detailed in https
 
 We retrieve this dataframe from google drive
 
-```{r}
+```{r load_db_specs}
 imm.db <- readxl::read_xlsx("data/Standarized_datasets_DB.xlsx")
 ```
 
@@ -122,9 +121,10 @@ Now we will load the light (no small samples and downsampled) rds file for this 
 ```{r}
 rds <- imm.db %>%
         # get only whole tumor
-        filter(Enrichment_cell_types == "unbiased") %>% 
+        filter(Enrichment_cell_types %in% c("unbiased", "immune")) %>% 
+        filter(!grepl("SS2", RDS_id)) %>% 
         # get only datasets with >+ 10 samples/patients
-        filter(N_samples_light > 20) %>% 
+        # filter(N_samples_light > 9) %>% 
         select(RDS_id, CSI_Dataset_id) %>% 
         as.data.frame()
 
@@ -133,7 +133,7 @@ rds <- imm.db %>%
 ## Load immucanscdb selected datasets
 ```{r}
 # path to light rds
-light.path <- "~/Dropbox/CSI/Standardized_SingleCell_Datasets/immucanscdb/output/light_rds"
+light.path <- "~/Dropbox/CSI/Standardized_SingleCell_Datasets/immucanscdb/output/raw_light_rds/"
 
 #create a list to store the seurat objects
 seu <- list()
@@ -142,6 +142,7 @@ for(a in 1:nrow(rds)){
   # look for the rds in the light rds directory
   rds.file <- list.files(light.path, rds[a,1], full.names = T)
   #load file
+  if(length(rds.file)>0){
   tmp <- readRDS(rds.file)
   
   message("##### Loaded ", rds[a,2], "#####\n")
@@ -153,6 +154,7 @@ for(a in 1:nrow(rds)){
   
   # add to list
   seu[[rds[a,2]]] <- tmp
+  }
 }
 
 rm(tmp)
@@ -252,14 +254,15 @@ dev.off()
 ## Load ref
 
 ```{r}
-scGate_models_DB <- scGate::get_scGateDB(branch = "dev", force_update = F)
+
+#scGate_models_DB <- scGate::get_scGateDB(branch = "dev", force_update = F)
 # models.TME <- scGate_models_DB$human$TME_HiRes
 
 path_ref <- "~/Dropbox/CSI/reference_atlases" 
-ref.maps <- list(CD8 = load.reference.map(file.path(path_ref, "CD8T_human_ref_v1.rds")),
-          CD4 = load.reference.map(file.path(path_ref, "CD4T_human_ref_v2.rds")), 
-           DC = load.reference.map(file.path(path_ref, "DC_human_ref_v1.rds")), 
-          MoMac = load.reference.map(file.path(path_ref, "MoMac_human_v1.rds"))) 
+ref.maps <- list(CD8 = ProjecTILs::load.reference.map(file.path(path_ref, "CD8T_human_ref_v1.rds")),
+          CD4 = ProjecTILs::load.reference.map(file.path(path_ref, "CD4T_human_ref_v2.rds")), 
+           DC = ProjecTILs::load.reference.map(file.path(path_ref, "DC_human_ref_v1.rds")), 
+          MoMac = ProjecTILs::load.reference.map(file.path(path_ref, "MoMac_human_v1.rds"))) 
 
 # add scGate_link to ref.maps
 layer1.links <- list("CD8" = "CL:0000625",
@@ -283,13 +286,13 @@ names(stime) <- c("Dataset", "Sample", "N_cells", "ncores", "user.self",
 ```
 
 
-```{r}
-ncores = 8
+```{r, eval = F}
+ncores = 7
 
 for(a in names(seu)){
   # split into samples/patients
   if(!all(unique(seu[[a]]$group) %in% names(hit.list))){
-  dataset.list <- SplitObject(seu[[a]], split.by = "group")
+  dataset.list <- Seurat::SplitObject(seu[[a]], split.by = "group")
   
   for(b in names(dataset.list)){
     if(!b %in% names(seu.list)){
@@ -297,14 +300,15 @@ for(a in names(seu)){
     # Run annotate cells
     tryCatch(
       {
-      message("Running Run.HiTME dataset", a, ". Sample: ", b)
+      message("\nRunning Run.HiTME dataset", a, ". Sample: ", b)
       
       time <- system.time(
         
       seu.list[[b]] <- Run.HiTME(dataset.list[[b]],
-                             ref.maps = ref.maps,
-                            return.Seurat = T,
-                            ncores = ncores)
+                                 scGate.model.branch = "dev",
+                                 ref.maps = ref.maps,
+                                return.Seurat = T,
+                                ncores = ncores)
         
       )
       
@@ -321,8 +325,7 @@ for(a in names(seu)){
     
     # Get Hit object
     message("Creating Hit Object dataset", a, ". Sample: ", b)
-    hit.list[[b]] <- get.HiTObject(seu.list[[b]],
-                          group.by = c("scGate_multi", "functional.cluster"))
+    hit.list[[b]] <- get.HiTObject(seu.list[[b]])
       },
     error = function(e){
       message(e)
@@ -341,9 +344,12 @@ for(a in names(seu)){
 ```
 
 
+
+
+
 ```{r}
-saveRDS(seu.list, "cache/20datasets_annotated.rds")
-saveRDS(hit.list, "cache/20hit_annotated.rds")
+saveRDS(seu.list, "cache/20datasets_annotated_raw.rds")
+saveRDS(hit.list, "cache/20hit_annotated_raw.rds")
 ```
 
 
@@ -417,10 +423,10 @@ test <- scGate::scGate(t0$aml1012d0,
                ncores = 9)
 
 # no scGate, projectils, return Seurat
-test <- Run.HiTME(test,
+test <- Run.HiTME(t0$aml1012d0,
                   scGate.model.branch = "dev",
                   return.Seurat = T,
-                  ref.maps = ref.maps,
+                  ref.maps = NULL,
                   ncores = 9)
 
 # scGate, no projectils, return Seurat
@@ -445,18 +451,24 @@ View(test@meta.data)
 
 ```{r}
 # list
-test <- Run.HiTME(t0[4:6],
-                  scGate.model = NULL,
-                  # scGate.model.branch = "dev",
-                  return.Seurat = T,
-                  ref.maps = ref.maps,
-                  ncores = 9)
-
-test.by <- Run.HiTME(t0[9:10],
+test1 <- Run.HiTME(t0[4:6],
                   scGate.model.branch = "dev",
                   return.Seurat = F,
                   ref.maps = ref.maps,
+                  ncores = 9)
+
+test2 <- Run.HiTME(t0[4:6],
+                  scGate.model = NULL,
+                  return.Seurat = F,
+                  ref.maps = NULL,
                   ncores = 9, useNA = T)
+
+test.by <- Run.HiTME(t0[9:11],
+                  scGate.model = NULL ,
+                  return.Seurat = F,
+                  ref.maps = list(ref.maps[[2]], ref.maps[[3]]),
+                  ncores = 9,
+                  useNA = T)
 
 sp <- scCustomize::Merge_Seurat_List(t0[7:8])
 
@@ -465,8 +477,8 @@ object <- Run.HiTME(sp,
                   scGate.model.branch = "dev",
                   return.Seurat = F,
                   remerge = F,
-                  ref.maps = ref.maps,
-                  ncores = 9)
+                  ref.maps = ref.maps[2:3],
+                  ncores = 9, additional.signatures = NULL)
 hit.list <- list()
 for(a in names(testby)){
  hit.list[[a]] <- get.HiTObject(testby[[a]],
@@ -542,9 +554,210 @@ hit.na <- Run.HiTME(t0$aml328d113,
                   ncores = 9, useNA = T)
 ```
 
+# test new aggregated profile
 ```{r}
+ps <- Seurat::AggregateExpression(object,
+                                      group.by = group.by.aggregated[[1]],
+                                      assays = assay,
+                                      verbose = F)[[assay]]
+
+ps2 <- rowsum()
+
+
+tt <- get.aggregated.profile(object = dataset.list[[1]], 
+                       group.by.aggregated = "annotation")
+```
+
+
+
+# Cell type consistency analysis
+Load hit files
+```{r load_db_specs}
+imm.db <- readxl::read_xlsx("data/Standarized_datasets_DB.xlsx")
+```
+
+```{r}
+require(tidyverse)
+hit <- readRDS("cache/20hit_annotated_raw.rds")
+
+names(imm.db) <- tolower(names(imm.db))
+
+only.all = T
+# accommodate metdata
+for(a in names(hit)){
+  hit[[a]]@metadata <- left_join(hit[[a]]@metadata,
+                                 imm.db, by = "csi_dataset_id")
+  # keep only
+  if(only.all){
+    for(l in names(hit[[a]]@aggregated_profile$Pseudobulk)){
+      
+      hit[[a]]@aggregated_profile$Pseudobulk[[l]] <- hit[[a]]@aggregated_profile$Pseudobulk[[l]][["All.genes"]]
+      
+    }
+  }
+}
+```
+
+```{r}
+metadata.vars <- c("cancer_type", "treatment_type")
+t <- get.cluster.samples(hit,
+                     group.by = c("scGate_multi",
+                                  "functional.cluster"),
+                     metadata.vars = metadata.vars)
+
+
+matrix <- t$aggregated$layer1$`GO:0004896_Cytokine_activity`
+metadata <- t$aggregated$layer1$metadata
+silh <- cluster::silhouette(as.numeric(as.factor(metadata$celltype)),
+                            stats::dist(t(matrix)))
+print(factoextra::fviz_silhouette(silh)+
+                            theme(legend.position = "none"))
+
+mean(pl$data$sil_width)
+```
+
+
+```{r}
+matrix <- t$aggregated$layer2$`GO:0004896_Cytokine_activity`
+metadata <- t$aggregated$layer2$metadata
+
+
+group.by <- c("sample", "celltype")
+param <- BiocParallel::MulticoreParam(workers =  8, progressbar = T)
+cc <- get.cluster.score(matrix,
+                  metadata,
+                  group.by = group.by,
+                  dist.method = c("euclidean", "manhattan", "canberra"))
+```
+
+Do a summarizing pdf
+```{r}
+metadata.vars <- c("cancer_type", "treatment_type")
+pd <- get.cluster.samples(hit,
+                     group.by = c("scGate_multi",
+                                  "functional.cluster"),
+                     metadata.vars = metadata.vars,
+                     dist.method = c("euclidean"))
+
+require(ggpubr)
+
+pdf("figs/clustering_tests_scaled.pdf", width = 27, height = 18)
+for(l in c("layer1", "layer2")){
+  
+  for(gf in names(pd$aggregated$layer1)){
+    gpl <- list()
+    if(gf == "metadata"){
+      next
+    }
+    
+    
+    set <- pd$aggregated[[l]][[gf]]$clustering
+    for(sc in names(set)){
+    gpl <- append(gpl, set[[sc]]$plots)
+    
+    # do barplot with silhoutte value per celltype
+    bdf <- set[[sc]]$bygroup_average
+    
+    bpl <- bdf %>% 
+      ggplot(aes_string("average_sil_width", names(bdf)[1],
+                        size = "size", fill = names(bdf)[1])) +
+      geom_col() +
+      theme_classic()
+    gpl <- append(gpl, list(bpl))
+  }
+ ggpubpl <- ggarrange(plotlist = gpl, ncol = 3, nrow = 4)
+ ggpubpl <- annotate_figure(ggpubpl, top = text_grob(gf, 
+               color = "black", face = "bold", size = 22))
+  print(ggpubpl)
+  }
+ 
+}
+dev.off()
+```
+
+```{r}
+cc <- get.cluster.score(matrix = matrix,
+                        metadata = metadata,
+                        cluster.by = c("celltype", "sample"),
+                        ntests = 10,
+                        ndim = 10)
+
 
 ```
+
+```{r}
+metadata.vars <- c("cancer_type", "treatment_type")
+pd <- get.cluster.samples(hit,
+                     group.by = c("scGate_multi",
+                                  "functional.cluster"),
+                     metadata.vars = metadata.vars,
+                     dist.method = c("euclidean"),
+                     ncores = 6)
+```
+
+
+```{r}
+
+df <- pd$aggregated$layer2$clustering$sample_euclidean_silhouette$bygroup_average
+
+png("figs/confScore_silhoutte_scGate_sample.png", width = 1000, height = 600)
+plot.score(df, type = "barplot")
+dev.off()
+
+# treeplot
+d <- get.cluster.score(matrix = pd$aggregated$layer1$data,
+                       metadata = pd$aggregated$layer1$metadata,
+                       ntests = 100,
+                       ndim = 10,
+                       ncores = 6)
+```
+
+## Upset plot
+Try to see if the higher clustering of sample correlate with the cell types found within each sample
+```{r}
+library(UpSetR)
+
+layer <- "layer1"
+
+# get significant samples
+sigs <- pd$aggregated[[layer]]$clustering$sample_euclidean_silhouette$bygroup_average %>% 
+        filter(iteration == "NO" & p_val_adj >= 0.05) %>% 
+        pull(cluster)
+
+df.up <- data.frame(matrix(nrow=0, ncol = 2))
+names(df.up) <- c("celltype", "sample")
+for(a in sigs){
+  v <- hit[[a]]@composition[[layer]]$cell_counts
+  va <- names(v)[v>=10]
+  df <- data.frame(celltype = va,
+                   sample = rep(a, length(va)))
+  df.up <- rbind(df.up, df)
+}
+
+up.list <- split(df.up, df.up$celltype)
+
+up.list <- lapply(up.list, function(x){
+            x$sample
+})
+
+# Create the upset plot
+up.pl <- upset(fromList(up.list), order.by = "freq", nsets = length(up.list))
+
+png("figs/upset_sample_scGate_notsig.png", width = 1400, height = 1000)
+up.pl
+dev.off()
+
+```
+
+
+
+
+
+
+
+
+
+
 
 
 
