@@ -42,7 +42,7 @@ Imports:
   SignatuR (>= 0.1.2),
   dplyr (>= 1.1.4),
   ggplot2 (>= 3.4.4),
-  cowplot (>= 1.1.1)
+  cowplot (>= 1.1.1),
   Seurat (>= 5.0.0),
   SeuratObject (>= 5.0.0),
   stringr (>= 1.5.1),
