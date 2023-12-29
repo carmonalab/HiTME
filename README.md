@@ -1,6 +1,6 @@
 # HiTME :dart: :facepunch:
 
-New tool for classifying all cell types in the tumor microenvironment
+High-resolution Tumor Micro-Environment cell type classification and compositional analysis for single-cell RNA-seq
 
 ### Installation
 
@@ -12,11 +12,11 @@ remotes::install_github("carmonalab/HiTME")
 
 # Cell type annotation
 
-**HiTME's `Run.HiTME` is a wrapper of [scGate](https://github.com/carmonalab/scGate) and [ProjecTILs](https://github.com/carmonalab/ProjecTILs) to classify cell types in single-cell RNA-seq experiments.**
+**HiTME's `Run.HiTME` is an R package that combines [scGate](https://github.com/carmonalab/scGate) and [ProjecTILs](https://github.com/carmonalab/ProjecTILs) to classify cell types in single-cell RNA-seq data at high resolution and with great flexibility and transparency.**
 
 The function takes as input `Seurat` objects (or list of them). These should be split by sample to avoid batch effects, or split internally in `Run.HitME` by indicating the parameter `split.by`.
 
-This wrapper firstly runs [scGate](https://github.com/carmonalab/scGate) on TME (Tumor micronenvirontment) default models or alternatively on the models provided, resulting in a coarse cell type classification (CD4T, B cell, Dendritic cell...). Next, it runs [ProjecTILs](https://github.com/carmonalab/ProjecTILs) for a finer cell type classification (CD4+ TFH, Tex CD8+, cDC1...) based on the references provided on the cell types classified by [scGate](https://github.com/carmonalab/scGate) that are linked to a respective reference map.
+This wrapper firstly runs [scGate](https://github.com/carmonalab/scGate) (easily customizable) marker-based classification, resulting in a coarse-grained cell type classification (CD4T, B cell, Dendritic cell...). Next, it runs for each broad cell type [ProjecTILs](https://github.com/carmonalab/ProjecTILs) for a finer cell type classification (CD4+ TFH, Tex CD8+, cDC1...) based on cell mapping onto expert-curated single-cell reference maps.
 
 ``` r
 library(scGate)
@@ -116,6 +116,7 @@ The Hit object summarize the cell type annotation and contain the following slot
 2.  Cell type predictions for each cell in the data set (list): `predictions`
 
 3.  Cell type composition for each layer of cell type prediction: `composition`. Including:
+
 
     3.1. cell counts
 
