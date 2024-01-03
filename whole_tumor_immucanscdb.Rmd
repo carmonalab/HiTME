@@ -20,8 +20,8 @@ renv::restore()
 #            "SignatuR", "ProjecTILs",
 #            "scCustomize", "UCell", "ProjecTILs")
 
-pckgs <- c("tidyverse", "ProjecTILs"
-           # "HiTME"
+pckgs <- c("tidyverse", "ProjecTILs",
+           "HiTME"
            )
 for(package in pckgs){
   tryCatch(
@@ -167,6 +167,10 @@ seu[["JoaI_2022_35773407"]] <-
   readRDS("~/Dropbox/CSI/Standardized_SingleCell_Datasets/JoaI_2022_35773407/output/JoaI_2022_35773407_Nofilt_Downsampled_light.rds")
 
 seu[["JoaI_2022_35773407"]]$CSI_Dataset_id <- "Joanito_2022_35773407"
+
+# agrement of metafeatures??
+table(rownames(seu[["JoaI_2022_35773407"]][["RNA"]]@data) == rownames(seu[["JoaI_2022_35773407"]][["RNA"]]@meta.features))
+table(rownames(seu[["JoaI_2022_35773407"]][["RNA"]]@counts) == rownames(seu[["JoaI_2022_35773407"]][["RNA"]]@meta.features))
 ```
 
 ## Explore list metadata
