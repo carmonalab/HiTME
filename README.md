@@ -1,6 +1,10 @@
 # HiTME :dart: :facepunch:
 
-High-resolution Tumor Micro-Environment cell type classification and compositional analysis for single-cell RNA-seq
+## High-resolution Tumor Micro-Environment cell type classification and compositional analysis for single-cell RNA-seq
+
+HiTME is designed for precise cell type classification within the complex tumor microenvironment (TME), providing high accuracy and interpretability in cell type identification.
+
+Find a vignette describing its main functions in [html](https://carmonalab.github.io/HiTME_CaseStudies/HiTME_demo.html) and its [code (repository)](https://github.com/carmonalab/HiTME_CaseStudies).
 
 ### Installation
 
@@ -12,7 +16,7 @@ remotes::install_github("carmonalab/HiTME")
 
 # Cell type annotation
 
-**HiTME's `Run.HiTME` is an R package that combines [scGate](https://github.com/carmonalab/scGate) and [ProjecTILs](https://github.com/carmonalab/ProjecTILs) to classify cell types in single-cell RNA-seq data at high resolution and with great flexibility and transparency.**
+**HiTME's is an R package that combines [scGate](https://github.com/carmonalab/scGate) and [ProjecTILs](https://github.com/carmonalab/ProjecTILs) to classify cell types in single-cell RNA-seq data at high resolution and with great flexibility and transparency.**
 
 The function takes as input `Seurat` objects (or list of them). These should be split by sample to avoid batch effects, or split internally in `Run.HitME` by indicating the parameter `split.by`.
 
