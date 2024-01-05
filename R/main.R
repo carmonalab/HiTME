@@ -97,7 +97,7 @@ Run.HiTME <- function(object = NULL,
   }
 
   if(!return.Seurat && is.null(group.by)){
-    message("If setting return Seurat as FALSE, HiT summarized object will be returned. Need to indicate group.by variable indicating cell type classification\n
+    warning("If setting return Seurat as FALSE, HiT summarized object will be returned. Need to indicate group.by variable indicating cell type classification\n
          e.g. group.by = list(\"layer1\" = c(\"scGate_multi\"),\"layer2\" = c(\"functional.cluster\"))\n
             Returning Seurat object, not HiT object.")
     return.Seurat = TRUE
@@ -1493,6 +1493,155 @@ plot.confusion.matrix <- function(object = NULL,
                                                              vjust = 1))
 
   return(plot)
+}
+
+#' Plot gene expression along scGate model
+#'
+#'
+#' @param object Seurat object or list of them, if list is provided one plot per Seurat object is returned
+#' @param scGate.model scGate model to plot their gating genes
+#' @param group.by Whether to group gene expression by a variable in metadata
+#' @param split.by Whether to generate one plot for each grouping variable provided
+
+#' @import scGate
+#' @importFrom Seurat VlnPlot
+#' @importFrom ggplot2 ylab ggtitle ggplot theme_void
+#' @importFrom ggpubr ggarrange annotate_figure
+
+#' @return Plots to evaluate the gene expression of scGate models
+#' @export plot_gene_gating
+#'
+
+plot_gene_gating <- function(object = NULL,
+                        scGate.model = NULL,
+                        group.by = NULL,
+                        split.by = NULL
+){
+
+  if (is.null(object)) {
+    stop("Please provide a Seurat object or a list of them")
+  }
+
+  if(is.list(object) && !is.null(split.by)){
+    stop("split.by only supported for a single Seurat object, not a list.\n
+         Merge list before running HiTME")
+  }
+
+  if (is.null(scGate.model)) {
+    stop("Please provide a scGate model or list of them")
+  }
+
+  if(!is.list(scGate.model)){
+    scGate.model <- list("scGate_model" = scGate.model)
+  }
+
+  # split object into a list if indicated
+  if (!is.null(split.by)) {
+    if(is.list(object)){
+      stop("Split.by argument not supported when providing a list of Seurat objects. Set split.by = NULL or merge list.")
+    }
+    if(!split.by %in% names(object@meta.data)){
+      stop(paste("split.by argument: ", split.by, " is not a metadata column in this Seurat object"))
+    }
+    object <- Seurat::SplitObject(object, split.by = split.by)
+
+  }
+
+  if (!is.null(group.by)) {
+    if(!group.by %in% names(object@meta.data)){
+      stop(paste("group.by argument: ", group.by, " is not a metadata column in this Seurat object"))
+    }
+  } else {
+    group.by <- "orig.ident"
+  }
+
+  # if object is unique turn into a list
+  if(!is.list(object)){
+    object <- list("object" = object)
+  }
+
+  plots <- list()
+  # render plots
+  model <- scGate:::table.to.model(scGate.model)
+
+  suppressWarnings(
+    {
+  for(ob in names(object)){
+    if(class(object[[ob]]) != "Seurat"){
+      stop("Not Seurat object included, cannot be processed.\n")
+    }
+
+    # keep only genes expressed
+    sc_names <- rownames(object[[ob]])[rowSums(object[[ob]]) > 0]
+    # make plot list for each level
+    pl.list <- list()
+
+    for(a in names(model)){
+      m <- model[[a]] %>% unlist(recursive = F)
+      pl.sublist <- list()
+      for(e in names(m)){
+        # remove - sign on negative markers
+        feat <- m[[e]] %>% gsub("-", "", .)
+
+        feat <- intersect(feat, sc_names)
+
+        if(length(feat)>0){
+        # do not stack if only one gene is present
+        stack <- ifelse(length(feat)>1, T, F)
+
+        pl.sublist[[e]] <-
+            Seurat::VlnPlot(object[[ob]],
+                                     features = feat,
+                                     group.by = group.by,
+                                     stack = stack,
+                                      pt.size = 0,
+                                     flip = T) +
+                            ggplot2::ggtitle(e) +
+                            Seurat::NoLegend() +
+                            ggplot2::xlab("") +
+                            {if(length(feat) == 1){
+                              ggplot2::ylab(feat)
+                            }} +
+                          ggplot2::theme(plot.title = element_text(hjust = 0.5))
+
+        }
+      }
+
+      pl.list[[a]] <- pl.sublist
+    }
+
+    # max number of plots
+    max <- lapply(pl.list, length) %>% unlist() %>% max()
+
+    for(p in names(pl.list)){
+
+      # add blank plots if needed
+      while(length(pl.list[[p]])<max){
+        void <- ggplot2::ggplot() + ggplot2::theme_void()
+        pl.list[[p]][[paste0("void", length(pl.list[[p]])+1)]] <- void
+      }
+
+      join.plot <- ggpubr::ggarrange(plotlist = pl.list[[p]],
+                                     ncol= 1,
+                                     nrow = length(pl.list[[p]]))
+      join.plot <- ggpubr::annotate_figure(join.plot,
+                                           top = ggpubr::text_grob(p, face = "bold",
+                                                                   color = "darkblue",
+                                                                   size = 26))
+
+      pl.list[[p]] <- join.plot
+    }
+
+
+    plots[[ob]] <- ggpubr::ggarrange(plotlist = pl.list,
+                                   nrow= 1,
+                                   ncol = length(pl.list))
+
+  }
+    })
+
+  return(plots)
+
 }
 
 
