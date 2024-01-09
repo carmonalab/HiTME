@@ -93,6 +93,12 @@ ProjecTILs.classifier.multi <- function(object,
                             #remove duplicated rownames (classified by different ref.maps)
                             dplyr::filter(!duplicated(rn)) %>%
                             tibble::column_to_rownames("rn")
+
+    # remove already present functional.cluster columns
+    rm <- grep("^functional.cluster", names(object@meta.data))
+    if(length(rm) > 0){
+      object@meta.data <- object@meta.data[, -rm, drop = F]
+    }
     object@meta.data <- merge(object@meta.data, functional.clusters, by = 0, all.x = T) %>%
                         tibble::column_to_rownames("Row.names")
 
