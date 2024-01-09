@@ -37,8 +37,8 @@ for(package in pckgs){
 
 options(timeout=4000) # increase time out for downloading
 
-source("R/utils.R")
-source("R/main.R")
+# source("R/utils.R")
+# source("R/main.R")
 
 
 #dataset testing
@@ -752,6 +752,22 @@ up.pl
 dev.off()
 
 ```
+
+# scGate plot
+```{r}
+scGate_models_DB <- scGate::get_scGateDB(branch = "dev", force_update = T)
+models.TME <- scGate_models_DB$human$HiTME
+
+obj <- merge(object[[1]], object[-1])
+p <- plot_gene_gating(obj[,obj$cellType == "B_cell"],
+                 group.by = "scGate_multi",
+               scGate.model = models.TME$MoMac)
+
+png("figs/gene_Gating_momac.png", width = 1200, height = 2800)
+p
+dev.off()
+```
+
 
 
 
