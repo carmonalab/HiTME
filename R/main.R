@@ -68,7 +68,6 @@ Run.HiTME <- function(object = NULL,
                        species = "human",
                        bparam = NULL,
                        ncores = parallelly::availableCores() - 2,
-                       ncores.limit = TRUE,
                        progressbar = TRUE
                        ){
 
