@@ -555,7 +555,7 @@ get.celltype.composition <- function(object = NULL,
     stop("Split.by variable not found in meta.data!\n")
   }
 
-  if(length(useNA) != 1 && length(useNA) == length(group.by.composition)){
+  if(length(useNA) != 1 && length(useNA) != length(group.by.composition)){
     stop("useNA variable must be of length 1 or the same length as group.by.composition (group.by)")
   }
 
