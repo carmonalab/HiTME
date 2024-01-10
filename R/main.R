@@ -257,7 +257,7 @@ Run.HiTME <- function(object = NULL,
 
     # check that all ref maps are Seurat objects
     if(suppressWarnings(!all(lapply(ref.maps, function(x){class(x) == "Seurat"})))){
-      message("Some or all reference maps are not a Seurat object, please prodive refenrece maps as Seurat objects.\nNot running Projectils.")
+      message("Some or all reference maps are not a Seurat object, please provide reference maps as Seurat objects.\nNot running Projectils.")
     } else {
 
       message("## Running Projectils\n")
