@@ -653,7 +653,8 @@ get.celltype.composition <- function(object = NULL,
       ctable <- compositional_data(data = meta.data,
                                    split.by = split.by,
                                    group.by.1 = group.by.composition[[i]],
-                                   useNA = useNA[i])
+                                   useNA = useNA[i],
+                                   clr_zero_impute_perc = clr_zero_impute_perc)
 
       # stop if very few cells
       if (sum(ctable$cell_counts) < min.cells) {

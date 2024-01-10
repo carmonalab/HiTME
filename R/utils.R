@@ -735,7 +735,8 @@ set_paralel_params <- function(ncores,
 compositional_data <- function(data,
                                split.by = NULL,
                                group.by.1 = NULL,
-                               useNA = FALSE
+                               useNA = FALSE,
+                               clr_zero_impute_perc = 1
                               ){
 
   # set grouping variables
