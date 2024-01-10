@@ -769,6 +769,84 @@ dev.off()
 ```
 
 
+# Change get.composition
+```{r}
+object = bassez$BIOKEY_13_Pre
+object <- merge(bassez$BIOKEY_13_Pre, bassez$BIOKEY_14_Pre)
+# group.by.composition = list("layer1" = c("scGate_multi"),
+#                                        "layer2" = c("functional.cluster"))
+group.by.composition = c("scGate_multi","functional.cluster")
+split.by = NULL
+min.cells = 10
+useNA = FALSE
+clr_zero_impute_perc = 1
+
+layers_links = c("scGate_multi" = "functional.cluster")
+```
+
+```{r}
+ctable = compositional_data(data = meta.data,
+                   split.by = "sample",
+                   group.by.1 = "scGate_multi"
+                   )
+```
+
+## tests
+```{r}
+source("R/main.R")
+source("R/utils.R")
+
+bassez <- readRDS("~/Dropbox/CSI/Standardized_SingleCell_Datasets/BassezA_2021_33958794/output/BassezA_2021_33958794_3patients.rds")
+
+```
+
+```{r}
+bassez <- Run.HiTME(bassez,
+                    ref.maps = ref.maps,
+                    split.by = "sample",
+                    remerge = T)
+```
+
+```{r}
+hit <- list()
+for(a in names(bassez)){
+  hit[[a]] <- get.HiTObject(bassez,
+                            group.by = list("layer1" = "scGate_multi",
+                                          "layer2" = "functional.cluster",
+                                     "layer1.2" =  "annotation_chetah",
+                                     "layer0" = "baba"
+                                          ))
+}
+```
+
+```{r}
+hit <- get.HiTObject(bassez,
+              group.by = list("layer1" = "scGate_multi",
+                            "layer2" = "functional.cluster",
+                       "layer1.2" =  "annotation_chetah",
+                       "layer0" = "baba"
+                            ),
+              split.by = "sample")
+```
+
+
+```{r}
+tes <- get.celltype.composition(object = bassez,
+                                split.by = "sample",
+                                group.by.composition = list("layer1" = "scGate_multi",
+                                          "layer2" = "functional.cluster",
+                                     "layer1.2" =  "annotation_chetah",
+                                     "layer0" = "baba"
+                                          ))
+```
+
+
+
+
+
+
+
+
 
 
 
