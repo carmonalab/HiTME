@@ -122,11 +122,11 @@ The Hit object summarize the cell type annotation and contain the following slot
 3.  Cell type composition for each layer of cell type prediction: `composition`. Including:
 
 
-    3.1. cell counts
+    3.1. Cell counts
 
-    3.2. frequency
+    3.2. Frequency
 
-    3.3. CLR (Central log ratio)-transformed frequency
+    3.3. Centered log-ratio (clr)-transformed frequency
 
 4.  Aggregated profile of predicted cell types: `aggregated_profile`. Including:
 
