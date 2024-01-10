@@ -27,6 +27,10 @@ ProjecTILs.classifier.multi <- function(object,
                               ct <- x@misc$layer1_link
                               nrow(object@meta.data[object@meta.data[[layer1_link]] %in% ct,])
                             })
+    # save names of reference maps run
+    object@misc[["Projectils_param"]][["user_specified"]] <- names(ref.maps)
+    all_subtypes <- unlist(ref.maps %>% sapply("[[", "functional.cluster") %>% sapply(levels))
+
     present <- names(ref.maps[map.celltypes > 1])
     no.present <- names(ref.maps)[!names(ref.maps) %in% present]
 
@@ -103,12 +107,13 @@ ProjecTILs.classifier.multi <- function(object,
                         tibble::column_to_rownames("Row.names")
 
     # save names of reference maps run
-    object@misc[["Projectils_param"]] <- names(ref.maps)
+    object@misc[["Projectils_param"]][["executed"]] <- names(ref.maps)
   } else {
     object@meta.data <- object@meta.data %>%
                         dplyr::mutate(functional.cluster = NA,
                                       functional.cluster.conf = NA)
   }
+  oject@meta.data[["functional.cluster"]] <- factor(object@meta.data[["functional.cluster"]], levels = all_subtypes)
   }
 
 
