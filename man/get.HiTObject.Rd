@@ -10,8 +10,10 @@ get.HiTObject(
   name.additional.signatures = NULL,
   useNA = FALSE,
   clr_zero_impute_perc = 1,
+  layers_links = c(scGate_multi = "functional.cluster"),
   gene.filter = NULL,
-  assay = "RNA"
+  assay = "RNA",
+  layer1_link = "CellOntology_ID"
 )
 }
 \arguments{
@@ -25,9 +27,13 @@ get.HiTObject(
 
 \item{clr_zero_impute_perc}{Parameter for internal \link{get.celltype.composition}.}
 
+\item{layers_links}{Parameter for internal \link{get.celltype.composition}}
+
 \item{gene.filter}{List of genes to subset for aggregated expression. Parameter for internal \link{get.aggregated.profile}.}
 
 \item{assay}{Parameter for internal \link{get.aggregated.profile}.}
+
+\item{layer1_link}{Column of metadata linking layer1 prediction (e.g. scGate ~ CellOntology_ID) in order to perform subsetting for second layer classification.}
 }
 \value{
 HiT object summarizing cell type classification and aggregated profiles.

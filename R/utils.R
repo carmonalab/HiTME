@@ -113,7 +113,7 @@ ProjecTILs.classifier.multi <- function(object,
                         dplyr::mutate(functional.cluster = NA,
                                       functional.cluster.conf = NA)
   }
-  oject@meta.data[["functional.cluster"]] <- factor(object@meta.data[["functional.cluster"]], levels = all_subtypes)
+  object@meta.data[["functional.cluster"]] <- factor(object@meta.data[["functional.cluster"]], levels = all_subtypes)
   }
 
 
@@ -729,5 +729,54 @@ set_paralel_params <- function(ncores,
 }
 
 
+###################################################################################################
+# Function to compute compositional data with dplyr
 
+compositional_data <- function(data,
+                               split.by = NULL,
+                               group.by.1 = NULL,
+                               useNA = FALSE
+                              ){
+
+  # set grouping variables
+  gr_vars <- c(split.by, group.by.1)
+  gr_vars2 <- c(split.by)
+
+
+  ctable <- data %>%
+    # drop = F keeps all levels of the factor
+    dplyr::group_by(across(all_of(gr_vars)), .drop = F) %>%
+    dplyr::summarize(cell_counts = n()) %>%
+    dplyr::ungroup() %>%
+    dplyr::filter(if (!useNA) !is.na(.data[[group.by.1]])
+                  else rep(TRUE, n())) %>%
+    dplyr::group_by(across(all_of(gr_vars2))) %>%
+    dplyr::mutate(freq = cell_counts/sum(cell_counts) * 100) %>%
+    as.data.frame()
+
+
+    # compute clr
+  clr.df <- ctable %>%
+    dplyr::select(-cell_counts) %>%
+    # add pseudocount
+    dplyr::mutate(freq = freq + clr_zero_impute_perc) %>%
+    tidyr::pivot_wider(names_from = group.by.1,
+                       values_from = "freq")
+  # accomodate df for clr transformation
+  ## Remove character columns
+  chr_cols <- sapply(clr.df, is.character)
+  chr_cols <- names(clr.df)[chr_cols]
+  clr.df.ref <- clr.df %>% dplyr::select(!all_of(chr_cols))
+
+  clr <- Hotelling::clr(clr.df.ref)
+  # add extra cols (if any)
+  clr <- cbind(clr.df[,chr_cols],clr)  %>%
+          tidyr::pivot_longer(-chr_cols, names_to = group.by.1, values_to = "clr")
+  # join clr df to main dataframe
+  ctable <- dplyr::left_join(ctable, clr, by = c(chr_cols, group.by.1))
+
+
+  return(ctable)
+
+}
 

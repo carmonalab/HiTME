@@ -10,11 +10,13 @@ get.celltype.composition(
   split.by = NULL,
   min.cells = 10,
   useNA = FALSE,
-  clr_zero_impute_perc = 1
+  layers_links = c(scGate_multi = "functional.cluster"),
+  clr_zero_impute_perc = 1,
+  layer1_link = "CellOntology_ID"
 )
 }
 \arguments{
-\item{object}{A seurat object or metadata dataframe.}
+\item{object}{A seurat object}
 
 \item{group.by.composition}{The Seurat object metadata column(s) containing celltype annotations (provide as character vector, containing the metadata column name(s))}
 
@@ -25,6 +27,10 @@ get.celltype.composition(
 \item{useNA}{Whether to include not annotated cells or not (labelled as "NA" in the group.by.composition). Can be defined separately for each group.by.composition (provide single boolean or vector of booleans)}
 
 \item{clr_zero_impute_perc}{To calculate the clr-transformed relative abundance ("clr_freq"), zero values are not allowed and need to be imputed (e.g. by adding a pseudo cell count). Instead of adding a pseudo cell count of flat +1, here a pseudo cell count of +1\% of the total cell count will be added to all cell types, to better take into consideration the relative abundance ratios (e.g. adding +1 cell to a total cell count of 10 cells would have a different, i.e. much larger effect, than adding +1 to 1000 cells).}
+
+\item{layer1_link}{Column of metadata linking layer1 prediction (e.g. scGate ~ CellOntology_ID) in order to perform subsetting for second layer classification.}
+
+\item{layers_link}{Named vector indicating the relation of multiple layer classification, default is \code{c("scGate_multi", "functional.cluster")}. Name of the vector element ought to be layer1 and element layer2. This parameter is used to compute relative compositional data of layer2 within layer1 classes.}
 }
 \value{
 Cell type compositions as a list of data.frames containing cell counts, relative abundance (freq) and clr-transformed freq (freq_clr), respectively.

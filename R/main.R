@@ -68,8 +68,7 @@ Run.HiTME <- function(object = NULL,
                        species = "human",
                        bparam = NULL,
                        ncores = parallelly::availableCores() - 2,
-                       progressbar = TRUE
-                       ){
+                       progressbar = TRUE){
 
   if (is.null(object)) {
     stop("Please provide a Seurat object or a list of them")
@@ -200,7 +199,6 @@ Run.HiTME <- function(object = NULL,
                                         BPPARAM = param,
                                         multi.asNA = T)
 
-
                     x@misc[["layer1_param"]] <- list()
                     x@misc[["layer1_param"]][["layer1_models"]] <- names(scGate.model)
                     x@misc[["layer1_param"]][["additional.signatures"]] <- names(additional.signatures)
@@ -297,6 +295,32 @@ Run.HiTME <- function(object = NULL,
     object <- list(object)
   }
 
+  # add layer_links metadata levels
+  object <- lapply(object,
+                   function(x){
+                     if(!is.null(scGate.model)){
+                       x$scGate_multi <- factor(x$scGate_multi,
+                                                levels = names(scGate.model))
+                     }
+                     if(!is.null(ref.maps)){
+                       # get ref.maps all cells types
+                       all.levels <- lapply(ref.maps, function(x){
+                         unique(x$functional.cluster)
+                       })
+                       x$functional.cluster <- factor(x$functional.cluster,
+                                                      levels = unlist(all.levels))
+
+                       # add each level to misc
+                       names(all.levels) <- lapply(ref.maps, function(x){
+                         x@misc$layer1_link
+                       })
+                       x@misc[["layer2_levels"]] <- all.levels
+
+                     }
+                     return(x)
+
+                   })
+
 
   # if group.by parameters are not present in metadata, return Seurat
   if(!return.Seurat){
@@ -323,19 +347,18 @@ Run.HiTME <- function(object = NULL,
 
   # if list is of 1, return object not list
 
-  if (!is.null(object)) {
-    if(return.Seurat){
-      if(length(object)==1){
-        object <- object[[1]]
-      }
-      return(object)
-    } else {
-      if(length(hit)==1){
-        hit <- hit[[1]]
-      }
-      return(hit)
+  if(return.Seurat){
+    if(length(object)==1){
+      object <- object[[1]]
     }
+    return(object)
+  } else {
+    if(length(hit)==1){
+      hit <- hit[[1]]
+    }
+    return(hit)
   }
+
 
 }
 
@@ -351,8 +374,10 @@ Run.HiTME <- function(object = NULL,
 #' @param name.additional.signatures Names of additional signatures as found in object metadata to take into account.
 #' @param useNA logical whether to return aggregated profile for NA (undefined) cell types, default is FALSE.
 #' @param clr_zero_impute_perc Parameter for internal \link{get.celltype.composition}.
+#' @param layers_links Parameter for internal \link{get.celltype.composition}
 #' @param gene.filter List of genes to subset for aggregated expression. Parameter for internal \link{get.aggregated.profile}.
 #' @param assay Parameter for internal \link{get.aggregated.profile}.
+#' @param layer1_link Column of metadata linking layer1 prediction (e.g. scGate ~ CellOntology_ID) in order to perform subsetting for second layer classification.
 #'
 #' @importFrom methods setClass new
 #' @import SeuratObject
@@ -369,8 +394,10 @@ get.HiTObject <- function(object,
                           name.additional.signatures = NULL,
                           useNA = FALSE,
                           clr_zero_impute_perc = 1,
+                          layers_links = c("scGate_multi" = "functional.cluster"),
                           gene.filter = NULL,
-                          assay = "RNA"
+                          assay = "RNA",
+                          layer1_link = "CellOntology_ID"
                           ){
 
 
@@ -397,8 +424,8 @@ get.HiTObject <- function(object,
   }
 
   for(v in seq_along(group.by)){
-    if(is.null(names(group.by[[v]])) || is.na(names(group.by[[v]]))){
-      names(group.by[[v]]) <- paste0("layer", v)
+    if(is.null(names(group.by)[[v]]) || is.na(names(group.by)[[v]])){
+      names(group.by)[[v]] <- paste0("layer", v)
     }
   }
 
@@ -462,7 +489,9 @@ get.HiTObject <- function(object,
   comp.prop <- get.celltype.composition(object,
                                         group.by.composition = group.by,
                                         useNA = useNA,
-                                        clr_zero_impute_perc = clr_zero_impute_perc)
+                                        clr_zero_impute_perc = clr_zero_impute_perc,
+                                        layer1_link = layer1_link,
+                                        layers_links = layers_links)
   # Compute avg expression
   message("\nComputing aggregated profile...\n")
 
@@ -495,15 +524,20 @@ get.HiTObject <- function(object,
 
 #' Calculate cell type composition or frequencies
 #'
-#' @param object A seurat object or metadata dataframe.
+#' @param object A seurat object
 #' @param group.by.composition The Seurat object metadata column(s) containing celltype annotations (provide as character vector, containing the metadata column name(s))
 #' @param split.by A Seurat object metadata column to split by (e.g. sample names)
 #' @param min.cells Set a minimum threshold for number of cells to calculate relative abundance (e.g. less than 10 cells -> no relative abundance will be calculated)
-
 #' @param useNA Whether to include not annotated cells or not (labelled as "NA" in the group.by.composition). Can be defined separately for each group.by.composition (provide single boolean or vector of booleans)
+#' @param layers_link Named vector indicating the relation of multiple layer classification, default is \code{c("scGate_multi", "functional.cluster")}. Name of the vector element ought to be layer1 and element layer2. This parameter is used to compute relative compositional data of layer2 within layer1 classes.
 #' @param clr_zero_impute_perc To calculate the clr-transformed relative abundance ("clr_freq"), zero values are not allowed and need to be imputed (e.g. by adding a pseudo cell count). Instead of adding a pseudo cell count of flat +1, here a pseudo cell count of +1% of the total cell count will be added to all cell types, to better take into consideration the relative abundance ratios (e.g. adding +1 cell to a total cell count of 10 cells would have a different, i.e. much larger effect, than adding +1 to 1000 cells).
+#' @param layer1_link Column of metadata linking layer1 prediction (e.g. scGate ~ CellOntology_ID) in order to perform subsetting for second layer classification.
 
 #' @importFrom Hotelling clr
+#' @importFrom dplyr group_by summarize filter ungroup mutate select left_join
+#' @importFrom tidyr pivot_wider
+#' @importFrom tibble column_to_rownames
+#'
 #' @return Cell type compositions as a list of data.frames containing cell counts, relative abundance (freq) and clr-transformed freq (freq_clr), respectively.
 #' @export get.celltype.composition
 #'
@@ -526,7 +560,9 @@ get.celltype.composition <- function(object = NULL,
                                      split.by = NULL,
                                      min.cells = 10,
                                      useNA = FALSE,
-                                     clr_zero_impute_perc = 1) {
+                                     layers_links = c("scGate_multi" = "functional.cluster"),
+                                     clr_zero_impute_perc = 1,
+                                     layer1_link = "CellOntology_ID") {
 
   if (is.null(object)) {
     stop("Please provide a Seurat object or metadata as dataframe")
@@ -539,8 +575,6 @@ get.celltype.composition <- function(object = NULL,
     if(is.null(meta.data)){
       stop("No metadata found in this Seurat object")
       }
-  } else if (class(object) == "data.frame"){
-    meta.data <- object
   } else {
     stop("Not Seurat object or dataframe included, cannot be processed.\n")
   }
@@ -548,7 +582,6 @@ get.celltype.composition <- function(object = NULL,
   if(is.null(group.by.composition)){
     stop("Please specificy a group.by.composition variable")
   }
-
 
   # Assess wheter split.by variable is in metadata
   if(!is.null(split.by) && !split.by %in% names(meta.data)){
@@ -590,9 +623,20 @@ get.celltype.composition <- function(object = NULL,
     message("Only found ", paste(group.by.composition, collapse = ", ") , " as grouping variables.")
   }
 
+  # Factorize cell type to keep all in compositional data
+  meta.data <- meta.data %>%
+                dplyr::mutate_at(unlist(group.by.composition), as.factor)
 
-  # Convert TRUE/FALSE to ifany or no
-  useNA <- ifelse(useNA == TRUE, "ifany", "no")
+  # evaluate which layers are included in group.by.composition and layers_links
+  for(l in seq_along(layers_links)){
+    if(!all(c(names(layers_links[1]), layers_links[1]) %in%
+           group.by.composition)){
+      message("Not computing relative proportion values of layer2 within layer1 for ",
+              paste0(names(layers_links[1]), " -> ", layers_links[1]))
+    }
+  }
+
+
   # Rep useNa parameters according to group.by.composition variable
   if (length(useNA) == 1) {
     useNA <- rep(useNA, length(group.by.composition))
@@ -603,30 +647,58 @@ get.celltype.composition <- function(object = NULL,
 
 
   for (i in seq_along(group.by.composition)) {
-    if (is.null(split.by)) {
-      comp_table <- table(meta.data[[group.by.composition[[i]]]],
-                          useNA = useNA[i])
-      comp_table_freq <- prop.table(comp_table) * 100 # To get percentage
-    } else {
-      comp_table <- table(meta.data[[group.by.composition[[i]]]],
-                          meta.data[[split.by]],
-                          useNA = useNA[i])
-      comp_table_freq <- prop.table(comp_table, margin = 2) * 100 # To get percentage
-    }
 
-    if (sum(comp_table) < min.cells) {
-      warning(paste("There are less than", min.cells,
-                    "cells detected. This is too few to calculate a reasonable celltype composition, If needed, set parameter min.cells = 0."))
-      next
-    }
+      suppressMessages(
+        {
+      ctable <- compositional_data(data = meta.data,
+                                   split.by = split.by,
+                                   group.by.1 = group.by.composition[[i]],
+                                   useNA = useNA[i])
 
-    ## clr-transform
-    comp_table_clr <- Hotelling::clr(t(comp_table_freq + clr_zero_impute_perc))
+      # stop if very few cells
+      if (sum(ctable$cell_counts) < min.cells) {
+        warning(paste("There are less than ", min.cells,
+                      "cells detected for ", group.by.composition[[i]],
+                      ". This is too few to calculate a reasonable celltype composition.\nIf needed, set parameter min.cells = 0."))
+        next
+      }
+
+      # get proportion relative to layer1 types
+      if(group.by.composition[[i]] %in% layers_links){
+        lay <- layers_links[which(group.by.composition[[i]] %in% layers_links)]
+        meta.split <- split(meta.data, meta.data[[names(lay)]])
+        # switch list names to cell ontology ID
+        cellonto_dic <- lapply(meta.split, function(x){
+                        nam <- unique(x[[names(lay)]])
+                        val <- unique(x[[layer1_link]])
+                        names(val) <- nam
+                        return(val)
+          }) %>% unname() %>%  unlist()
+
+        levs <- object@misc$layer2_levels
+        names(levs) <- names(cellonto_dic[match(names(levs), cellonto_dic)])
+
+
+        # Filter only layer1 cells with representation in layer2
+        meta.split <- meta.split[names(levs)]
+
+        # add factor to group by layer1
+        for(f in names(meta.split)){
+          meta.split[[f]]$functional.cluster <- factor(meta.split[[f]]$functional.cluster,
+                                                       levels = levs[[f]])
+        }
+
+        ctable.split <- lapply(meta.split, compositional_data,
+                               split.by = split.by,
+                               group.by.1 = group.by.composition[[i]],
+                               useNA = useNA[i])
+        ctable <- c(all = list(ctable),
+                       ctable.split)
+      }
+        })
 
     ## Append
-    celltype.compositions[[names(group.by.composition)[i]]][["cell_counts"]] <- as.data.frame.matrix(t(comp_table))
-    celltype.compositions[[names(group.by.composition)[i]]][["freq"]] <- as.data.frame.matrix(t(comp_table_freq))
-    celltype.compositions[[names(group.by.composition)[i]]][["freq_clr"]] <- as.data.frame.matrix(comp_table_clr)
+    celltype.compositions[[names(group.by.composition)[i]]] <- ctable
   }
 
   return(celltype.compositions)
