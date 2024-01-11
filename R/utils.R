@@ -747,7 +747,7 @@ compositional_data <- function(data,
   ctable <- data %>%
     # drop = F keeps all levels of the factor
     dplyr::group_by(across(all_of(gr_vars)), .drop = F) %>%
-    dplyr::summarize(cell_counts = n()) %>%
+    dplyr::summarize(cell_counts = dplyr::n()) %>%
     dplyr::ungroup() %>%
     dplyr::filter(if (!useNA) !is.na(.data[[group.by.1]])
                   else rep(TRUE, n())) %>%

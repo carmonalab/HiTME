@@ -534,7 +534,7 @@ get.HiTObject <- function(object,
 #' @param layer1_link Column of metadata linking layer1 prediction (e.g. scGate ~ CellOntology_ID) in order to perform subsetting for second layer classification.
 
 #' @importFrom Hotelling clr
-#' @importFrom dplyr group_by summarize filter ungroup mutate select left_join
+#' @importFrom dplyr group_by summarize filter ungroup mutate select left_join n
 #' @importFrom tidyr pivot_wider
 #' @importFrom tibble column_to_rownames
 #'
