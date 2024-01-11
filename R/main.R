@@ -198,11 +198,6 @@ Run.HiTME <- function(object = NULL,
                                         additional.signatures = additional.signatures,
                                         BPPARAM = param,
                                         multi.asNA = T)
-
-                    x@misc[["layer1_param"]] <- list()
-                    x@misc[["layer1_param"]][["layer1_models"]] <- names(scGate.model)
-                    x@misc[["layer1_param"]][["additional.signatures"]] <- names(additional.signatures)
-
                     return(x)
               }
     )
@@ -225,10 +220,6 @@ Run.HiTME <- function(object = NULL,
         x <- UCell::AddModuleScore_UCell(x,
                                         features = additional.signatures,
                                         BPPARAM = param)
-
-
-      x@misc[["layer1_param"]] <- list()
-      x@misc[["layer1_param"]][["additional.signatures"]] <- names(additional.signatures)
 
       return(x)
     }
@@ -281,23 +272,22 @@ Run.HiTME <- function(object = NULL,
   }
 
 
-  if (is.list(object)) {
-    if (remerge && length(object)>1) {
-        object <- merge(object[[1]],object[2:length(object)])
-        # add misc slot, removed when merging
-        object@misc[["layer1_param"]] <- list()
-        object@misc[["layer1_param"]][["layer1_models"]] <- names(scGate.model)
-        object@misc[["layer1_param"]][["additional.signatures"]] <- names(additional.signatures)
-
-        object <- list(object)
-    }
-  } else {
-    object <- list(object)
+ # Remerge if indicated
+  if (remerge && length(object)>1) {
+      object <- merge(object[[1]],object[2:length(object)])
+      object <- list(object)
   }
 
+
   # add layer_links metadata levels
+  # misc slots are removed when merging objects
   object <- lapply(object,
                    function(x){
+                     # add misc slot, removed when merging
+                     x@misc[["layer1_param"]] <- list()
+                     x@misc[["layer1_param"]][["scGate_models"]] <- names(scGate.model)
+                     x@misc[["layer1_param"]][["additional.signatures"]] <- names(additional.signatures)
+
                      if(!is.null(scGate.model)){
                        x$scGate_multi <- factor(x$scGate_multi,
                                                 levels = names(scGate.model))
@@ -314,7 +304,10 @@ Run.HiTME <- function(object = NULL,
                        names(all.levels) <- lapply(ref.maps, function(x){
                          x@misc$layer1_link
                        })
-                       x@misc[["layer2_levels"]] <- all.levels
+                       x@misc[["layer2_param"]][["functional.cluster"]][["levels2_per_levels1"]] <- all.levels
+                       # all refs indicated in the function
+                       x@misc[["layer2_param"]][["functional.cluster"]][["References_user_specified"]] <- names(ref.maps)
+
 
                      }
                      return(x)
@@ -629,10 +622,10 @@ get.celltype.composition <- function(object = NULL,
 
   # evaluate which layers are included in group.by.composition and layers_links
   for(l in seq_along(layers_links)){
-    if(!all(c(names(layers_links[1]), layers_links[1]) %in%
+    if(!all(c(names(layers_links[l]), layers_links[l]) %in%
            group.by.composition)){
       message("Not computing relative proportion values of layer2 within layer1 for ",
-              paste0(names(layers_links[1]), " -> ", layers_links[1]))
+              paste0(names(layers_links[l]), " -> ", layers_links[l]))
     }
   }
 
@@ -666,35 +659,37 @@ get.celltype.composition <- function(object = NULL,
 
       # get proportion relative to layer1 types
       if(group.by.composition[[i]] %in% layers_links){
-        lay <- layers_links[which(group.by.composition[[i]] %in% layers_links)]
-        meta.split <- split(meta.data, meta.data[[names(lay)]])
-        # switch list names to cell ontology ID
-        cellonto_dic <- lapply(meta.split, function(x){
-                        nam <- unique(x[[names(lay)]])
-                        val <- unique(x[[layer1_link]])
-                        names(val) <- nam
-                        return(val)
-          }) %>% unname() %>%  unlist()
+        lay <- layers_links[which(layers_links == group.by.composition[[i]])]
+        if(lay %in% names(object@misc$layer2_param)){
+          meta.split <- split(meta.data, meta.data[[names(lay)]])
+          # switch list names to cell ontology ID
+          cellonto_dic <- lapply(meta.split, function(x){
+                          nam <- unique(x[[names(lay)]])
+                          val <- unique(x[[layer1_link]])
+                          names(val) <- nam
+                          return(val)
+            }) %>% unname() %>%  unlist()
 
-        levs <- object@misc$layer2_levels
-        names(levs) <- names(cellonto_dic[match(names(levs), cellonto_dic)])
+          levs <- object@misc$layer2_param[[lay]]$levels2_per_levels1
+          names(levs) <- names(cellonto_dic[match(names(levs), cellonto_dic)])
 
 
-        # Filter only layer1 cells with representation in layer2
-        meta.split <- meta.split[names(levs)]
+          # Filter only layer1 cells with representation in layer2
+          meta.split <- meta.split[names(levs)]
 
-        # add factor to group by layer1
-        for(f in names(meta.split)){
-          meta.split[[f]]$functional.cluster <- factor(meta.split[[f]]$functional.cluster,
-                                                       levels = levs[[f]])
+          # add factor to group by layer1
+          for(f in names(meta.split)){
+            meta.split[[f]]$functional.cluster <- factor(meta.split[[f]]$functional.cluster,
+                                                         levels = levs[[f]])
+          }
+
+          ctable.split <- lapply(meta.split, compositional_data,
+                                 split.by = split.by,
+                                 group.by.1 = group.by.composition[[i]],
+                                 useNA = useNA[i])
+          ctable <- c(all = list(ctable),
+                         ctable.split)
         }
-
-        ctable.split <- lapply(meta.split, compositional_data,
-                               split.by = split.by,
-                               group.by.1 = group.by.composition[[i]],
-                               useNA = useNA[i])
-        ctable <- c(all = list(ctable),
-                       ctable.split)
       }
         })
 
