@@ -294,16 +294,20 @@ Run.HiTME <- function(object = NULL,
                      }
                      if(!is.null(ref.maps)){
                        # get ref.maps all cells types
-                       all.levels <- lapply(ref.maps, function(x){
-                         unique(x$functional.cluster)
-                       })
-                       x$functional.cluster <- factor(x$functional.cluster,
-                                                      levels = unlist(all.levels))
+                       if("functional.cluster" %in% names(x@meta.data)){
+                         all.levels <- lapply(ref.maps, function(x){
+                           unique(x$functional.cluster)
+                         })
+                         x$functional.cluster <- factor(x$functional.cluster,
+                                                        levels = unlist(all.levels))
 
-                       # add each level to misc
-                       names(all.levels) <- lapply(ref.maps, function(x){
-                         x@misc$layer1_link
+                         # add each level to misc
+                         names(all.levels) <- lapply(ref.maps, function(x){
+                           x@misc$layer1_link
                        })
+                       } else {
+                         all.levels <- NULL
+                       }
                        x@misc[["layer2_param"]][["functional.cluster"]][["levels2_per_levels1"]] <- all.levels
                        # all refs indicated in the function
                        x@misc[["layer2_param"]][["functional.cluster"]][["References_user_specified"]] <- names(ref.maps)
