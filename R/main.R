@@ -388,6 +388,7 @@ get.HiTObject <- function(object,
                           group.by = list("layer1" = c("scGate_multi"),
                                           "layer2" = c("functional.cluster")
                                           ),
+                          split.by = NULL,
                           name.additional.signatures = NULL,
                           useNA = FALSE,
                           clr_zero_impute_perc = 1,
@@ -485,6 +486,7 @@ get.HiTObject <- function(object,
 
   comp.prop <- get.celltype.composition(object,
                                         group.by.composition = group.by,
+                                        split.by = split.by,
                                         useNA = useNA,
                                         clr_zero_impute_perc = clr_zero_impute_perc,
                                         layer1_link = layer1_link,
@@ -677,6 +679,8 @@ get.celltype.composition <- function(object = NULL,
           levs <- object@misc$layer2_param[[lay]]$levels2_per_levels1
           names(levs) <- names(cellonto_dic[match(names(levs), cellonto_dic)])
 
+          # If a celltype was not detected, drop it
+          levs <- levs[!is.na(names(levs))]
 
           # Filter only layer1 cells with representation in layer2
           meta.split <- meta.split[names(levs)]
