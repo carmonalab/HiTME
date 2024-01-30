@@ -763,9 +763,12 @@ compositional_data <- function(data,
                        values_from = "freq")
   # accomodate df for clr transformation
   ## Remove character columns
-  chr_cols <- sapply(clr.df, is.character)
-  chr_cols <- names(clr.df)[chr_cols]
-  clr.df.ref <- clr.df %>% dplyr::select(!all_of(chr_cols))
+  num_cols_bool_idx <- sapply(clr.df, is.numeric)
+  num_cols <- names(clr.df)[num_cols_bool_idx]
+  chr_cols <- names(clr.df)[!num_cols_bool_idx]
+  clr.df.ref <- clr.df %>% dplyr::select(all_of(num_cols))
+
+  clr.df.ref[is.na(clr.df.ref)] <- clr_zero_impute_perc
 
   clr <- Hotelling::clr(clr.df.ref)
   # add extra cols (if any)
