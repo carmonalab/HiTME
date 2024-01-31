@@ -771,40 +771,39 @@ get.aggregated.profile <- function(object,
 
   for(i in names(group.by.aggregated)){
 
-    # if useNA = TRUE, transform NA to character
-    if(useNA){
-      object@meta.data[is.na(object@meta.data[[group.by.aggregated[[i]]]]),
-                       group.by.aggregated[[i]]] <- "NA"
-    }
-
-  # compute pseudobulk
+    # compute pseudobulk
     suppressWarnings(
       {
-        avg.exp[[i]]  <-
-          Seurat::AggregateExpression(object,
-                                      group.by = group.by.aggregated[[i]],
-                                      assays = assay,
-                                      verbose = F,
-                                      ...)[[assay]]
+        # Handle not annotated cells being labelled as NA
+        obj_tmp <- object
+        obj_tmp@meta.data[[group.by.aggregated[[i]]]] <- as.character(obj_tmp@meta.data[[group.by.aggregated[[i]]]])
+        obj_tmp@meta.data[[group.by.aggregated[[i]]]][is.na(obj_tmp@meta.data[[group.by.aggregated[[i]]]])] <- "NA"
+        obj_tmp@meta.data[[group.by.aggregated[[i]]]] <- as.factor(obj_tmp@meta.data[[group.by.aggregated[[i]]]])
+
+        if (length(unique(object@meta.data[[group.by.aggregated[[i]]]])) >= 2) {
+          avg.exp[[i]] <-
+            Seurat::AggregateExpression(obj_tmp,
+                                        group.by = group.by.aggregated[[i]],
+                                        assays = assay,
+                                        verbose = F,
+                                        ...)[[assay]]
+        } else {
+          # Handle case if there is only one cell type
+          avg.exp[[i]] <- obj.list[[1]]@assays[["RNA"]]["counts"]
+          row_names <- names(avg.exp[[i]])
+          col_name <- unique(obj_tmp@meta.data[[group.by.aggregated[[i]]]])
+          avg.exp[[i]] <- Matrix::Matrix(rowSums(avg.exp[[i]]))
+          rownames(avg.exp[[i]]) <- row_names
+          colnames(avg.exp[[i]]) <- col_name
+        }
       })
 
-
-    if(ncol(avg.exp[[i]]) == 1){
-      for(av in names(avg.exp)){
-        colnames(avg.exp[[i]]) <-
-          unique(object@meta.data[!is.na(object@meta.data[[group.by.aggregated[[i]]]]),
-                                  group.by.aggregated[[i]]])
-      }
+    if (useNA == FALSE) {
+      # Drop NA column
+      avg.exp[[i]] <- avg.exp[[i]][, !colnames(avg.exp[[i]]) %in% "NA", drop = FALSE]
     }
 
-      # add colnames if only one cell type is found
-    if(ncol(avg.exp[[i]] ) == 1){
-        colnames(avg.exp[[i]] ) <-
-          unique(object@meta.data[!is.na(object@meta.data[[group.by.aggregated[[i]]]]),
-                                  group.by.aggregated[[i]]])
-      }
   }
-
 
   return(avg.exp)
 }
