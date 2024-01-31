@@ -1138,15 +1138,9 @@ get.cluster.samples <- function(object = NULL,
                               progressbar = progressbar)
 
 # prepare metadata
-  md.all <- sapply(metadata.vars, function(x){
-    BiocParallel::bplapply(X = names(object),
-                           BPPARAM = param,
-                           FUN =function(y){
-                             unique(object[[y]]@metadata[[x]])
-                           }
-    ) %>% unlist()
-  }) %>% as.data.frame() %>%
-    dplyr::mutate(sample = names(object))
+  md.all <- lapply(names(object), FUN = function (x) {object[[x]]@metadata[1, metadata.vars] %>% mutate(sample = x)})
+  md.all <- data.table::rbindlist(md.all, use.names=TRUE)
+
 # Join data from all HiT objects
 
   # list to store joined data for each grouping variable
