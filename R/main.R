@@ -1021,6 +1021,7 @@ get.GOList <- function(GO_accession = NULL,
 #' @param ncores The number of cores to use, by default, all available cores - 2.
 #' @param bparam A \code{BiocParallel::bpparam()} object that tells how to parallelize. If provided, it overrides the `ncores` parameter.
 #' @param progressbar Whether to show a progressbar or not
+#' @param verbose Whether to show optional messages or not
 
 #' @importFrom dplyr mutate mutate_if filter %>% coalesce mutate_all full_join row_number
 #' @importFrom BiocParallel MulticoreParam bplapply
@@ -1055,7 +1056,8 @@ get.cluster.samples <- function(object = NULL,
                             black.list = NULL,
                             ncores = parallelly::availableCores() - 2,
                             bparam = NULL,
-                            progressbar = TRUE
+                            progressbar = TRUE,
+                            verbose = FALSE
                             ){
 
 
@@ -1066,10 +1068,10 @@ get.cluster.samples <- function(object = NULL,
     }
   }
 
-  #give name to list of hit objects
+  # give name to list of hit objects
   for(v in seq_along(object)){
-    if(is.null(names(object)[[v]]) || is.na(names(object)[[v]])){
-      names(object)[[v]] <- paste0("Sample", v)
+    if(is.null(names(object)[v]) | is.na(names(object)[v])){
+      names(object)[v] <- paste0("Sample", v)
     }
   }
 
@@ -1082,8 +1084,8 @@ get.cluster.samples <- function(object = NULL,
     }
   # give name to list of grouping.by variables
     for(v in seq_along(group.by)){
-      if(is.null(names(group.by)[[v]]) || is.na(names(group.by)[[v]])){
-        names(group.by)[[v]] <- paste0("layer", v)
+      if(is.null(names(group.by)[v]) | is.na(names(group.by)[v])){
+        names(group.by)[v] <- paste0("layer", v)
       }
     }
   }
@@ -1092,44 +1094,47 @@ get.cluster.samples <- function(object = NULL,
     stop("Not all supplied HiT object contain ", paste(group.by, collapse = ", "),
          "group.by elements in their metadata")
   } else {
-    message("\n#### Group by ####")
     present <- sapply(group.by,
                       function(char){
                         unlist(lapply(object,
-                                   function(df) {char %in% colnames(df@metadata)}
-                                   ))
+                                      function(df) {char %in% colnames(df@metadata)}
+                        ))
 
-                        }
-                      )
-    present.sum <- colSums(present)
+                      }
+    )
+    if (verbose) {
+      message("\n#### Group by ####")
 
-    for(l in names(group.by)){
-      message("** ", l, " present in ", present.sum[[l]], " / ", length(object), " HiT objects.")
+      present.sum <- colSums(present)
+
+      for(l in names(group.by)){
+        message("** ", l, " present in ", present.sum[[l]], " / ", length(object), " HiT objects.")
+      }
     }
-
   }
 
   if(!is.null(metadata.vars)){
-    message("\n#### Metadata ####")
+    if (verbose) {message("\n#### Metadata ####")}
     if(suppressWarnings(!all(lapply(object, function(x){any(metadata.vars %in% names(x@metadata))})))) {
       message("Not all supplied HiT object contain ", paste(metadata.vars, collapse = ", "),
-           "metadata elements in their metadata")
+              "metadata elements in their metadata")
     }
+    if (verbose) {
       in.md <- sapply(metadata.vars,
-                        function(char){
-                          unlist(lapply(object,
-                                        function(df) {char %in% colnames(df@metadata)}
-                          ))
+                      function(char){
+                        unlist(lapply(object,
+                                      function(df) {char %in% colnames(df@metadata)}
+                        ))
 
-                        }
+                      }
       )
       in.md.sum <- colSums(in.md)
 
       for(l in metadata.vars){
         message("** ", l, " present in ", in.md.sum[[l]], " / ", length(object), " HiT objects.")
       }
-
     }
+  }
 
 
 # set parallelization parameters
