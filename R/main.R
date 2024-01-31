@@ -131,8 +131,8 @@ Run.HiTME <- function(object = NULL,
   }
 
 
-  # set paralelization parameters
-  param <- set_paralel_params(ncores = ncores,
+  # set parallelization parameters
+  param <- set_parallel_params(ncores = ncores,
                                bparam = bparam,
                                progressbar = progressbar)
 
@@ -1132,8 +1132,8 @@ get.cluster.samples <- function(object = NULL,
     }
 
 
-# set paralelization parameters
-  param <- set_paralel_params(ncores = ncores,
+# set parallelization parameters
+  param <- set_parallel_params(ncores = ncores,
                               bparam = bparam,
                               progressbar = progressbar)
 

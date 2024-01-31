@@ -515,8 +515,8 @@ silhoutte_onelabel <- function(labels = NULL, # vector of labels
     stop("Please provide a number for setting seed")
   }
 
-  # set paralelization parameters
-  param <- set_paralel_params(ncores = ncores,
+  # set parallelization parameters
+  param <- set_parallel_params(ncores = ncores,
                               bparam = bparam,
                               progressbar = progressbar)
 
@@ -695,9 +695,9 @@ plot.score <- function(df = NULL,
 
 
 ###################################################################################################
-# Function to set the paralalization parameters using Biocparalel
+# Function to set the parallelization parameters using Biocparallel
 
-set_paralel_params <- function(ncores,
+set_parallel_params <- function(ncores,
                                bparam,
                                progressbar)
                               {
@@ -710,7 +710,7 @@ set_paralel_params <- function(ncores,
     message("Using all or more cores available in this computer, reducing number of cores to ", ncores)
   }
 
-  # set paralelization parameters
+  # set parallelization parameters
   if (is.null(bparam)) {
     if (ncores>1) {
       param <- BiocParallel::MulticoreParam(workers =  ncores,
