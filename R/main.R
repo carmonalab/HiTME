@@ -1002,22 +1002,11 @@ get.GOList <- function(GO_accession = NULL,
 }
 
 
-#' Compute aggregation metrics of summarized data
+#' Merge HiTObjects
 #'
-#'
-#' @param object List of Hit class object
-#' @param group.by Grouping variable for
-#' @param min.cells Minimum number of cells to consider for aggregated expression.
-#' @param metadata.vars Variables to show as metadata
-#' @param score Score to compute clustering of samples based on cell type prediction, either Silhoutte or modularity.
-#' @param dist.method Method to compute distance between celltypes, default euclidean.
-#' @param ndim Number of dimensions to be use for PCA clustering metrics.
-#' @param nVarGenes Number of variable genes to assess samples.
-#' @param gene.filter Additional named list of genes to subset their aggregated expression, if "default" is indicated, all genes,
-#' ribosomal genes, transcription factor (GO:0003700), cytokines (GO:0005125),
-#'   cytokine receptors (GO:0004896), chemokines (GO:0008009), and chemokines receptors (GO:0004950) are subsetted and accounted for.
-#' @param GO_accession Additional GO accessions to subset genes for aggregation, by default the list indicated in \code{gene.filter} are returned.
-#' @param black.list List of genes to discard from clustering, if "default" object "default_black_list" object is used. Alternative black listed genes can be provided as a vector or list.
+#' @param object List of HiTObjects
+#' @param group.by Grouping variable for layers
+#' @param metadata.vars Variables to keep as metadata. (Default: NULL, keeping unique metadata columns per sample, dropping single-cell metadata)
 #' @param ncores The number of cores to use, by default, all available cores - 2.
 #' @param bparam A \code{BiocParallel::bpparam()} object that tells how to parallelize. If provided, it overrides the `ncores` parameter.
 #' @param progressbar Whether to show a progressbar or not
@@ -1026,39 +1015,21 @@ get.GOList <- function(GO_accession = NULL,
 #' @importFrom dplyr mutate mutate_if filter %>% coalesce mutate_all full_join row_number
 #' @importFrom BiocParallel MulticoreParam bplapply
 #' @importFrom parallelly availableCores
-#' @importFrom tibble rownames_to_column column_to_rownames remove_rownames
-#' @importFrom caret nearZeroVar
-#' @importFrom ggplot2 aes geom_point guides theme geom_col labs geom_hline guide_legend geom_vline theme_bw ggtitle
-#' @importFrom DESeq2 DESeqDataSetFromMatrix vst estimateSizeFactors
-#' @importFrom MatrixGenerics rowVars
-#' @importFrom SummarizedExperiment assay
-#' @importFrom BiocGenerics counts
 #' @importFrom data.table rbindlist
-#' @importFrom ggdendro ggdendrogram
 
-#' @return Summarize of pseudobulk metrics for each celltype based on different predictions across all samples provided.
-#' @export get.cluster.samples
+#' @return Merged HiTObject
+#' @export merge.HiTObjects
 #'
 
-get.cluster.samples <- function(object = NULL,
-                            group.by = list("layer1" = c("scGate_multi"),
-                                            "layer2" = c("functional.cluster")
-                            ),
-                            min.cells = 10,
-                            metadata.vars = NULL,
-                            score = c("silhouette"),
-                            dist.method = "euclidean",
-                            ndim = 10,
-                            nVarGenes = 500,
-                            gene.filter = NULL,
-                            GO_accession = NULL,
-                            ntests = 100,
-                            black.list = NULL,
-                            ncores = parallelly::availableCores() - 2,
-                            bparam = NULL,
-                            progressbar = TRUE,
-                            verbose = FALSE
-                            ){
+merge.HiTObjects <- function(object = NULL,
+                             group.by = list("layer1" = c("scGate_multi"),
+                                             "layer2" = c("functional.cluster")
+                             ),
+                             ncores = parallelly::availableCores() - 2,
+                             bparam = NULL,
+                             progressbar = FALSE,
+                             verbose = FALSE
+                             ){
 
 
   if (is.null(object) || !is.list(object)) {
@@ -1069,20 +1040,20 @@ get.cluster.samples <- function(object = NULL,
   }
 
   # give name to list of hit objects
-  for(v in seq_along(object)){
+  for (v in seq_along(object)){
     if(is.null(names(object)[v]) | is.na(names(object)[v])){
       names(object)[v] <- paste0("Sample", v)
     }
   }
 
 
-  if(is.null(group.by)){
+  if (is.null(group.by)){
     stop("Please provide at least one grouping variable for cell type classification common in all elements of the list of Hit objects")
   } else {
     if(!is.list(group.by)){
       group.by <- as.list(group.by)
     }
-  # give name to list of grouping.by variables
+    # give name to list of grouping.by variables
     for(v in seq_along(group.by)){
       if(is.null(names(group.by)[v]) | is.na(names(group.by)[v])){
         names(group.by)[v] <- paste0("layer", v)
@@ -1090,7 +1061,7 @@ get.cluster.samples <- function(object = NULL,
     }
   }
 
-  if(suppressWarnings(!all(lapply(object, function(x){any(group.by %in% names(x@metadata))})))) {
+  if (suppressWarnings(!all(lapply(object, function(x){any(group.by %in% names(x@metadata))})))) {
     stop("Not all supplied HiT object contain ", paste(group.by, collapse = ", "),
          "group.by elements in their metadata")
   } else {
@@ -1115,7 +1086,7 @@ get.cluster.samples <- function(object = NULL,
 
   if(!is.null(metadata.vars)){
     if (verbose) {message("\n#### Metadata ####")}
-    if(suppressWarnings(!all(lapply(object, function(x){any(metadata.vars %in% names(x@metadata))})))) {
+    if (suppressWarnings(!all(lapply(object, function(x){any(metadata.vars %in% names(x@metadata))})))) {
       message("Not all supplied HiT object contain ", paste(metadata.vars, collapse = ", "),
               "metadata elements in their metadata")
     }
@@ -1130,136 +1101,116 @@ get.cluster.samples <- function(object = NULL,
       )
       in.md.sum <- colSums(in.md)
 
-      for(l in metadata.vars){
+      for (l in metadata.vars){
         message("** ", l, " present in ", in.md.sum[[l]], " / ", length(object), " HiT objects.")
       }
     }
   }
 
 
-# set parallelization parameters
+  # set parallelization parameters
   param <- set_parallel_params(ncores = ncores,
-                              bparam = bparam,
-                              progressbar = progressbar)
+                               bparam = bparam,
+                               progressbar = progressbar)
 
-# prepare metadata
-  md.all <- lapply(names(object), FUN = function (x) {object[[x]]@metadata[1, metadata.vars] %>% mutate(sample = x)})
-  md.all <- data.table::rbindlist(md.all, use.names=TRUE)
+  # Join data from all HiT objects
 
-# Join data from all HiT objects
+  # Metadata
+  if (is.null(metadata.vars)) {
+    # Per HiTObject from input, get metadata column names which have all the same value.
+    # E.g. each HiTObject is from a specific sample, so each HiTObject has metadata column "Sample" which contains all the same value (e.g. "sample1" for sample 1, "sample2" for sample 2, etc.)
+    # Other metadata columns, e.g. scGate_multi can be dropped, as the merged HiTObject is a summary per sample, so single-cell metadata columns don't make sense.
+    umc <- lapply(names(HiT_summary_list), FUN = function (x) {apply(HiT_summary_list[[x]]@metadata, 2, function(y) length(unique(y))) == 1})
+    umc <- umc %>% Reduce("&", .)
+    metadata.vars <- names(umc)[test == T]
+  }
+  metadata <- lapply(names(object), FUN = function (x) {object[[x]]@metadata[1, metadata.vars] %>% mutate(sample = x)})
+  metadata <- data.table::rbindlist(metadata, use.names=TRUE, fill=TRUE)
 
-  # list to store joined data for each grouping variable
-  join.list <- list()
-  join.list[["aggregated"]] <- list()
-  join.list[["composition"]] <- list()
+  comp.prop <- list()
+  avg.expr <- list()
+  aggr.signature <- list()
 
   for(gb in names(group.by)){
 
     layer.present <- rownames(present)[present[,gb]]
-    message("Computing metrics for composition of " , gb, "...")
-      count  <-
-        BiocParallel::bplapply(
-          X = layer.present,
-          BPPARAM = param,
-          FUN = function(x){
-              mat <- object[[x]]@composition[[gb]]$freq %>%
-                      dplyr::mutate(sample = x)
-              return(mat)
-        }) %>%
-        data.table::rbindlist(., use.names = T, fill = T) %>%
-        # convert NA to 0
-        dplyr::mutate_if(is.numeric, ~ifelse(is.na(.), 0, .)) %>%
-        tibble::column_to_rownames("sample") %>%
-        t() %>% as.matrix()
-
-      join.list[["composition"]][[gb]] <- list("Composition" = count,
-                                               "Metadata" = md.all)
-
-      message("Computing metrics for aggregated profile of " , gb, "...")
-
-      # list for each gene subset
 
 
-    gf <- BiocParallel::bplapply(
-      X = layer.present,
-      BPPARAM = param,
-      FUN = function(x){
-        # remove cells with less than min.cells
-        tab <- object[[x]]@composition[[gb]]$cell_counts
-        names(tab) <- gsub("-", "_", names(tab))
-        keep <- names(tab)[tab>=min.cells]
+    # Composition
+    message("Merging compositions of " , gb, "...")
 
-        if(length(keep) > 0){
-        dat <- object[[x]]@aggregated_profile$Pseudobulk[[gb]]
-        # in case _ and - are not match
-        colnames(dat) <- gsub("-", "_", colnames(dat))
-
-        #keep only cell type with more than min.cells
-        dat <- dat[, keep, drop = F]
-        celltype <- colnames(dat)[colnames(dat)!= "gene"]
-
-        # accommodate colnames to merge then
-        colnames(dat) <- paste(colnames(dat), x, sep = "_")
-        dat <- dat %>%
-                as.data.frame() %>%
-                tibble::rownames_to_column("gene")
-        md <- data.frame(rn = colnames(dat)[colnames(dat)!= "gene"],
-                         sample = rep(x, ncol(dat)-1),
-                         celltype = celltype)
-        return(list("data" = dat,
-                    "metadata" = md))
-        } else {
-          return(NULL)
-        }
-      })
-      # remove NULL if generated
-      gf <- gf[!sapply(gf, is.null)]
-
-      # join all gene expression matrices using full_join
-      data.all <- lapply(gf, function(x) x[["data"]]) %>%
-                    reduce(full_join, by = "gene") %>%
-                    # convert NA to 0
-                    mutate_if(is.numeric, ~ifelse(is.na(.), 0, .)) %>%
-                    tibble::column_to_rownames("gene") %>%
-                    as.matrix()
-
-      ## Summarize metadata
-      md.agg <- lapply(gf, function(x) x[["metadata"]]) %>%
-            data.table::rbindlist() %>%
-            left_join(., md.all, by = "sample") %>%
-            as.data.frame() %>%
-            tibble::column_to_rownames("rn")
-
-      join.list[["aggregated"]][[gb]] <- list("data" = data.all,
-                                              "metadata" = md.agg)
+    is_df_check <- object[layer.present] %>%
+      lapply(slot, name = "composition") %>%
+      lapply("[[", gb) %>%
+      lapply(is.data.frame) %>%
+      unlist()
+    is_list_check <- object[layer.present] %>%
+      lapply(slot, name = "composition") %>%
+      lapply("[[", gb) %>%
+      lapply(FUN = function(x) {is.list(x) & !is.data.frame(x)}) %>%
+      unlist()
+    if (all(is_df_check)) {
+      df <- bplapply(X = layer.present,
+                     BPPARAM = param,
+                     FUN = function(x){
+                       object[[x]]@composition[[gb]] %>% mutate(sample = x)
+                     })
+      df <- data.table::rbindlist(df, use.names=TRUE, fill=TRUE)
+      comp.prop[[gb]] <- df
+    }
+    else if (all(is_list_check)) {
+      gb_sublevel_unique_names <- object[layer.present] %>%
+        lapply(slot, name = "composition") %>%
+        lapply("[[", gb) %>%
+        lapply(names) %>%
+        unlist() %>%
+        unique()
+      for (i in gb_sublevel_unique_names){
+        df <- bplapply(X = layer.present,
+                       BPPARAM = param,
+                       FUN = function(x){
+                         if(!is.null(object[[x]]@composition[[gb]][[i]])) {
+                           object[[x]]@composition[[gb]][[i]] %>% mutate(sample = x)
+                         }
+                       })
+        df <- data.table::rbindlist(df, use.names=TRUE, fill=TRUE)
+        comp.prop[[gb]][[i]] <- df
+      }
+    }
 
 
+    # Aggregated_profile
+    message("Merging aggregated profiles of " , gb, "...")
 
-      message("\nComputing clustering metrics of aggregated for ", gb)
+    # Aggregated_profile Pseudobulk
+    df <- bplapply(X = layer.present,
+                   BPPARAM = param,
+                   FUN = function(x){
+                     df <- data.frame(gene = row.names(object[[x]]@aggregated_profile[["Pseudobulk"]][[gb]]),
+                                      object[[x]]@aggregated_profile[["Pseudobulk"]][[gb]])
+                     df %>% mutate(sample = x)
+                   })
+    df <- data.table::rbindlist(df, use.names=TRUE, fill=TRUE)
+    avg.expr[[gb]] <- df
 
-      cc <- get.cluster.score(matrix = join.list[["aggregated"]][[gb]]$data,
-                              metadata = join.list[["aggregated"]][[gb]]$metadata,
-                              cluster.by = c("celltype", "sample"),
-                              score = score,
-                              ndim = ndim,
-                              ntests = 100,
-                              gene.filter = gene.filter,
-                              GO_accession = GO_accession,
-                              black.list = black.list,
-                              nVarGenes = nVarGenes,
-                              dist.method = dist.method)
-
-      join.list[["aggregated"]][[gb]][["clustering"]] <- cc
-
-
+    # Aggregated_profile Signatures
+    df <- bplapply(X = layer.present,
+                   BPPARAM = param,
+                   FUN = function(x){
+                     object[[x]]@aggregated_profile[["Signatures"]][[gb]] %>% mutate(sample = x)
+                   })
+    df <- data.table::rbindlist(df, use.names=TRUE, fill=TRUE)
+    aggr.signature[[gb]] <- df
   }
 
+  hit <- methods::new("HiT",
+                      metadata = metadata,
+                      composition = comp.prop,
+                      aggregated_profile = list("Pseudobulk" = avg.expr,
+                                                "Signatures" = aggr.signature)
+  )
 
-
-
-
-  return(join.list)
-
+  return(hit)
 }
 
 
@@ -1303,7 +1254,7 @@ plot.celltype.freq <- function(object = NULL,
     stop("Not all components of the list are HiT objects.")
   }
 
-  #give name to list of hit objects
+  # give name to list of hit objects
   for(v in seq_along(object)){
     if(is.null(names(object)[[v]]) || is.na(names(object)[[v]])){
       names(object)[[v]] <- paste0("Sample", v)
@@ -1328,7 +1279,7 @@ plot.celltype.freq <- function(object = NULL,
   if(suppressWarnings(!all(lapply(object, function(x){any(group.by %in% names(x@metadata))})))) {
     stop("Not all supplied HiT object contain ", paste(group.by, collapse = ", "),
          " group.by elements in their metadata")
-}
+  }
   # remove group by if not present in any sample
     present <- sapply(group.by,
                       function(char){
