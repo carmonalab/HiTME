@@ -1,5 +1,5 @@
-#############################################################################################################
-# HiT class definition
+# HiT class definition -------------------------------------------------
+
 ## Build S4 objects to store data
 methods::setClass(Class = "HiT",
                   slots = list(
@@ -8,22 +8,23 @@ methods::setClass(Class = "HiT",
                     composition = "list",
                     aggregated_profile = "list",
                     version = "list"
-                  )
+                    )
 )
 
 
-#############################################################################################################
-# Projectils on multiple reference maps
+
+# ProjecTILs on multiple reference maps -------------------------------------------------
+
 ProjecTILs.classifier.multi <- function(object,
                                         ref.maps,
                                         bparam = NULL,
-                                        layer1_link = "CellOntology_ID"){
+                                        layer1_link = "CellOntology_ID") {
 
   # count how many cells are found by scGate for each map reference
-  if(layer1_link %in% names(object@meta.data)){
+  if (layer1_link %in% names(object@meta.data)) {
     filter.cells <- F
     map.celltypes <- lapply(ref.maps,
-                            function(x){
+                            function(x) {
                               ct <- x@misc$layer1_link
                               nrow(object@meta.data[object@meta.data[[layer1_link]] %in% ct,])
                             })
@@ -31,14 +32,14 @@ ProjecTILs.classifier.multi <- function(object,
     present <- names(ref.maps[map.celltypes > 1])
     no.present <- names(ref.maps)[!names(ref.maps) %in% present]
 
-    if(length(present) == 0){
+    if (length(present) == 0) {
       message(paste("No cells linked to reference maps found by", layer1_link, ".\nNot running Projectils"))
       run <- FALSE
     } else {
       run <- TRUE
       message("Performing Projectils classification for ", paste(present, collapse = ", "))
 
-      if(length(ref.maps) != length(present)){
+      if (length(ref.maps) != length(present)) {
         message("Not doing mapping for ", paste(no.present, collapse = ", ") )
         ref.maps <- ref.maps[present]
       }
@@ -52,80 +53,77 @@ ProjecTILs.classifier.multi <- function(object,
     run <- TRUE
   }
 
-  if(run){
-  suppressWarnings(require(ProjecTILs))
+  if (run) {
+    suppressWarnings(require(ProjecTILs))
 
-  functional.clusters <-
-    BiocParallel::bplapply(
-      X = names(ref.maps),
-      BPPARAM = bparam,
-      FUN = function(m){
-        if(filter.cells){
-          # don't subset if no scGate gating is found in metadata, instead run scGate within projectils
-          subset.object <- object
-        } else {
-        map.celltype <- ref.maps[[m]]@misc$layer1_link
-        subset.object <- object[,object@meta.data[[layer1_link]] %in% map.celltype]
+    functional.clusters <-
+      BiocParallel::bplapply(
+        X = names(ref.maps),
+        BPPARAM = bparam,
+        FUN = function(m) {
+          if (filter.cells) {
+            # don't subset if no scGate gating is found in metadata, instead run scGate within projectils
+            subset.object <- object
+          } else {
+            map.celltype <- ref.maps[[m]]@misc$layer1_link
+            subset.object <- object[,object@meta.data[[layer1_link]] %in% map.celltype]
 
+          }
+
+          if (ncol(subset.object)>0) {
+            message("\nRunning Projectils for ", m, " reference")
+            # it is mandatory to make run in serial (ncores = 1 and BPPARAM SerialParam)
+            subset.object.pred <- ProjecTILs:::classifier.singleobject(subset.object,
+                                                                       ref = ref.maps[[m]],
+                                                                       filter.cells = filter.cells,
+                                                                       ncores = 1)
+
+            return(subset.object.pred)
+
+          } else {
+            message("Not Running Projectils classifier for reference map",
+                    paste(map.celltype, collapse = ", "), ". No cells found")
+          }
         }
+      )
 
-        if(ncol(subset.object)>0){
-          message("\nRunning Projectils for ", m, " reference")
-          # it is mandatory to make run in serial (ncores = 1 and BPPARAM SerialParam)
-          subset.object.pred <- ProjecTILs:::classifier.singleobject(subset.object,
-                                                                     ref = ref.maps[[m]],
-                                                                     filter.cells = filter.cells,
-                                                                     ncores = 1)
 
-          return(subset.object.pred)
+    if (!all(unlist(lapply(functional.clusters, function(x) {is.null(x)})))) {
+      functional.clusters <- data.table::rbindlist(lapply(functional.clusters,
+                                                          data.table::setDT,
+                                                          keep.rownames = TRUE)) %>%
+        #remove duplicated rownames (classified by different ref.maps)
+        dplyr::filter(!duplicated(rn)) %>%
+        tibble::column_to_rownames("rn")
 
-        } else {
-          message("Not Running Projectils classifier for reference map",
-                  paste(map.celltype, collapse = ", "), ". No cells found")
-        }
+      # remove already present functional.cluster columns
+      rm <- grep("^functional.cluster", names(object@meta.data))
+      if (length(rm) > 0) {
+        object@meta.data <- object@meta.data[, -rm, drop = F]
       }
-    )
+      object@meta.data <- merge(object@meta.data, functional.clusters, by = 0, all.x = T) %>%
+        tibble::column_to_rownames("Row.names")
 
+      # save names of reference maps run (will be lost if objects remerged)
+      object@misc[["layer2_param"]][["functional.cluster"]][["References_executed"]] <- names(ref.maps)
 
-  if(!all(unlist(lapply(functional.clusters, function(x){is.null(x)})))){
-    functional.clusters <- data.table::rbindlist(lapply(functional.clusters,
-                                                        data.table::setDT,
-                                                        keep.rownames = TRUE)) %>%
-                            #remove duplicated rownames (classified by different ref.maps)
-                            dplyr::filter(!duplicated(rn)) %>%
-                            tibble::column_to_rownames("rn")
-
-    # remove already present functional.cluster columns
-    rm <- grep("^functional.cluster", names(object@meta.data))
-    if(length(rm) > 0){
-      object@meta.data <- object@meta.data[, -rm, drop = F]
+    } else {
+      object@meta.data <- object@meta.data %>%
+        dplyr::mutate(functional.cluster = NA,
+                      functional.cluster.conf = NA)
     }
-    object@meta.data <- merge(object@meta.data, functional.clusters, by = 0, all.x = T) %>%
-                        tibble::column_to_rownames("Row.names")
-
-    # save names of reference maps run (will be lost if objects remerged)
-    object@misc[["layer2_param"]][["functional.cluster"]][["References_executed"]] <- names(ref.maps)
-
-  } else {
-    object@meta.data <- object@meta.data %>%
-                        dplyr::mutate(functional.cluster = NA,
-                                      functional.cluster.conf = NA)
   }
-
-  }
-
-
   return(object)
-
 }
 
 
-#############################################################################################################
-# function to match words with grep
+
+# Match words with grep -------------------------------------------------
+
 match_dictionary <- function(cell_type,
                              dictionary = NULL) {
 
-  if(is.null(dictionary)){
+  if (is.null(dictionary)) {
     dict <- c("^T|CTL" = "T cell",
               "^B|B$" = "B cell",
               "^NK" = "NK",
@@ -140,8 +138,7 @@ match_dictionary <- function(cell_type,
               "Macroph" = "Macrophage",
               "^Endo" = "Endothelial",
               "Neutro" = "Neutrophil",
-              "Strom" = "Stromal"
-    )
+              "Strom" = "Stromal")
   }
 
   for (keyword in names(dict)) {
@@ -153,23 +150,23 @@ match_dictionary <- function(cell_type,
   return(cell_type)
 }
 
-#############################################################################################################
-# complete function applying previous function with sapply to all vector
-StandardizeCellNames <- function(cell.names, dictionary = NULL){
+
+# sapply match_dictionary to all elements in vector -------------------------------------------------
+
+StandardizeCellNames <- function(cell.names, dictionary = NULL) {
 
   standarized_cellnames <- sapply(cell.names,
                                   match_dictionary,
                                   dictionary)
   standarized_cellnames <- unname(standarized_cellnames)
-  return(standarized_cellnames)
 
+  return(standarized_cellnames)
 }
 
 
 
 
-#############################################################################################################
-# Compute the clustering score
+# Compute clustering score -------------------------------------------------
 
 get.cluster.score <- function(matrix = NULL,
                               metadata = NULL,
@@ -186,18 +183,18 @@ get.cluster.score <- function(matrix = NULL,
                               ncores = parallelly::availableCores() - 2,
                               bparam = NULL,
                               progressbar = TRUE
-                              ){
+                              ) {
 
-  if(is.null(matrix) || !is.matrix(matrix)){
+  if (is.null(matrix) || !is.matrix(matrix)) {
     stop("Please provide a matrix object.")
   }
 
-  if(is.null(metadata) || !is.data.frame(metadata)){
+  if (is.null(metadata) || !is.data.frame(metadata)) {
     stop("Please provide a metadata object as dataframe")
   }
 
   # Get black list
-  if(is.null(black.list)){
+  if (is.null(black.list)) {
     data("default_black_list")
   }
   black.list <- unlist(black.list)
@@ -236,7 +233,7 @@ get.cluster.score <- function(matrix = NULL,
   select <- order(rv, decreasing=TRUE)[seq_len(min(nVarGenes, length(rv)))]
   vsd <- vsd[select,]
 
-  # if(!is.null(gene.filter) && !is.list(gene.filter)){
+  # if (!is.null(gene.filter) && !is.list(gene.filter)) {
   #   gene.filter <- list(gene.filter)
   # }
   #
@@ -253,7 +250,7 @@ get.cluster.score <- function(matrix = NULL,
   #
   # # Add list genes from GO accessions
   # # check if indicted additional GO accessions
-  # if(!is.null(GO_accession)){
+  # if (!is.null(GO_accession)) {
   #   GO_additional <- get.GOList(GO_accession, ...)
   # } else {
   #   GO_additional <- NULL
@@ -264,8 +261,8 @@ get.cluster.score <- function(matrix = NULL,
   # gene.filter.list <- c(gene.filter.list, GO_default, GO_additional)
   #
   # # Add defined list of genes to filter
-  # for(a in seq_along(gene.filter)){
-  #   if(is.null(names(gene.filter[[a]]))){
+  # for (a in seq_along(gene.filter)) {
+  #   if (is.null(names(gene.filter[[a]]))) {
   #     i.name <- paste0("GeneList_", a)
   #   } else {
   #     i.name <- names(gene.filter[[a]])
@@ -274,7 +271,7 @@ get.cluster.score <- function(matrix = NULL,
   # }
 
   # subset genes accroding to gene filter list
-  # for(e in names(gene.filter.list)){
+  # for (e in names(gene.filter.list)) {
   #   keep <- gene.filter.list[[e]][gene.filter.list[[e]] %in%
   #                                   rownames(avg.exp[[i]] )]
   #   avg.exp[[i]][[e]] <- avg.exp[[i]] [keep, , drop = FALSE]
@@ -284,17 +281,16 @@ get.cluster.score <- function(matrix = NULL,
   tryCatch({
     pc <- stats::prcomp(t(vsd))
   },
-  error = function(e){
+  error = function(e) {
     near_zero_var <- caret::nearZeroVar(vsd)
-    if(length(near_zero_var) > 0){
+    if (length(near_zero_var) > 0) {
       vsd <- vsd[, -near_zero_var]
       metadata <<- metadata[-near_zero_var, ]
       pc <<- stats::prcomp(t(vsd))
     } else if (length(near_zero_var) == ncol(vsd)) {
       message("PCA compute not possible.\n")
     }
-  }
-  )
+  })
 
 
   # produce scree plot to know how many dimensions to use
@@ -319,7 +315,7 @@ get.cluster.score <- function(matrix = NULL,
     ggplot2::ggtitle(paste0(ndim, " first PC"))
 
   # compute distance
-  for(x in 1:nrow(df.score)){
+  for (x in 1:nrow(df.score)) {
 
     # define the grouping by variable
     gr.by <- as.character(df.score[x, 1])
@@ -327,7 +323,7 @@ get.cluster.score <- function(matrix = NULL,
     dist <- stats::dist(pc$x[,1:ndim],
                         method = df.score[x, 2])
 
-    # plot dendogram
+    # plot dendrogram
     pc2 <- pc$x[,1:ndim] %>%
       as.data.frame() %>%
       mutate(celltype = metadata[[df.score[x, 1]]])
@@ -349,15 +345,15 @@ get.cluster.score <- function(matrix = NULL,
     leg.pos <- ifelse(length(unique(metadata[[gr.by]])) < 40,
                       "right", "none")
 
-    if(df.score[x,3] == "silhouette"){
-      message("Computing Silhoutte score")
+    if (df.score[x,3] == "silhouette") {
+      message("Computing silhouette score")
 
-      silh <- silhoutte_onelabel(metadata[[gr.by]],
-                                 dist = dist,
-                                 ntests = ntests,
-                                 ncores = ncores,
-                                 bparam = bparam,
-                                 progressbar = progressbar)
+      silh <- calc_sil_score(metadata[[gr.by]],
+                             dist = dist,
+                             ntests = ntests,
+                             ncores = ncores,
+                             bparam = bparam,
+                             progressbar = progressbar)
 
       whole.mean <- mean(silh$cell$sil_width)
 
@@ -374,7 +370,7 @@ get.cluster.score <- function(matrix = NULL,
                             color = "black",
                             linetype = 2) +
         ggplot2::labs(y = "Silhouette width",
-             title = paste0(gr.by, " - ", df.score[x, 2], "\nAverage Silhoutte width: ", round(whole.mean, 3))) +
+             title = paste0(gr.by, " - ", df.score[x, 2], "\nAverage silhouette width: ", round(whole.mean, 3))) +
         ggplot2::guides(fill=guide_legend(ncol=4))+
         ggplot2::theme(
           panel.background = element_rect(fill = "white"),
@@ -383,10 +379,9 @@ get.cluster.score <- function(matrix = NULL,
           axis.ticks.x = element_blank(),
           legend.position = leg.pos
         )
-
     }
 
-    if(df.score[x,3] == "modularity"){
+    if (df.score[x,3] == "modularity") {
       message("Computing Modularity score")
       # transform to network the distance
       graph <- graph.adjacency(
@@ -416,10 +411,6 @@ get.cluster.score <- function(matrix = NULL,
       mod.pl <- plot(graph,
                      vertex.color = V(graph)$group,
                      main = "Network with Group Assignments")
-
-
-
-
     }
 
     # # plot for PCA
@@ -446,8 +437,7 @@ get.cluster.score <- function(matrix = NULL,
         legend.position = leg.pos,
         legend.key = element_rect(fill = "white")
       )
-  score.type <- as.character(df.score[x,3])
-
+    score.type <- as.character(df.score[x,3])
 
 
   # plot of bootstraping
@@ -463,16 +453,16 @@ get.cluster.score <- function(matrix = NULL,
   #
   #             ggplot2::geom_vline(aes(xintercept = ifelse(iteration == "NO",
   #                                                     avg_sil_width, NA)),
-  #                                 color = "Avg Silhoutte width"),
+  #                                 color = "Avg silhouette width"),
   #                                 lty = 2, show.legend = T)
   #             ggplot2::geom_vline(xintercept = quantile(cof_before[,2], c(0.05,0.95))[1],
   #                            color = "Bootstrap"), lty = 2, show.legend = T)
 
-  # Build plot list
-  pl.list <- list( score.type = gpl,
-                   "PCA" = pc.pl,
-                   "Scree_plot" = plot_var,
-                   "Dendogram" = dendo)
+    # Build plot list
+    pl.list <- list( score.type = gpl,
+                     "PCA" = pc.pl,
+                     "Scree_plot" = plot_var,
+                     "Dendogram" = dendo)
 
     # return list
     ret <- list("whole_avgerage" = whole.mean,
@@ -481,29 +471,26 @@ get.cluster.score <- function(matrix = NULL,
 
     scores[[paste(df.score[x,], collapse = "_")]] <- ret
   }
-
-
   return(scores)
-
-
 }
 
-#############################################################################################################
-# Function for silhoutte one label
 
-silhoutte_onelabel <- function(labels = NULL, # vector of labels
-                               dist = NULL, # distance object
-                               ntests = 0, # number of shuffling events
-                               seed = 22, # seed for random suffling
-                               ncores = parallelly::availableCores() - 2,
-                               bparam = NULL,
-                               progressbar = TRUE){
 
-  if (is.null(labels) || !is.vector(labels)) {
-    stop("Please provide a vector of the labels")
+# Calculate silhouette score ----------------------------------------------
+
+calc_sil_score <- function(cluster_labels = NULL, # vector of cluster labels
+                           dist = NULL, # distance object
+                           ntests = 1000, # number of shuffling events
+                           seed = 22, # seed for random shuffling
+                           ncores = parallelly::availableCores() - 2,
+                           bparam = NULL,
+                           progressbar = TRUE) {
+
+  if (is.null(cluster_labels) | !is.vector(cluster_labels)) {
+    stop("Please provide a vector of the cluster_labels")
   }
 
-  if (is.null(dist) || !class(dist) == "dist") {
+  if (is.null(dist) | !class(dist) == "dist") {
     stop("Please provide a a dissimilarity object inheriting from class dist or coercible to one")
   }
 
@@ -520,21 +507,19 @@ silhoutte_onelabel <- function(labels = NULL, # vector of labels
                               bparam = bparam,
                               progressbar = progressbar)
 
-  tlabels <- unique(labels)
-
-  len <- length(labels)
+  clabels_unique <- unique(cluster_labels)
 
   sils <- BiocParallel::bplapply(
-    X = tlabels,
+    X = clabels_unique,
     BPPARAM = param,
-    function(a){
+    function(a) {
 
-    x_one <- ifelse(labels == a, 2, 1) %>%
+    x_one <- ifelse(cluster_labels == a, 2, 1) %>%
               as.factor() %>% as.numeric()
 
     silh <- cluster::silhouette(x_one, dist)
 
-    # silhoutte score for each sample
+    # silhouette score for each sample
     # change names back to character
     sil.res.cell <- as.data.frame(silh) %>%
               dplyr::filter(cluster == 2) %>%
@@ -553,19 +538,19 @@ silhoutte_onelabel <- function(labels = NULL, # vector of labels
     bots.df <- data.frame(matrix(nrow = 0, ncol = 4))
     names(bots.df) <- c("cluster", "iteration", "size", "avg_sil_width")
 
-    if(ntests > 0){
-    # perform the shuffling
-      for(u in 1:ntests){
+    if (ntests > 0) {
+      # perform the shuffling
+      for (u in 1:ntests) {
         # random vector
-        vec <- rep(1, length(labels))
+        vec <- rep(1, length(cluster_labels))
         # seeding for reproducibility
-        seed <- seed + which(tlabels == a)
+        seed <- seed + which(clabels_unique == a)
         set.seed(seed)
-        random_sample <- sample(1:len, size)
+        random_sample <- sample(1:length(cluster_labels), size)
         vec[random_sample] <- 2
         vec <- vec %>% as.factor() %>% as.numeric()
 
-        # run silhoutte
+        # run silhouette
         silh <- cluster::silhouette(vec, dist)
         sil.res <- as.data.frame(silh) %>%
                     dplyr::filter(cluster == 2)
@@ -584,7 +569,7 @@ silhoutte_onelabel <- function(labels = NULL, # vector of labels
                                      random.values = bots.df$avg_sil_width)
       sil.sumA$p_val_adj <- p.adjust(sil.sumA$p_val,
                                        method = "fdr",
-                                       n = length(tlabels))
+                                       n = length(clabels_unique))
       sil.sumA$conf.int.95 <- NA
       # Compute confidence interval
       bots.df <- bots.df %>%
@@ -593,19 +578,18 @@ silhoutte_onelabel <- function(labels = NULL, # vector of labels
       bots.df$p_val_adj <- NA
 
       sil.sumA <- rbind(sil.sumA, bots.df)
-
     }
 
-    return(list("cell" = sil.res.cell, # silhoutte score for each sample
+    return(list("cell" = sil.res.cell, # silhouette score for each sample
                 "summary" = sil.sumA))
     }
   )
 
   # join results
-  sil.all <- lapply(sils, function(x){x[["cell"]]}) %>%
+  sil.all <- lapply(sils, function(x) {x[["cell"]]}) %>%
                 data.table::rbindlist()
 
-  sil.sum <- lapply(sils, function(x){x[["summary"]]}) %>%
+  sil.sum <- lapply(sils, function(x) {x[["summary"]]}) %>%
                 data.table::rbindlist()
 
 
@@ -621,10 +605,11 @@ silhoutte_onelabel <- function(labels = NULL, # vector of labels
 }
 
 
-###################################################################################################
-# Function to compute p-value based on z score
+
+# Compute p-value based on z score ----------------------------------------
+
 p.val_zscore <- function(obs = NULL,
-                          random.values = NULL){
+                          random.values = NULL) {
 
   mean <- mean(random.values)
   sd <- sd(random.values)
@@ -634,15 +619,16 @@ p.val_zscore <- function(obs = NULL,
 }
 
 
-###################################################################################################
-# Function plot shuffling interval confidence
-plot.score <- function(df = NULL,
-                       type = "density"){
 
-  if(type == "density") {
+# Plot shuffling interval confidence -------------------------------------------------
+
+plot.score <- function(df = NULL,
+                       type = "density") {
+
+  if (type == "density") {
     spl <- split(df, df$cluster)
     pl.list <- list()
-    for(a in names(spl)){
+    for (a in names(spl)) {
 
       it <- spl[[a]] %>% filter(iteration != "NO") %>%
             mutate(adj_p_val = NA)
@@ -672,7 +658,6 @@ plot.score <- function(df = NULL,
 
     }
     pl <- ggpubr::ggarrange(plotlist = pl.list, common.legend = T)
-
   }
 
   if (type == "barplot") {
@@ -688,24 +673,22 @@ plot.score <- function(df = NULL,
           geom_col() +
           theme_bw()
   }
-
   return(pl)
 }
 
 
 
-###################################################################################################
-# Function to set the parallelization parameters using Biocparallel
+# Set the parallelization parameters using Biocparallel -------------------------------------------------
 
 set_parallel_params <- function(ncores,
                                bparam,
                                progressbar)
                               {
-  if(is.null(ncores)){
+  if (is.null(ncores)) {
     ncores <- 1
   }
 
-  if(ncores >= parallelly::availableCores()){
+  if (ncores >= parallelly::availableCores()) {
     ncores <- parallelly::availableCores() - 1
     message("Using all or more cores available in this computer, reducing number of cores to ", ncores)
   }
@@ -721,21 +704,18 @@ set_parallel_params <- function(ncores,
   } else {
     param <- bparam
   }
-
   return(param)
-
 }
 
 
-###################################################################################################
-# Function to compute compositional data with dplyr
+# Compute compositional data with dplyr -------------------------------------------------
 
 compositional_data <- function(data,
                                split.by = NULL,
                                group.by.1 = NULL,
                                useNA = FALSE,
                                clr_zero_impute_perc = 1
-                              ){
+                              ) {
 
   # set grouping variables
   gr_vars <- c(split.by, group.by.1)
@@ -777,8 +757,5 @@ compositional_data <- function(data,
   # join clr df to main dataframe
   ctable <- dplyr::left_join(ctable, clr, by = c(chr_cols, group.by.1))
 
-
   return(ctable)
-
 }
-

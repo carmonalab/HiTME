@@ -1,5 +1,3 @@
-
-
 #' Classify cells using scGate and ProjecTILs.
 #'
 #' @param object A seurat object or a list of seurat objects
@@ -53,38 +51,38 @@
 #'
 
 Run.HiTME <- function(object = NULL,
-                       scGate.model = "default",
-                       scGate.model.branch = c("master", "dev"),
-                       additional.signatures = "default",
-                       ref.maps = NULL,
-                       split.by = NULL,
-                       layer1_link = "CellOntology_ID",
-                       return.Seurat = TRUE,
-                       group.by = list("layer1" = c("scGate_multi"),
-                                       "layer2" = c("functional.cluster")
-                                      ),
-                       useNA = FALSE,
-                       remerge = TRUE,
-                       species = "human",
-                       bparam = NULL,
-                       ncores = parallelly::availableCores() - 2,
-                       progressbar = TRUE){
+                      scGate.model = "default",
+                      scGate.model.branch = c("master", "dev"),
+                      additional.signatures = "default",
+                      ref.maps = NULL,
+                      split.by = NULL,
+                      layer1_link = "CellOntology_ID",
+                      return.Seurat = TRUE,
+                      group.by = list("layer1" = c("scGate_multi"),
+                                      "layer2" = c("functional.cluster")
+                      ),
+                      useNA = FALSE,
+                      remerge = TRUE,
+                      species = "human",
+                      bparam = NULL,
+                      ncores = parallelly::availableCores() - 2,
+                      progressbar = TRUE) {
 
   if (is.null(object)) {
     stop("Please provide a Seurat object or a list of them")
   }
 
-  if(is.list(object) && !is.null(split.by)){
+  if (is.list(object) && !is.null(split.by)) {
     stop("split.by only supported for a single Seurat object, not a list.\n
          Merge list before running HiTME")
   }
 
   # split object into a list if indicated
   if (!is.null(split.by)) {
-    if(is.list(object)){
+    if (is.list(object)) {
       stop("Split.by argument not supported when providing a list of Seurat objects. Set split.by = NULL or merge list.")
     }
-    if(!split.by %in% names(object@meta.data)){
+    if (!split.by %in% names(object@meta.data)) {
       stop(paste("split.by argument: ", split.by, " is not a metadata column in this Seurat object"))
     }
     object <- Seurat::SplitObject(object, split.by = split.by)
@@ -94,7 +92,7 @@ Run.HiTME <- function(object = NULL,
     remerge <-  FALSE
   }
 
-  if(!return.Seurat && is.null(group.by)){
+  if (!return.Seurat && is.null(group.by)) {
     warning("If setting return Seurat as FALSE, HiT summarized object will be returned. Need to indicate group.by variable indicating cell type classification\n
          e.g. group.by = list(\"layer1\" = c(\"scGate_multi\"),\"layer2\" = c(\"functional.cluster\"))\n
             Returning Seurat object, not HiT object.")
@@ -102,16 +100,16 @@ Run.HiTME <- function(object = NULL,
   }
 
   # adapt species
-  if(is.null(species)){
+  if (is.null(species)) {
     stop("Please provide human or mouse as species")
   }
   species <- tolower(species)
-  if(!species == "human"){
-    if(grepl("homo|sap|huma", species)){
+  if (!species == "human") {
+    if (grepl("homo|sap|huma", species)) {
       species <- "human"
     }
-  } else if (!species == "mouse"){
-    if(grepl("mice|mus", species)){
+  } else if (!species == "mouse") {
+    if (grepl("mice|mus", species)) {
       species <- "mouse"
     }
   } else {
@@ -119,14 +117,14 @@ Run.HiTME <- function(object = NULL,
   }
 
   # if object is unique turn into a list
-  if(!is.list(object)){
+  if (!is.list(object)) {
     remerge <-  FALSE
     object <- list(object)
   }
 
 
   # Warning to reduce number of cores if file is huge
-  if(any(lapply(object, ncol))>=30000){
+  if (any(lapply(object, ncol))>=30000) {
     warning("Huge Seurat object, consider reducing number of cores to avoid memory issues")
   }
 
@@ -139,45 +137,45 @@ Run.HiTME <- function(object = NULL,
 
   # Get default additional signatures
   # based on species get SignatuR signatures
-  if(!is.null(additional.signatures)){
+  if (!is.null(additional.signatures)) {
     # convert to list if not
-    if(!is.list(additional.signatures)){
+    if (!is.list(additional.signatures)) {
       additional.signatures <- list(additional.signatures)
     }
 
-    if(length(additional.signatures) == 1 && tolower(additional.signatures) == "default"){
-      if(species == "human"){
+    if (length(additional.signatures) == 1 && tolower(additional.signatures) == "default") {
+      if (species == "human") {
         sig.species <- "Hs"
-      } else if(species == "mouse"){
+      } else if (species == "mouse") {
         sig.species <- "Mm"
       }
       additional.signatures <- SignatuR::GetSignature(SignatuR::SignatuR[[sig.species]][["Programs"]])
       message(" - Adding additional signatures: ", paste(names(additional.signatures), collapse = ", "), "\n")
     }
-    } else {
-      for(v in seq_along(additional.signatures)){
-        if(is.null(names(additional.signatures)[[v]]) || is.na(names(additional.signatures)[[v]])){
-          names(additional.signatures)[[v]] <- paste0("Additional_signature", v)
-        }
+  } else {
+    for (v in seq_along(additional.signatures)) {
+      if (is.null(names(additional.signatures)[[v]]) || is.na(names(additional.signatures)[[v]])) {
+        names(additional.signatures)[[v]] <- paste0("Additional_signature", v)
       }
     }
+  }
 
 
   # Run scGate, if model is provided
-  if(!is.null(scGate.model)) {
+  if (!is.null(scGate.model)) {
     message("## Running scGate\n")
 
-    if(!is.list(scGate.model)){
+    if (!is.list(scGate.model)) {
       scGate.model <- list(scGate.model)
     }
 
     # Retrieve default scGate models if default
-    if(length(scGate.model) == 1 && tolower(scGate.model) == "default"){
+    if (length(scGate.model) == 1 && tolower(scGate.model) == "default") {
       scGate.model.branch <- scGate.model.branch[1]
-      if(species == "human"){
+      if (species == "human") {
         scGate.model <- scGate::get_scGateDB(branch = scGate.model.branch,
                                              force_update = F)[[species]][["HiTME"]]
-      } else if(species == "mouse"){
+      } else if (species == "mouse") {
         scGate.model <- scGate::get_scGateDB(branch = scGate.model.branch,
                                              force_update = F)[[species]][["HiTME"]]
       }
@@ -186,20 +184,20 @@ Run.HiTME <- function(object = NULL,
 
 
 
-  ## Run scGate
+    ## Run scGate
     object <- lapply(
-              X = object,
-              FUN = function(x) {
-                    if(class(x) != "Seurat"){
-                      stop("Not Seurat object included, cannot be processed.\n")
-                    }
-                    x <- scGate::scGate(x,
-                                        model=scGate.model,
-                                        additional.signatures = additional.signatures,
-                                        BPPARAM = param,
-                                        multi.asNA = T)
-                    return(x)
-              }
+      X = object,
+      function(x) {
+        if (class(x) != "Seurat") {
+          stop("Not Seurat object included, cannot be processed.\n")
+        }
+        x <- scGate::scGate(x,
+                            model=scGate.model,
+                            additional.signatures = additional.signatures,
+                            BPPARAM = param,
+                            multi.asNA = T)
+        return(x)
+      }
     )
 
     message("Finished scGate\n####################################################\n")
@@ -208,24 +206,20 @@ Run.HiTME <- function(object = NULL,
   }
 
     # Instance if we want to run additional signatures but not scGate
-  if(is.null(scGate.model) && !is.null(additional.signatures)){
-
-  message("Running additional Signatures but not Running scGate classification\n")
-  object <- lapply(
-    X = object,
-    FUN = function(x) {
-      if(class(x) != "Seurat"){
-        stop("Not Seurat object included, cannot be processed.\n")
+  if (is.null(scGate.model) && !is.null(additional.signatures)) {
+    message("Running additional Signatures but not Running scGate classification\n")
+    object <- lapply(
+      X = object,
+      function(x) {
+        if (class(x) != "Seurat") {
+          stop("Not Seurat object included, cannot be processed.\n")
+        }
+          x <- UCell::AddModuleScore_UCell(x,
+                                          features = additional.signatures,
+                                          BPPARAM = param)
+        return(x)
       }
-        x <- UCell::AddModuleScore_UCell(x,
-                                        features = additional.signatures,
-                                        BPPARAM = param)
-
-      return(x)
-    }
-  )
-
-
+    )
   }
 
 
@@ -233,95 +227,93 @@ Run.HiTME <- function(object = NULL,
   # Run ProjecTILs if ref.maps is provided
   if (!is.null(ref.maps)) {
     # convert ref.maps to list if not
-    if(!is.list(ref.maps)){
+    if (!is.list(ref.maps)) {
       ref.maps <- list(ref.maps)
     }
 
     # give name to ref.maps list if not present
-    for(v in seq_along(ref.maps)){
-      if(is.null(names(ref.maps)[[v]]) || is.na(names(ref.maps)[[v]])){
+    for (v in seq_along(ref.maps)) {
+      if (is.null(names(ref.maps)[[v]]) || is.na(names(ref.maps)[[v]])) {
         names(ref.maps)[[v]] <- paste0("Map_", v)
       }
     }
 
     # check that all ref maps are Seurat objects
-    if(suppressWarnings(!all(lapply(ref.maps, function(x){class(x) == "Seurat"})))){
+    if (suppressWarnings(!all(lapply(ref.maps, function(x) {class(x) == "Seurat"})))) {
       message("Some or all reference maps are not a Seurat object, please provide reference maps as Seurat objects.\nNot running Projectils.")
     } else {
 
       message("## Running Projectils\n")
 
         object <- lapply(
-                  X = object,
-                  FUN = function(x) {
-                    if(class(x) != "Seurat"){
-                      stop("Not Seurat object included, cannot be processed.\n")
-                    }
-                    x <- ProjecTILs.classifier.multi(x,
-                                                     ref.maps = ref.maps,
-                                                     bparam = param,
-                                                     layer1_link = layer1_link)
-                    return(x)
-                  }
+          X = object,
+          function(x) {
+            if (class(x) != "Seurat") {
+              stop("Not Seurat object included, cannot be processed.\n")
+            }
+            x <- ProjecTILs.classifier.multi(x,
+                                             ref.maps = ref.maps,
+                                             bparam = param,
+                                             layer1_link = layer1_link)
+            return(x)
+          }
         )
-
     message("Finished Projectils\n####################################################\n")
     }
+
   } else {
     message("Not running reference mapping as no reference maps were indicated.\n")
   }
 
 
- # Remerge if indicated
+  # Remerge if indicated
   if (remerge && length(object)>1) {
-      object <- merge(object[[1]],object[2:length(object)])
-      object <- list(object)
+    object <- merge(object[[1]],object[2:length(object)])
+    object <- list(object)
   }
 
 
   # add layer_links metadata levels
   # misc slots are removed when merging objects
   object <- lapply(object,
-                   function(x){
+                   function(x) {
                      # add misc slot, removed when merging
                      x@misc[["layer1_param"]] <- list()
                      x@misc[["layer1_param"]][["scGate_models"]] <- names(scGate.model)
                      x@misc[["layer1_param"]][["additional.signatures"]] <- names(additional.signatures)
 
-                     if(!is.null(scGate.model)){
+                     if (!is.null(scGate.model)) {
                        x$scGate_multi <- factor(x$scGate_multi,
                                                 levels = names(scGate.model))
                      }
-                     if(!is.null(ref.maps)){
+                     if (!is.null(ref.maps)) {
                        # get ref.maps all cells types
-                       if("functional.cluster" %in% names(x@meta.data)){
-                         all.levels <- lapply(ref.maps, function(x){
+                       if ("functional.cluster" %in% names(x@meta.data)) {
+                         all.levels <- lapply(ref.maps, function(x) {
                            unique(x$functional.cluster)
                          })
                          x$functional.cluster <- factor(x$functional.cluster,
                                                         levels = unlist(all.levels))
 
                          # add each level to misc
-                         names(all.levels) <- lapply(ref.maps, function(x){
+                         names(all.levels) <- lapply(ref.maps, function(x) {
                            x@misc$layer1_link
-                       })
+                         })
                        } else {
                          all.levels <- NULL
                        }
                        x@misc[["layer2_param"]][["functional.cluster"]][["levels2_per_levels1"]] <- all.levels
                        # all refs indicated in the function
                        x@misc[["layer2_param"]][["functional.cluster"]][["References_user_specified"]] <- names(ref.maps)
-
-
                      }
                      return(x)
-
-                   })
+                   }
+  )
 
 
   # if group.by parameters are not present in metadata, return Seurat
-  if(!return.Seurat){
-    if(suppressWarnings(!all(lapply(object, function(x){any(names(x@meta.data) %in% group.by)})))){
+  if (!return.Seurat) {
+    if (suppressWarnings(!all(lapply(object, function(x) {any(names(x@meta.data) %in% group.by)})))) {
       message("None of the 'group.by' variables found, returning Seurat object not HiT object.")
       return.Seurat <- TRUE
     } else {
@@ -330,7 +322,7 @@ Run.HiTME <- function(object = NULL,
       hit <- BiocParallel::bplapply(
         X = object,
         BPPARAM = param,
-        FUN = function(x) {
+        function(x) {
           x <- get.HiTObject(x,
                              group.by = group.by,
                              useNA = useNA
@@ -344,13 +336,13 @@ Run.HiTME <- function(object = NULL,
 
   # if list is of 1, return object not list
 
-  if(return.Seurat){
-    if(length(object)==1){
+  if (return.Seurat) {
+    if (length(object)==1) {
       object <- object[[1]]
     }
     return(object)
   } else {
-    if(length(hit)==1){
+    if (length(hit)==1) {
       hit <- hit[[1]]
     }
     return(hit)
@@ -395,34 +387,33 @@ get.HiTObject <- function(object,
                           layers_links = c("scGate_multi" = "functional.cluster"),
                           gene.filter = NULL,
                           assay = "RNA",
-                          layer1_link = "CellOntology_ID"
-                          ){
+                          layer1_link = "CellOntology_ID") {
 
 
   if (is.null(object)) {
     stop("Please provide a Seurat object")
-  } else if(class(object) != "Seurat"){
+  } else if (class(object) != "Seurat") {
     stop("Not Seurat object included, cannot be processed.\n")
   }
 
 
-  if(is.null(group.by)){
+  if (is.null(group.by)) {
     stop("Please provide at least one grouping variable")
   }
 
-  if(!is.list(group.by)){
+  if (!is.list(group.by)) {
     group.by <- as.list(group.by)
   }
 
-  if(!any(group.by %in% names(object@meta.data))){
+  if (!any(group.by %in% names(object@meta.data))) {
     stop("Group.by variables ", paste(group.by, collapse = ", "), " not found in metadata")
-  } else if (!all(group.by %in% names(object@meta.data))){
+  } else if (!all(group.by %in% names(object@meta.data))) {
     group.by <- group.by[group.by %in% names(object@meta.data)]
     message("Only found ", paste(group.by, collapse = ", ") , " as grouping variable for HiT Object.")
   }
 
-  for(v in seq_along(group.by)){
-    if(is.null(names(group.by)[[v]]) || is.na(names(group.by)[[v]])){
+  for (v in seq_along(group.by)) {
+    if (is.null(names(group.by)[[v]]) || is.na(names(group.by)[[v]])) {
       names(group.by)[[v]] <- paste0("layer", v)
     }
   }
@@ -430,7 +421,7 @@ get.HiTObject <- function(object,
 
     # make list of list for layers for predictions slot
   pred.list <- list()
-  for(a in names(group.by)){
+  for (a in names(group.by)) {
     pred.list[[a]] <- list()
     pred.list[[a]] <- object@meta.data[,group.by[[a]], drop = F]
   }
@@ -439,45 +430,44 @@ get.HiTObject <- function(object,
 
   #run extended if object got scGate info
   # extract values from misc slot from object
-  if(any(group.by == "scGate_multi")){
+  if (any(group.by == "scGate_multi")) {
     layer.scgate <- names(group.by[group.by == "scGate_multi"])
-    if(is.null(name.additional.signatures)){
+    if (is.null(name.additional.signatures)) {
       name.additional.signatures <- object@misc$layer1_param$additional.signatures
     }
-  scgate.models <- object@misc$layer1_param$layer1_models
+    scgate.models <- object@misc$layer1_param$layer1_models
 
 
-  if(!is.null(name.additional.signatures)){
-  sig <- grep(paste(name.additional.signatures, collapse = "|"),
-              names(object@meta.data), value = T)
-  sig.df <- object@meta.data[, sig]
-  pred.list[[layer.scgate]][["additional_signatures"]] <- sig.df
-  }
+    if (!is.null(name.additional.signatures)) {
+      sig <- grep(paste(name.additional.signatures, collapse = "|"),
+                  names(object@meta.data), value = T)
+      sig.df <- object@meta.data[, sig]
+      pred.list[[layer.scgate]][["additional_signatures"]] <- sig.df
+    }
 
-  if(!is.null(scgate.models)){
-  scgate <- grep(paste(paste0(scgate.models, "$"), collapse = "|"),
-                 names(object@meta.data), value = T)
-  scgate.df <- object@meta.data[, scgate]
-  pred.list[[layer.scgate]][["scGate_is.pure"]] <- scgate.df
-  }
+    if (!is.null(scgate.models)) {
+      scgate <- grep(paste(paste0(scgate.models, "$"), collapse = "|"),
+                     names(object@meta.data), value = T)
+      scgate.df <- object@meta.data[, scgate]
+      pred.list[[layer.scgate]][["scGate_is.pure"]] <- scgate.df
+    }
 
-  if(!is.null(name.additional.signatures) && !is.null(scgate.models)){
-  ucell <- names(object@meta.data)[!names(object@meta.data) %in% c(sig, scgate)] %>%
-            grep("_UCell$", ., value = T)
+    if (!is.null(name.additional.signatures) && !is.null(scgate.models)) {
+    ucell <- names(object@meta.data)[!names(object@meta.data) %in% c(sig, scgate)] %>%
+              grep("_UCell$", ., value = T)
 
-  ucell.df <- object@meta.data[, ucell]
+    ucell.df <- object@meta.data[, ucell]
 
-  pred.list[[layer.scgate]][["UCell_scores"]] <- ucell.df
-  }
+    pred.list[[layer.scgate]][["UCell_scores"]] <- ucell.df
+    }
   }
 
   #run extended if object got projectils info
   # extract values from misc slot from object
-  if(any(group.by == "functional.cluster")){
+  if (any(group.by == "functional.cluster")) {
     layer.pt <- names(group.by[group.by == "functional.cluster"])
     pred.list[[layer.pt]][["functional.cluster"]] <- object@meta.data[,"functional.cluster", drop = F]
     pred.list[[layer.pt]][["functional.cluster.conf"]] <- object@meta.data[,"functional.cluster.conf", drop = F]
-
   }
 
 
@@ -505,7 +495,6 @@ get.HiTObject <- function(object,
                                              name.additional.signatures = name.additional.signatures,
                                              useNA = useNA)
 
-
   hit <- methods::new("HiT",
                        metadata = object@meta.data,
                        predictions = pred.list,
@@ -513,11 +502,7 @@ get.HiTObject <- function(object,
                                                  "Signatures" = aggr.signature),
                        composition = comp.prop
                       )
-
-
   return(hit)
-
-
 }
 
 
@@ -569,37 +554,37 @@ get.celltype.composition <- function(object = NULL,
 
   # input can be a Seurat object or a dataframe containing its meta.data
   # convert object to metadata if seurat object is provided
-  if(class(object) == "Seurat"){
+  if (class(object) == "Seurat") {
     meta.data <- object@meta.data
-    if(is.null(meta.data)){
+    if (is.null(meta.data)) {
       stop("No metadata found in this Seurat object")
       }
   } else {
     stop("Not Seurat object or dataframe included, cannot be processed.\n")
   }
 
-  if(is.null(group.by.composition)){
+  if (is.null(group.by.composition)) {
     stop("Please specificy a group.by.composition variable")
   }
 
   # Assess wheter split.by variable is in metadata
-  if(!is.null(split.by) && !split.by %in% names(meta.data)){
+  if (!is.null(split.by) && !split.by %in% names(meta.data)) {
     stop("Split.by variable not found in meta.data!\n")
   }
 
-  if(length(useNA) != 1 && length(useNA) != length(group.by.composition)){
+  if (length(useNA) != 1 && length(useNA) != length(group.by.composition)) {
     stop("useNA variable must be of length 1 or the same length as group.by.composition (group.by)")
   }
 
   # convert group.by.composition to list if not
-  if(!is.list(group.by.composition)){
+  if (!is.list(group.by.composition)) {
     group.by.composition <- as.list(group.by.composition)
   }
 
 
   # Rename group.by.composition if not indicated
-  for(v in seq_along(group.by.composition)){
-    if(is.null(names(group.by.composition)[[v]]) || is.na(names(group.by.composition)[[v]])){
+  for (v in seq_along(group.by.composition)) {
+    if (is.null(names(group.by.composition)[[v]]) || is.na(names(group.by.composition)[[v]])) {
       names(group.by.composition)[[v]] <- group.by.composition[[v]]
     }
 
@@ -608,9 +593,9 @@ get.celltype.composition <- function(object = NULL,
 
 
   # Keep only grouping variables in metadata
-  if(!any(group.by.composition %in% names(meta.data))){
+  if (!any(group.by.composition %in% names(meta.data))) {
     stop("Group.by variables ", paste(group.by.composition, collapse = ", "), " not found in metadata")
-  } else if (!all(group.by.composition %in% names(meta.data))){
+  } else if (!all(group.by.composition %in% names(meta.data))) {
     group.present <- group.by.composition %in% names(meta.data)
     # accommodate useNA vector
     if (length(useNA) == length(group.by.composition)) {
@@ -627,9 +612,9 @@ get.celltype.composition <- function(object = NULL,
                 dplyr::mutate_at(unlist(group.by.composition), as.factor)
 
   # evaluate which layers are included in group.by.composition and layers_links
-  for(l in seq_along(layers_links)){
-    if(!all(c(names(layers_links[l]), layers_links[l]) %in%
-           group.by.composition)){
+  for (l in seq_along(layers_links)) {
+    if (!all(c(names(layers_links[l]), layers_links[l]) %in%
+           group.by.composition)) {
       message("Not computing relative proportion values of layer2 within layer1 for ",
               paste0(names(layers_links[l]), " -> ", layers_links[l]))
     }
@@ -664,12 +649,12 @@ get.celltype.composition <- function(object = NULL,
       }
 
       # get proportion relative to layer1 types
-      if(group.by.composition[[i]] %in% layers_links){
+      if (group.by.composition[[i]] %in% layers_links) {
         lay <- layers_links[which(layers_links == group.by.composition[[i]])]
-        if(lay %in% names(object@misc$layer2_param)){
+        if (lay %in% names(object@misc$layer2_param)) {
           meta.split <- split(meta.data, meta.data[[names(lay)]])
           # switch list names to cell ontology ID
-          cellonto_dic <- lapply(meta.split, function(x){
+          cellonto_dic <- lapply(meta.split, function(x) {
                           nam <- unique(x[[names(lay)]])
                           val <- unique(x[[layer1_link]])
                           names(val) <- nam
@@ -686,7 +671,7 @@ get.celltype.composition <- function(object = NULL,
           meta.split <- meta.split[names(levs)]
 
           # add factor to group by layer1
-          for(f in names(meta.split)){
+          for (f in names(meta.split)) {
             meta.split[[f]]$functional.cluster <- factor(meta.split[[f]]$functional.cluster,
                                                          levels = levs[[f]])
           }
@@ -735,31 +720,30 @@ get.aggregated.profile <- function(object,
 
   if (is.null(object)) {
     stop("Please provide a Seurat object")
-    if(class(object) != "Seurat"){
+    if (class(object) != "Seurat") {
       stop("Please provide a Seurat object")
     }
   }
 
-  if(is.null(group.by.aggregated)){
+  if (is.null(group.by.aggregated)) {
     stop("Please specificy a group.by.aggregated variable")
   }
 
   # convert group.by.aggregated to list if not
-  if(!is.list(group.by.aggregated)){
+  if (!is.list(group.by.aggregated)) {
     group.by.aggregated <- as.list(group.by.aggregated)
   }
 
   # Rename group.by.aggregated if not indicated
-  # Rename group.by.aggregated if not indicated
-  for(v in seq_along(group.by.aggregated)){
-    if(is.null(names(group.by.aggregated)[[v]]) || is.na(names(group.by.aggregated)[[v]])){
+  for (v in seq_along(group.by.aggregated)) {
+    if (is.null(names(group.by.aggregated)[[v]]) || is.na(names(group.by.aggregated)[[v]])) {
       names(group.by.aggregated)[[v]] <- group.by.aggregated[[v]]
     }
   }
 
-  if(!any(group.by.aggregated %in% names(object@meta.data))){
+  if (!any(group.by.aggregated %in% names(object@meta.data))) {
     stop("Group.by variables ", paste(group.by.aggregated, collapse = ", "), " not found in metadata")
-  } else if (!all(group.by.aggregated %in% names(object@meta.data))){
+  } else if (!all(group.by.aggregated %in% names(object@meta.data))) {
     group.by.aggregated <- group.by.aggregated[group.by.aggregated %in% names(object@meta.data)]
     message("Only found ", paste(group.by.aggregated, collapse = ", ") , " as grouping variables.")
   }
@@ -768,43 +752,39 @@ get.aggregated.profile <- function(object,
   avg.exp <- list()
 
   # loop over different grouping
-
-  for(i in names(group.by.aggregated)){
+  for (i in names(group.by.aggregated)) {
 
     # compute pseudobulk
-    suppressWarnings(
-      {
-        # Handle not annotated cells being labelled as NA
-        obj_tmp <- object
-        obj_tmp@meta.data[[group.by.aggregated[[i]]]] <- as.character(obj_tmp@meta.data[[group.by.aggregated[[i]]]])
-        obj_tmp@meta.data[[group.by.aggregated[[i]]]][is.na(obj_tmp@meta.data[[group.by.aggregated[[i]]]])] <- "NA"
-        obj_tmp@meta.data[[group.by.aggregated[[i]]]] <- as.factor(obj_tmp@meta.data[[group.by.aggregated[[i]]]])
+    suppressWarnings({
+      # Handle not annotated cells being labelled as NA
+      obj_tmp <- object
+      obj_tmp@meta.data[[group.by.aggregated[[i]]]] <- as.character(obj_tmp@meta.data[[group.by.aggregated[[i]]]])
+      obj_tmp@meta.data[[group.by.aggregated[[i]]]][is.na(obj_tmp@meta.data[[group.by.aggregated[[i]]]])] <- "NA"
+      obj_tmp@meta.data[[group.by.aggregated[[i]]]] <- as.factor(obj_tmp@meta.data[[group.by.aggregated[[i]]]])
 
-        if (length(unique(object@meta.data[[group.by.aggregated[[i]]]])) >= 2) {
-          avg.exp[[i]] <-
-            Seurat::AggregateExpression(obj_tmp,
-                                        group.by = group.by.aggregated[[i]],
-                                        assays = assay,
-                                        verbose = F,
-                                        ...)[[assay]]
-        } else {
-          # Handle case if there is only one cell type
-          avg.exp[[i]] <- obj.list[[1]]@assays[["RNA"]]["counts"]
-          row_names <- names(avg.exp[[i]])
-          col_name <- unique(obj_tmp@meta.data[[group.by.aggregated[[i]]]])
-          avg.exp[[i]] <- Matrix::Matrix(rowSums(avg.exp[[i]]))
-          rownames(avg.exp[[i]]) <- row_names
-          colnames(avg.exp[[i]]) <- col_name
-        }
-      })
+      if (length(unique(object@meta.data[[group.by.aggregated[[i]]]])) >= 2) {
+        avg.exp[[i]] <-
+          Seurat::AggregateExpression(obj_tmp,
+                                      group.by = group.by.aggregated[[i]],
+                                      assays = assay,
+                                      verbose = F,
+                                      ...)[[assay]]
+      } else {
+        # Handle case if there is only one cell type
+        avg.exp[[i]] <- obj.list[[1]]@assays[["RNA"]]["counts"]
+        row_names <- names(avg.exp[[i]])
+        col_name <- unique(obj_tmp@meta.data[[group.by.aggregated[[i]]]])
+        avg.exp[[i]] <- Matrix::Matrix(rowSums(avg.exp[[i]]))
+        rownames(avg.exp[[i]]) <- row_names
+        colnames(avg.exp[[i]]) <- col_name
+      }
+    })
 
     if (useNA == FALSE) {
       # Drop NA column
       avg.exp[[i]] <- avg.exp[[i]][, !colnames(avg.exp[[i]]) %in% "NA", drop = FALSE]
     }
-
   }
-
   return(avg.exp)
 }
 
@@ -829,57 +809,57 @@ get.aggregated.signature <- function(object,
                                      group.by.aggregated = NULL,
                                      name.additional.signatures = NULL,
                                      fun = mean,
-                                     useNA = FALSE){
+                                     useNA = FALSE) {
 
 
   # input can be a Seurat object or a dataframe containing its meta.data
   # convert object to metadata if seurat object is provided
-  if(class(object) == "Seurat"){
+  if (class(object) == "Seurat") {
     meta.data <- object@meta.data
-    if(is.null(meta.data)){
+    if (is.null(meta.data)) {
       stop("No metadata found in this Seurat object")
     }
-  } else if (class(object) == "data.frame"){
+  } else if (class(object) == "data.frame") {
     meta.data <- object
   } else {
     stop("Not Seurat object or dataframe included, cannot be processed.\n")
   }
 
 
-  if(is.null(group.by.aggregated)){
+  if (is.null(group.by.aggregated)) {
     stop("Please specificy a group.by.aggregated variable")
   }
 
   # convert group.by.aggregated to list if not
-  if(!is.list(group.by.aggregated)){
+  if (!is.list(group.by.aggregated)) {
     group.by.aggregated <- as.list(group.by.aggregated)
   }
 
   # Rename group.by.aggregated if not indicated
-  for(v in seq_along(group.by.aggregated)){
-    if(is.null(names(group.by.aggregated)[[v]]) || is.na(names(group.by.aggregated)[[v]])){
+  for (v in seq_along(group.by.aggregated)) {
+    if (is.null(names(group.by.aggregated)[[v]]) || is.na(names(group.by.aggregated)[[v]])) {
       names(group.by.aggregated)[[v]] <- group.by.aggregated[[v]]
     }
   }
 
-  if(!any(group.by.aggregated %in% names(meta.data))){
+  if (!any(group.by.aggregated %in% names(meta.data))) {
     stop("Group.by variables ", paste(group.by.aggregated, collapse = ", "), " not found in metadata")
-  } else if (!all(group.by.aggregated %in% names(meta.data))){
+  } else if (!all(group.by.aggregated %in% names(meta.data))) {
     group.by.aggregated <- group.by.aggregated[group.by.aggregated %in% names(meta.data)]
     message("Only found ", paste(group.by.aggregated, collapse = ", ") , " as grouping variable.")
   }
 
-  if(is.null(name.additional.signatures)){
+  if (is.null(name.additional.signatures)) {
     name.additional.signatures <- object@misc$layer1_param$additional.signatures
   }
 
-  if(is.null(name.additional.signatures)){
+  if (is.null(name.additional.signatures)) {
     message("No additional signatures indicated. Returning NULL")
     aggr.sig <- NULL
   } else {
 
-    if(!any(grepl(paste(name.additional.signatures, collapse = "|"),
-                  names(meta.data)))){
+    if (!any(grepl(paste(name.additional.signatures, collapse = "|"),
+                  names(meta.data)))) {
       stop("No additional signatures found in this object metadata")
     }
 
@@ -888,22 +868,19 @@ get.aggregated.signature <- function(object,
 
     aggr.sig <- list()
 
-    for(e in names(group.by.aggregated)){
+    for (e in names(group.by.aggregated)) {
       aggr.sig[[e]] <- meta.data %>%
         dplyr::group_by(.data[[group.by.aggregated[[e]]]]) %>%
         dplyr::summarize_at(add.sig.cols, fun, na.rm = T)
 
         # filter out NA if useNA=F
-      if(!useNA){
+      if (!useNA) {
         aggr.sig[[e]] <- aggr.sig[[e]] %>%
                           dplyr::filter(!is.na(.data[[group.by.aggregated[[e]]]]))
       }
-
     }
   }
-
   return(aggr.sig)
-
 }
 
 
@@ -925,15 +902,12 @@ get.aggregated.signature <- function(object,
 
 get.GOList <- function(GO_accession = NULL,
                        species = "Human",
-                       host = "https://dec2021.archive.ensembl.org/"
-                      ){
+                       host = "https://dec2021.archive.ensembl.org/") {
 
-
-
-  if(is.null(GO_accession)){
+  if (is.null(GO_accession)) {
     stop("Please provide at least one GO accession ID (e.g. GO:0003700")
   } else {
-    if(length(names(GO_accession)) == 0){
+    if (length(names(GO_accession)) == 0) {
       names(GO_accession) <- GO_accession
     }
   }
@@ -942,13 +916,13 @@ get.GOList <- function(GO_accession = NULL,
 
 
   # adapt species
-  if(is.null(species)){
+  if (is.null(species)) {
     stop("Please provide human or mouse as species")
   }
   species <- tolower(species)
-  if(grepl("homo|sapi|huma", species)){
+  if (grepl("homo|sapi|huma", species)) {
     dataset <- "hsapiens_gene_ensembl"
-  } else if (grepl("mice|mus", species)){
+  } else if (grepl("mice|mus", species)) {
     dataset <- "mmusculus_gene_ensembl"
   } else {
     stop("Only supported species are human and mouse")
@@ -972,21 +946,21 @@ get.GOList <- function(GO_accession = NULL,
                                        mart = ensembl)
         gene.data.bm
       },
-      error = function(e){
+      error = function(e) {
         message("GO accession from biomaRt not possible")
         message(e)
         NULL
       }
     )
 
-  if(!is.null(gene.data.bm)){
+  if (!is.null(gene.data.bm)) {
     gene.data <- gene.data.bm %>%
       dplyr::filter(go_id %in% GO_accession) %>%
       dplyr::filter(hgnc_symbol != "") %>%
       split(., as.factor(.$go_id)) %>%
       lapply(., function(x) x[,1])
 
-    if(length(names(gene.data)) != length(GO_accession)){
+    if (length(names(gene.data)) != length(GO_accession)) {
       warning("Additional GO accession provided not found in GO database")
     }
   names(gene.data) <- paste0(names(gene.data), "_",
@@ -995,10 +969,7 @@ get.GOList <- function(GO_accession = NULL,
   } else {
     gene.data <- NULL
   }
-
-
   return(gene.data)
-
 }
 
 
@@ -1023,55 +994,51 @@ get.GOList <- function(GO_accession = NULL,
 
 merge.HiTObjects <- function(object = NULL,
                              group.by = list("layer1" = c("scGate_multi"),
-                                             "layer2" = c("functional.cluster")
-                             ),
+                                             "layer2" = c("functional.cluster")),
                              metadata.vars = NULL,
                              ncores = parallelly::availableCores() - 2,
                              bparam = NULL,
                              progressbar = FALSE,
-                             verbose = FALSE
-                             ){
-
+                             verbose = FALSE) {
 
   if (is.null(object) || !is.list(object)) {
     stop("Please provide a list of HiT object containing more than one sample")
-    if(suppressWarnings(!all(lapply(object, function(x){class(x) == "HiT"})))){
+    if (suppressWarnings(!all(lapply(object, function(x) {class(x) == "HiT"})))) {
       stop("Not all components of the list are HiT objects.")
     }
   }
 
   # give name to list of hit objects
-  for (v in seq_along(object)){
-    if(is.null(names(object)[v]) | is.na(names(object)[v])){
+  for (v in seq_along(object)) {
+    if (is.null(names(object)[v]) | is.na(names(object)[v])) {
       names(object)[v] <- paste0("Sample", v)
     }
   }
 
 
-  if (is.null(group.by)){
+  if (is.null(group.by)) {
     stop("Please provide at least one grouping variable for cell type classification common in all elements of the list of Hit objects")
   } else {
-    if(!is.list(group.by)){
+    if (!is.list(group.by)) {
       group.by <- as.list(group.by)
     }
     # give name to list of grouping.by variables
-    for(v in seq_along(group.by)){
-      if(is.null(names(group.by)[v]) | is.na(names(group.by)[v])){
+    for (v in seq_along(group.by)) {
+      if (is.null(names(group.by)[v]) | is.na(names(group.by)[v])) {
         names(group.by)[v] <- paste0("layer", v)
       }
     }
   }
 
-  if (suppressWarnings(!all(lapply(object, function(x){any(group.by %in% names(x@metadata))})))) {
+  if (suppressWarnings(!all(lapply(object, function(x) {any(group.by %in% names(x@metadata))})))) {
     stop("Not all supplied HiT object contain ", paste(group.by, collapse = ", "),
          "group.by elements in their metadata")
   } else {
     present <- sapply(group.by,
-                      function(char){
+                      function(char) {
                         unlist(lapply(object,
                                       function(df) {char %in% colnames(df@metadata)}
                         ))
-
                       }
     )
     if (verbose) {
@@ -1079,35 +1046,33 @@ merge.HiTObjects <- function(object = NULL,
 
       present.sum <- colSums(present)
 
-      for(l in names(group.by)){
+      for (l in names(group.by)) {
         message("** ", l, " present in ", present.sum[[l]], " / ", length(object), " HiT objects.")
       }
     }
   }
 
-  if(!is.null(metadata.vars)){
+  if (!is.null(metadata.vars)) {
     if (verbose) {message("\n#### Metadata ####")}
-    if (suppressWarnings(!all(lapply(object, function(x){any(metadata.vars %in% names(x@metadata))})))) {
+    if (suppressWarnings(!all(lapply(object, function(x) {any(metadata.vars %in% names(x@metadata))})))) {
       message("Not all supplied HiT object contain ", paste(metadata.vars, collapse = ", "),
               "metadata elements in their metadata")
     }
     if (verbose) {
       in.md <- sapply(metadata.vars,
-                      function(char){
+                      function(char) {
                         unlist(lapply(object,
                                       function(df) {char %in% colnames(df@metadata)}
                         ))
-
                       }
       )
       in.md.sum <- colSums(in.md)
 
-      for (l in metadata.vars){
+      for (l in metadata.vars) {
         message("** ", l, " present in ", in.md.sum[[l]], " / ", length(object), " HiT objects.")
       }
     }
   }
-
 
   # set parallelization parameters
   param <- set_parallel_params(ncores = ncores,
@@ -1121,18 +1086,18 @@ merge.HiTObjects <- function(object = NULL,
     # Per HiTObject from input, get metadata column names which have all the same value.
     # E.g. each HiTObject is from a specific sample, so each HiTObject has metadata column "Sample" which contains all the same value (e.g. "sample1" for sample 1, "sample2" for sample 2, etc.)
     # Other metadata columns, e.g. scGate_multi can be dropped, as the merged HiTObject is a summary per sample, so single-cell metadata columns don't make sense.
-    umc <- lapply(names(HiT_summary_list), FUN = function (x) {apply(HiT_summary_list[[x]]@metadata, 2, function(y) length(unique(y))) == 1})
+    umc <- lapply(names(HiT_summary_list), function (x) {apply(HiT_summary_list[[x]]@metadata, 2, function(y) length(unique(y))) == 1})
     umc <- umc %>% Reduce("&", .)
     metadata.vars <- names(umc)[umc == T]
   }
-  metadata <- lapply(names(object), FUN = function (x) {object[[x]]@metadata[1, metadata.vars] %>% mutate(sample = x)})
+  metadata <- lapply(names(object), function (x) {object[[x]]@metadata[1, metadata.vars] %>% mutate(sample = x)})
   metadata <- data.table::rbindlist(metadata, use.names=TRUE, fill=TRUE)
 
   comp.prop <- list()
   avg.expr <- list()
   aggr.signature <- list()
 
-  for(gb in names(group.by)){
+  for (gb in names(group.by)) {
 
     layer_present <- rownames(present)[present[,gb]]
 
@@ -1148,12 +1113,12 @@ merge.HiTObjects <- function(object = NULL,
     is_list_check <- object[layer_present] %>%
       lapply(slot, name = "composition") %>%
       lapply("[[", gb) %>%
-      lapply(FUN = function(x) {is.list(x) & !is.data.frame(x)}) %>%
+      lapply(function(x) {is.list(x) & !is.data.frame(x)}) %>%
       unlist()
     if (all(is_df_check)) {
       df <- bplapply(X = layer_present,
                      BPPARAM = param,
-                     FUN = function(x){
+                     function(x) {
                        object[[x]]@composition[[gb]] %>% mutate(sample = x)
                      })
       df <- data.table::rbindlist(df, use.names=TRUE, fill=TRUE)
@@ -1166,11 +1131,11 @@ merge.HiTObjects <- function(object = NULL,
         lapply(names) %>%
         unlist() %>%
         unique()
-      for (i in gb_sublevel_unique_names){
+      for (i in gb_sublevel_unique_names) {
         df <- bplapply(X = layer_present,
                        BPPARAM = param,
-                       FUN = function(x){
-                         if(!is.null(object[[x]]@composition[[gb]][[i]])) {
+                       function(x) {
+                         if (!is.null(object[[x]]@composition[[gb]][[i]])) {
                            object[[x]]@composition[[gb]][[i]] %>% mutate(sample = x)
                          }
                        })
@@ -1184,14 +1149,14 @@ merge.HiTObjects <- function(object = NULL,
     message("Merging aggregated profiles of " , gb, "...")
 
     # Aggregated_profile Pseudobulk
-    celltypes <- lapply(names(object), FUN = function(x){ colnames(object[[x]]@aggregated_profile[["Pseudobulk"]][[gb]]) }) %>% unlist() %>% unique()
+    celltypes <- lapply(names(object), function(x) { colnames(object[[x]]@aggregated_profile[["Pseudobulk"]][[gb]]) }) %>% unlist() %>% unique()
 
     for (ct in celltypes) {
-      ct_present <- lapply(names(object), FUN = function(x){ ct %in% colnames(object[[x]]@aggregated_profile[["Pseudobulk"]][[gb]]) }) %>% unlist()
+      ct_present <- lapply(names(object), function(x) { ct %in% colnames(object[[x]]@aggregated_profile[["Pseudobulk"]][[gb]]) }) %>% unlist()
       layer_ct_present <- names(object)[(names(object) %in% layer_present) & ct_present]
       df <- bplapply(X = layer_ct_present,
                      BPPARAM = param,
-                     FUN = function(x){
+                     function(x) {
                        object[[x]]@aggregated_profile[["Pseudobulk"]][[gb]][, ct]
                      })
       df <- do.call(cbind, df)
@@ -1203,7 +1168,7 @@ merge.HiTObjects <- function(object = NULL,
     # Aggregated_profile Signatures
     df <- bplapply(X = layer_present,
                    BPPARAM = param,
-                   FUN = function(x){
+                   function(x) {
                      object[[x]]@aggregated_profile[["Signatures"]][[gb]] %>% mutate(sample = x)
                    })
     df <- data.table::rbindlist(df, use.names=TRUE, fill=TRUE)
@@ -1216,7 +1181,6 @@ merge.HiTObjects <- function(object = NULL,
                       aggregated_profile = list("Pseudobulk" = avg.expr,
                                                 "Signatures" = aggr.signature)
   )
-
   return(hit)
 }
 
@@ -1245,58 +1209,56 @@ plot.celltype.freq <- function(object = NULL,
                                                 "layer2" = c("functional.cluster")
                                 ),
                                 split.by = NULL,
-                                by.x = "celltype"
-){
-
+                                by.x = "celltype") {
 
   if (is.null(object)) {
     stop("Please provide a single one or a list of HiT object")
   }
 
-  if(!is.list(object)){
+  if (!is.list(object)) {
     object <- list(object)
   }
 
-  if(suppressWarnings(!all(lapply(object, function(x){class(x) == "HiT"})))){
+  if (suppressWarnings(!all(lapply(object, function(x) {class(x) == "HiT"})))) {
     stop("Not all components of the list are HiT objects.")
   }
 
   # give name to list of hit objects
-  for(v in seq_along(object)){
-    if(is.null(names(object)[[v]]) || is.na(names(object)[[v]])){
+  for (v in seq_along(object)) {
+    if (is.null(names(object)[[v]]) || is.na(names(object)[[v]])) {
       names(object)[[v]] <- paste0("Sample", v)
     }
   }
 
 
-  if(is.null(group.by)){
+  if (is.null(group.by)) {
     stop("Please provide at least one grouping variable for cell type classification common in all elements of the list of Hit objects")
   } else {
-    if(!is.list(group.by)){
+    if (!is.list(group.by)) {
       group.by <- as.list(group.by)
     }
     # give name to list of grouping.by variables
-    for(v in seq_along(group.by)){
-      if(is.null(names(group.by)[[v]]) || is.na(names(group.by)[[v]])){
+    for (v in seq_along(group.by)) {
+      if (is.null(names(group.by)[[v]]) || is.na(names(group.by)[[v]])) {
         names(group.by)[[v]] <- paste0("layer", v)
       }
     }
   }
 
-  if(suppressWarnings(!all(lapply(object, function(x){any(group.by %in% names(x@metadata))})))) {
+  if (suppressWarnings(!all(lapply(object, function(x) {any(group.by %in% names(x@metadata))})))) {
     stop("Not all supplied HiT object contain ", paste(group.by, collapse = ", "),
          " group.by elements in their metadata")
   }
   # remove group by if not present in any sample
     present <- sapply(group.by,
-                      function(char){
+                      function(char) {
                         any(unlist(lapply(object,
                                       function(df) {char %in% colnames(df@metadata)}
                         )))
 
                       }
     )
-    if(length(group.by[present]) != length(group.by)){
+    if (length(group.by[present]) != length(group.by)) {
       warning("Celltype classification for ", paste(as.vector(group.by[!present]), collapse = ", "),
               " not present in any object")
 
@@ -1305,20 +1267,20 @@ plot.celltype.freq <- function(object = NULL,
 
 
   # check splitting by variables
-  if(!is.null(split.by)){
-    if(suppressWarnings(!all(lapply(object, function(x){any(split.by %in% names(x@metadata))})))) {
+  if (!is.null(split.by)) {
+    if (suppressWarnings(!all(lapply(object, function(x) {any(split.by %in% names(x@metadata))})))) {
       warning("Not all supplied HiT objects contain ", paste(split.by, collapse = ", "),
               " metadata elements in their metadata")
     }
     present <- sapply(split.by,
-                    function(char){
+                    function(char) {
                       any(unlist(lapply(object,
                                     function(df) {char %in% colnames(df@metadata)}
                       )))
 
                     }
     )
-    if(length(split.by[present]) != length(split.by)){
+    if (length(split.by[present]) != length(split.by)) {
       warning("Metadata variable ", paste(as.vector(split.by[!present]), collapse = ", "),
               " not present in any object")
       split.by <- split.by[present]
@@ -1326,7 +1288,7 @@ plot.celltype.freq <- function(object = NULL,
   }
 
   # build all table
-  df <- lapply(names(object), function(y){
+  df <- lapply(names(object), function(y) {
     sel <- names(object[[y]]@metadata) %in% c(group.by, split.by)
     a <- object[[y]]@metadata[,sel, drop = F] %>%
           dplyr::mutate(sample = y)
@@ -1336,7 +1298,7 @@ plot.celltype.freq <- function(object = NULL,
 
   # compute counts
   c.list <- list()
-  for(gr.by in as.vector(group.by)){
+  for (gr.by in as.vector(group.by)) {
     #keep only needed columns
     rm <- group.by[group.by != gr.by] %>% as.character()
     kp <- which(!names(df) %in% rm)
@@ -1348,15 +1310,13 @@ plot.celltype.freq <- function(object = NULL,
       dplyr::distinct() %>%
       dplyr::group_by(sample) %>%
       dplyr::mutate(Freq = count/sum(count))
-
-
   }
 
   # list to store plots
   pl.list <- list()
-  if(by.x == "celltype"){
+  if (by.x == "celltype") {
     # count number of celltypes
-    for(gr.by in as.vector(group.by)){
+    for (gr.by in as.vector(group.by)) {
       pos <- ggplot2::position_dodge(width = .9)
       pl.list[[gr.by]] <-
         c.list[[gr.by]] %>%
@@ -1370,61 +1330,53 @@ plot.celltype.freq <- function(object = NULL,
                             show.legend = F) +
         ggplot2::labs(title = paste0(gr.by), " classification") +
         ggplot2::theme_bw()
-
-
     }
 
 
-  } else if(by.x == "sample"){
-    for(gr.by in as.vector(group.by)){
+  } else if (by.x == "sample") {
+    for (gr.by in as.vector(group.by)) {
       pl.list[[gr.by]] <-
         c.list[[gr.by]] %>%
         ggplot2::ggplot(ggplot2::aes(sample, Freq, fill = .data[[gr.by]])) +
         ggplot2::geom_col() +
         ggplot2::labs(title = paste0(gr.by), " classification") +
         ggplot2::theme_bw()
-
-
     }
   }
 
   # rotat x-axis label
-  pl.list <- lapply(pl.list, function(x){
+  pl.list <- lapply(pl.list, function(x) {
     x + ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45,
                                                        hjust = 1,
                                                        vjust = 1))
   })
 
-  for(spl in split.by){
-    pl.list <- lapply(pl.list, function(x){
+  for (spl in split.by) {
+    pl.list <- lapply(pl.list, function(x) {
       x + ggplot2::facet_wrap(~.data[[spl]])
     })
   }
-
-
-
   return(pl.list)
-
 }
 
 
 
-#' Built confusion matrix-like plots between different cell type classification approaches
+#' Build confusion matrix-like plots between different cell type classification approaches
 #'
 #'
 #' @param object List of Hit class object
 #' @param var.1 1st of grouping variables on the x-axis. If using \code{relative = TRUE} proportions will be normalized to this variable.
 #' @param var.2 2nd of grouping variables on the x-axis.
-#' @param relative Wheter to show absolute number of cells, or relative number cells out of the 1st variable indicted. Default is FALSE.
+#' @param relative Whether to show absolute number of cells, or relative number cells out of the 1st variable indicted. Default is FALSE.
 #' @param useNA Whether to include not annotated cells or not (labelled as "NA"). Can be "no", "ifany", or "always". See \code{?table} for more information. Default is "ifany".
-#' @param type Type of plot to render. Either "tile" (default) as a confusion matrixs or "barplot".
+#' @param type Type of plot to render. Either "tile" (default) as a confusion matrices or "barplot".
 
 #' @importFrom dplyr mutate group_by distinct
 #' @importFrom ggplot2 aes geom_point geom_tile geom_col scale_fill_gradient labs geom_label theme
 #' @importFrom cowplot theme_cowplot
 #' @importFrom data.table rbindlist
 
-#' @return Plots to evaluate the correspondance between different classification methods.
+#' @return Plots to evaluate the correspondence between different classification methods.
 #' @export plot.confusion.matrix
 #'
 
@@ -1433,25 +1385,23 @@ plot.confusion.matrix <- function(object = NULL,
                                   var.2 = NULL,
                                   relative = FALSE,
                                   useNA = "ifany",
-                                  type = "tile"
-){
-
+                                  type = "tile") {
 
   if (is.null(object)) {
     stop("Please provide a single one or a list of HiT object")
   }
 
-  if(!is.list(object)){
+  if (!is.list(object)) {
     object <- list(object)
   }
 
-  if(suppressWarnings(!all(lapply(object, function(x){class(x) == "HiT"})))){
+  if (suppressWarnings(!all(lapply(object, function(x) {class(x) == "HiT"})))) {
     stop("Not all components of the list are HiT objects.")
   }
 
   #give name to list of hit objects
-  for(v in seq_along(object)){
-    if(is.null(names(object)[[v]]) || is.na(names(object)[[v]])){
+  for (v in seq_along(object)) {
+    if (is.null(names(object)[[v]]) || is.na(names(object)[[v]])) {
       names(object)[[v]] <- paste0("Sample", v)
     }
   }
@@ -1459,18 +1409,18 @@ plot.confusion.matrix <- function(object = NULL,
   # join vars to plot
   vars <- c(var.1, var.2)
 
-  if(any(is.null(vars))){
+  if (any(is.null(vars))) {
     stop("Please provide 2 cell type classification labels common in all elements of the list of Hit objects: var.1 and var.2")
   }
 
-  if(suppressWarnings(!all(lapply(object, function(x){any(vars %in% names(x@metadata))})))) {
+  if (suppressWarnings(!all(lapply(object, function(x) {any(vars %in% names(x@metadata))})))) {
     stop("Not all supplied HiT object contain ", paste(vars, collapse = ", "),
          " group.by elements in their metadata")
   }
 
 
   # build all table
-  data <- lapply(names(object), function(y){
+  data <- lapply(names(object), function(y) {
     sel <- names(object[[y]]@metadata) %in% vars
     a <- object[[y]]@metadata[,sel, drop = F] %>%
       dplyr::mutate(sample = y)
@@ -1482,7 +1432,7 @@ plot.confusion.matrix <- function(object = NULL,
   pz <- table(data[[var.1]],
               data[[var.2]],
               useNA = useNA)
-  if(relative){
+  if (relative) {
     pz <- pz %>% prop.table(margin = 1)
     legend <- "Relative counts"
   } else {
@@ -1490,7 +1440,7 @@ plot.confusion.matrix <- function(object = NULL,
   }
 
 
-  if(tolower(type) == "tile"){
+  if (tolower(type) == "tile") {
   plot <- pz %>% as.data.frame() %>%
     ggplot2::ggplot(ggplot2::aes(Var1, Var2,
                fill = Freq)) +
@@ -1507,7 +1457,7 @@ plot.confusion.matrix <- function(object = NULL,
                         alpha = 0.6,
                         fill = "black") +
     cowplot::theme_cowplot()
-  } else if(grepl("bar|col", type, ignore.case = T)){
+  } else if (grepl("bar|col", type, ignore.case = T)) {
     plot <- pz %>% as.data.frame() %>%
       ggplot2::ggplot(ggplot2::aes(Var1, Freq,
                                    fill = Var2)) +
@@ -1522,9 +1472,11 @@ plot.confusion.matrix <- function(object = NULL,
           ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45,
                                                              hjust = 1,
                                                              vjust = 1))
-
   return(plot)
 }
+
+
+
 
 #' Plot gene expression along scGate model
 #'
@@ -1546,14 +1498,13 @@ plot.confusion.matrix <- function(object = NULL,
 plot_gene_gating <- function(object = NULL,
                         scGate.model = NULL,
                         group.by = NULL,
-                        split.by = NULL
-){
+                        split.by = NULL) {
 
   if (is.null(object)) {
     stop("Please provide a Seurat object or a list of them")
   }
 
-  if(is.list(object) && !is.null(split.by)){
+  if (is.list(object) && !is.null(split.by)) {
     stop("split.by only supported for a single Seurat object, not a list.\n
          Merge list before running HiTME")
   }
@@ -1562,16 +1513,16 @@ plot_gene_gating <- function(object = NULL,
     stop("Please provide a scGate model or list of them")
   }
 
-  if(!is.list(scGate.model)){
+  if (!is.list(scGate.model)) {
     scGate.model <- list("scGate_model" = scGate.model)
   }
 
   # split object into a list if indicated
   if (!is.null(split.by)) {
-    if(is.list(object)){
+    if (is.list(object)) {
       stop("Split.by argument not supported when providing a list of Seurat objects. Set split.by = NULL or merge list.")
     }
-    if(!split.by %in% names(object@meta.data)){
+    if (!split.by %in% names(object@meta.data)) {
       stop(paste("split.by argument: ", split.by, " is not a metadata column in this Seurat object"))
     }
     object <- Seurat::SplitObject(object, split.by = split.by)
@@ -1579,7 +1530,7 @@ plot_gene_gating <- function(object = NULL,
   }
 
   if (!is.null(group.by)) {
-    if(!group.by %in% names(object@meta.data)){
+    if (!group.by %in% names(object@meta.data)) {
       stop(paste("group.by argument: ", group.by, " is not a metadata column in this Seurat object"))
     }
   } else {
@@ -1587,7 +1538,7 @@ plot_gene_gating <- function(object = NULL,
   }
 
   # if object is unique turn into a list
-  if(!is.list(object)){
+  if (!is.list(object)) {
     object <- list("object" = object)
   }
 
@@ -1595,85 +1546,81 @@ plot_gene_gating <- function(object = NULL,
   # render plots
   model <- scGate:::table.to.model(scGate.model)
 
-  suppressWarnings(
-    {
-  for(ob in names(object)){
-    if(class(object[[ob]]) != "Seurat"){
-      stop("Not Seurat object included, cannot be processed.\n")
-    }
+  suppressWarnings({
+    for (ob in names(object)) {
+      if (class(object[[ob]]) != "Seurat") {
+        stop("Not Seurat object included, cannot be processed.\n")
+      }
 
-    # keep only genes expressed
-    sc_names <- rownames(object[[ob]])[rowSums(object[[ob]]) > 0]
-    # make plot list for each level
-    pl.list <- list()
+      # keep only genes expressed
+      sc_names <- rownames(object[[ob]])[rowSums(object[[ob]]) > 0]
+      # make plot list for each level
+      pl.list <- list()
 
-    for(a in names(model)){
-      m <- model[[a]] %>% unlist(recursive = F)
-      pl.sublist <- list()
-      for(e in names(m)){
-        # remove - sign on negative markers
-        feat <- m[[e]] %>% gsub("-", "", .)
+      for (a in names(model)) {
+        m <- model[[a]] %>% unlist(recursive = F)
+        pl.sublist <- list()
+        for (e in names(m)) {
+          # remove - sign on negative markers
+          feat <- m[[e]] %>% gsub("-", "", .)
 
-        feat <- intersect(feat, sc_names)
+          feat <- intersect(feat, sc_names)
 
-        if(length(feat)>0){
-        # do not stack if only one gene is present
-        stack <- ifelse(length(feat)>1, T, F)
+          if (length(feat)>0) {
+            # do not stack if only one gene is present
+            stack <- ifelse(length(feat)>1, T, F)
 
-        pl.sublist[[e]] <-
-            Seurat::VlnPlot(object[[ob]],
-                                     features = feat,
-                                     group.by = group.by,
-                                     stack = stack,
-                                      pt.size = 0,
-                                     flip = T) +
-                            ggplot2::ggtitle(e) +
-                            Seurat::NoLegend() +
-                            ggplot2::xlab("") +
-                            {if(length(feat) == 1){
-                              ggplot2::ylab(feat)
-                            }} +
-                          ggplot2::theme(plot.title = element_text(hjust = 0.5))
+            pl.sublist[[e]] <-
+              Seurat::VlnPlot(object[[ob]],
+                              features = feat,
+                              group.by = group.by,
+                              stack = stack,
+                              pt.size = 0,
+                              flip = T) +
+              ggplot2::ggtitle(e) +
+              Seurat::NoLegend() +
+              ggplot2::xlab("") +
+              {if (length(feat) == 1) {
+                ggplot2::ylab(feat)
+              }} +
+              ggplot2::theme(plot.title = element_text(hjust = 0.5))
 
+          }
         }
+
+        pl.list[[a]] <- pl.sublist
       }
 
-      pl.list[[a]] <- pl.sublist
-    }
+      # max number of plots
+      max <- lapply(pl.list, length) %>% unlist() %>% max()
 
-    # max number of plots
-    max <- lapply(pl.list, length) %>% unlist() %>% max()
+      for (p in names(pl.list)) {
 
-    for(p in names(pl.list)){
+        # add blank plots if needed
+        while(length(pl.list[[p]])<max) {
+          void <- ggplot2::ggplot() + ggplot2::theme_void()
+          pl.list[[p]][[paste0("void", length(pl.list[[p]])+1)]] <- void
+        }
 
-      # add blank plots if needed
-      while(length(pl.list[[p]])<max){
-        void <- ggplot2::ggplot() + ggplot2::theme_void()
-        pl.list[[p]][[paste0("void", length(pl.list[[p]])+1)]] <- void
+        join.plot <- ggpubr::ggarrange(plotlist = pl.list[[p]],
+                                       ncol= 1,
+                                       nrow = length(pl.list[[p]]))
+        join.plot <- ggpubr::annotate_figure(join.plot,
+                                             top = ggpubr::text_grob(p, face = "bold",
+                                                                     color = "darkblue",
+                                                                     size = 26))
+        pl.list[[p]] <- join.plot
       }
 
-      join.plot <- ggpubr::ggarrange(plotlist = pl.list[[p]],
-                                     ncol= 1,
-                                     nrow = length(pl.list[[p]]))
-      join.plot <- ggpubr::annotate_figure(join.plot,
-                                           top = ggpubr::text_grob(p, face = "bold",
-                                                                   color = "darkblue",
-                                                                   size = 26))
 
-      pl.list[[p]] <- join.plot
+      plots[[ob]] <- ggpubr::ggarrange(plotlist = pl.list,
+                                       nrow= 1,
+                                       ncol = length(pl.list))
     }
-
-
-    plots[[ob]] <- ggpubr::ggarrange(plotlist = pl.list,
-                                   nrow= 1,
-                                   ncol = length(pl.list))
-
-  }
-    })
-
+  })
   return(plots)
-
 }
+
 
 
 #' Save object list to disk, in parallel
@@ -1690,10 +1637,12 @@ plot_gene_gating <- function(object = NULL,
 #'
 #' @examples
 #' save_objs(obj.list, "./output/samples")
+
 save_objs <- function(obj.list,
                       dir,
                       ncores = parallelly::availableCores() - 2,
-                      progressbar = T){
+                      progressbar = T) {
+
   BiocParallel::bplapply(
     X = obj.list,
     BPPARAM =  BiocParallel::MulticoreParam(workers = ncores, progressbar = progressbar),
@@ -1703,6 +1652,7 @@ save_objs <- function(obj.list,
       saveRDS(x, file_name)
     })
 }
+
 
 
 #' Read all .rds files in a directory and return list of Seurat objects, in parallel
@@ -1720,14 +1670,16 @@ save_objs <- function(obj.list,
 #'
 #' @examples
 #' obj.list <- read_objs("./output/samples")
+
 read_objs <- function(dir = NULL,
                       file.list = NULL,
                       ncores = parallelly::availableCores() - 2,
-                      progressbar = T){
+                      progressbar = T) {
+
   if (!is.null(dir) & is.null(file.list)) {
     file_names <- list.files(dir)
     file_paths <- file.path(dir, file_names)
-  } else if (is.null(dir) & !is.null(file.list)){
+  } else if (is.null(dir) & !is.null(file.list)) {
     file_paths <- file.list[endsWith(files, '.rds')]
     file_names <- gsub("^.*/", "", file_paths)
   }
@@ -1740,7 +1692,3 @@ read_objs <- function(dir = NULL,
   names(obj.list) <- stringr::str_remove_all(file_names, '.rds')
   return(obj.list)
 }
-
-
-
-
