@@ -1123,7 +1123,7 @@ merge.HiTObjects <- function(object = NULL,
     # Other metadata columns, e.g. scGate_multi can be dropped, as the merged HiTObject is a summary per sample, so single-cell metadata columns don't make sense.
     umc <- lapply(names(HiT_summary_list), FUN = function (x) {apply(HiT_summary_list[[x]]@metadata, 2, function(y) length(unique(y))) == 1})
     umc <- umc %>% Reduce("&", .)
-    metadata.vars <- names(umc)[test == T]
+    metadata.vars <- names(umc)[umc == T]
   }
   metadata <- lapply(names(object), FUN = function (x) {object[[x]]@metadata[1, metadata.vars] %>% mutate(sample = x)})
   metadata <- data.table::rbindlist(metadata, use.names=TRUE, fill=TRUE)
@@ -1134,24 +1134,24 @@ merge.HiTObjects <- function(object = NULL,
 
   for(gb in names(group.by)){
 
-    layer.present <- rownames(present)[present[,gb]]
+    layer_present <- rownames(present)[present[,gb]]
 
 
     # Composition
     message("Merging compositions of " , gb, "...")
 
-    is_df_check <- object[layer.present] %>%
+    is_df_check <- object[layer_present] %>%
       lapply(slot, name = "composition") %>%
       lapply("[[", gb) %>%
       lapply(is.data.frame) %>%
       unlist()
-    is_list_check <- object[layer.present] %>%
+    is_list_check <- object[layer_present] %>%
       lapply(slot, name = "composition") %>%
       lapply("[[", gb) %>%
       lapply(FUN = function(x) {is.list(x) & !is.data.frame(x)}) %>%
       unlist()
     if (all(is_df_check)) {
-      df <- bplapply(X = layer.present,
+      df <- bplapply(X = layer_present,
                      BPPARAM = param,
                      FUN = function(x){
                        object[[x]]@composition[[gb]] %>% mutate(sample = x)
@@ -1160,14 +1160,14 @@ merge.HiTObjects <- function(object = NULL,
       comp.prop[[gb]] <- df
     }
     else if (all(is_list_check)) {
-      gb_sublevel_unique_names <- object[layer.present] %>%
+      gb_sublevel_unique_names <- object[layer_present] %>%
         lapply(slot, name = "composition") %>%
         lapply("[[", gb) %>%
         lapply(names) %>%
         unlist() %>%
         unique()
       for (i in gb_sublevel_unique_names){
-        df <- bplapply(X = layer.present,
+        df <- bplapply(X = layer_present,
                        BPPARAM = param,
                        FUN = function(x){
                          if(!is.null(object[[x]]@composition[[gb]][[i]])) {
@@ -1184,18 +1184,24 @@ merge.HiTObjects <- function(object = NULL,
     message("Merging aggregated profiles of " , gb, "...")
 
     # Aggregated_profile Pseudobulk
-    df <- bplapply(X = layer.present,
-                   BPPARAM = param,
-                   FUN = function(x){
-                     df <- data.frame(gene = row.names(object[[x]]@aggregated_profile[["Pseudobulk"]][[gb]]),
-                                      object[[x]]@aggregated_profile[["Pseudobulk"]][[gb]])
-                     df %>% mutate(sample = x)
-                   })
-    df <- data.table::rbindlist(df, use.names=TRUE, fill=TRUE)
-    avg.expr[[gb]] <- df
+    celltypes <- lapply(names(object), FUN = function(x){ colnames(object[[x]]@aggregated_profile[["Pseudobulk"]][[gb]]) }) %>% unlist() %>% unique()
+
+    for (ct in celltypes) {
+      ct_present <- lapply(names(object), FUN = function(x){ ct %in% colnames(object[[x]]@aggregated_profile[["Pseudobulk"]][[gb]]) }) %>% unlist()
+      layer_ct_present <- names(object)[(names(object) %in% layer_present) & ct_present]
+      df <- bplapply(X = layer_ct_present,
+                     BPPARAM = param,
+                     FUN = function(x){
+                       object[[x]]@aggregated_profile[["Pseudobulk"]][[gb]][, ct]
+                     })
+      df <- do.call(cbind, df)
+      df <- Matrix::Matrix(df, sparse = T)
+      colnames(df) <- layer_ct_present
+      avg.expr[[gb]][[ct]] <- df
+    }
 
     # Aggregated_profile Signatures
-    df <- bplapply(X = layer.present,
+    df <- bplapply(X = layer_present,
                    BPPARAM = param,
                    FUN = function(x){
                      object[[x]]@aggregated_profile[["Signatures"]][[gb]] %>% mutate(sample = x)
