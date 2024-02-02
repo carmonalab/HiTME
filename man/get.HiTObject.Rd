@@ -7,6 +7,7 @@
 get.HiTObject(
   object,
   group.by = list(layer1 = c("scGate_multi"), layer2 = c("functional.cluster")),
+  split.by = NULL,
   name.additional.signatures = NULL,
   useNA = FALSE,
   clr_zero_impute_perc = 1,

@@ -21,7 +21,7 @@ Authors@R: c(
 Description: HiTME enables cell type prediction on single-cell RNA-seq datasets from Tumor microenvirontment samples. HiTME's classification exploits [scGate](https://github.com/carmonalab/scGate) for coarse cell type classification, later when reference map for those coarse cell type is available uses [ProjecTILs](https://github.com/carmonalab/ProjecTILs) to define cell type at finer level. Additionally, HiTME package is envisioned to compare cell type classification in multiple samples of different type and source, hence it offers tool to evaluate predictions consistency across samples and comparison between different classification methods.
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.2.3
+RoxygenNote: 7.3.1
 VignetteBuilder: knitr
 URL: https://github.com/carmonalab/HiTME
 BugReports: https://github.com/carmonalab/HiTME/issues
@@ -52,5 +52,7 @@ Imports:
   methods (>= 4.3.1),
   tibble (>= 3.2.1)
 Suggests: 
-  knitr,
-  rmarkdown
+    knitr,
+    rmarkdown,
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
