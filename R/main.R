@@ -1025,6 +1025,7 @@ merge.HiTObjects <- function(object = NULL,
                              group.by = list("layer1" = c("scGate_multi"),
                                              "layer2" = c("functional.cluster")
                              ),
+                             metadata.vars = NULL,
                              ncores = parallelly::availableCores() - 2,
                              bparam = NULL,
                              progressbar = FALSE,
