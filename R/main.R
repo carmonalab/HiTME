@@ -1010,7 +1010,7 @@ merge.HiTObjects <- function(object = NULL,
 
   # give name to list of hit objects
   for (v in seq_along(object)) {
-    if (is.null(names(object)[v]) | is.na(names(object)[v])) {
+    if (is.null(names(object)[v]) || is.na(names(object)[v])) {
       names(object)[v] <- paste0("Sample", v)
     }
   }
@@ -1024,7 +1024,7 @@ merge.HiTObjects <- function(object = NULL,
     }
     # give name to list of grouping.by variables
     for (v in seq_along(group.by)) {
-      if (is.null(names(group.by)[v]) | is.na(names(group.by)[v])) {
+      if (is.null(names(group.by)[v]) || is.na(names(group.by)[v])) {
         names(group.by)[v] <- paste0("layer", v)
       }
     }
@@ -1646,7 +1646,7 @@ save_objs <- function(obj.list,
   BiocParallel::bplapply(
     X = obj.list,
     BPPARAM =  BiocParallel::MulticoreParam(workers = ncores, progressbar = progressbar),
-    FUN = function(x) {
+    function(x) {
       sample_name <- unique(x$Sample)
       file_name <- file.path(dir, sprintf("%s.rds", sample_name))
       saveRDS(x, file_name)
@@ -1686,7 +1686,7 @@ read_objs <- function(dir = NULL,
   obj.list <- BiocParallel::bplapply(
     X = file_paths,
     BPPARAM =  BiocParallel::MulticoreParam(workers = ncores, progressbar = progressbar),
-    FUN = function(x) {
+    function(x) {
       readRDS(file.path(x))
     })
   names(obj.list) <- stringr::str_remove_all(file_names, '.rds')
