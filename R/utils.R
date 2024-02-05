@@ -60,7 +60,7 @@ ProjecTILs.classifier.multi <- function(object,
       BiocParallel::bplapply(
         X = names(ref.maps),
         BPPARAM = bparam,
-        FUN = function(m) {
+        function(m) {
           if (filter.cells) {
             # don't subset if no scGate gating is found in metadata, instead run scGate within projectils
             subset.object <- object
@@ -348,7 +348,7 @@ get.cluster.score <- function(matrix = NULL,
     if (df.score[x,3] == "silhouette") {
       message("Computing silhouette score")
 
-      silh <- calc_sil_score(metadata[[gr.by]],
+      silh <- silhoutte_onelabel(metadata[[gr.by]],
                              dist = dist,
                              ntests = ntests,
                              ncores = ncores,
@@ -478,19 +478,19 @@ get.cluster.score <- function(matrix = NULL,
 
 # Calculate silhouette score ----------------------------------------------
 
-calc_sil_score <- function(cluster_labels = NULL, # vector of cluster labels
-                           dist = NULL, # distance object
-                           ntests = 1000, # number of shuffling events
-                           seed = 22, # seed for random shuffling
-                           ncores = parallelly::availableCores() - 2,
-                           bparam = NULL,
-                           progressbar = TRUE) {
+silhoutte_onelabel <- function(labels = NULL, # vector of labels
+                               dist = NULL, # distance object
+                               ntests = 0, # number of shuffling events
+                               seed = 22, # seed for random suffling
+                               ncores = parallelly::availableCores() - 2,
+                               bparam = NULL,
+                               progressbar = TRUE) {
 
-  if (is.null(cluster_labels) | !is.vector(cluster_labels)) {
-    stop("Please provide a vector of the cluster_labels")
+  if (is.null(labels) || !is.vector(labels)) {
+    stop("Please provide a vector of the labels")
   }
 
-  if (is.null(dist) | !class(dist) == "dist") {
+  if (is.null(dist) || !class(dist) == "dist") {
     stop("Please provide a a dissimilarity object inheriting from class dist or coercible to one")
   }
 
@@ -504,98 +504,101 @@ calc_sil_score <- function(cluster_labels = NULL, # vector of cluster labels
 
   # set parallelization parameters
   param <- set_parallel_params(ncores = ncores,
-                              bparam = bparam,
-                              progressbar = progressbar)
+                               bparam = bparam,
+                               progressbar = progressbar)
 
-  clabels_unique <- unique(cluster_labels)
+  tlabels <- unique(labels)
+
+  len <- length(labels)
 
   sils <- BiocParallel::bplapply(
-    X = clabels_unique,
+    X = tlabels,
     BPPARAM = param,
-    function(a) {
+    function(a){
 
-    x_one <- ifelse(cluster_labels == a, 2, 1) %>%
-              as.factor() %>% as.numeric()
+      x_one <- ifelse(labels == a, 2, 1) %>%
+        as.factor() %>% as.numeric()
 
-    silh <- cluster::silhouette(x_one, dist)
+      silh <- cluster::silhouette(x_one, dist)
 
-    # silhouette score for each sample
-    # change names back to character
-    sil.res.cell <- as.data.frame(silh) %>%
-              dplyr::filter(cluster == 2) %>%
-              dplyr::mutate(cluster = a) %>%
-              arrange(desc(sil_width))
+      # silhoutte score for each sample
+      # change names back to character
+      sil.res.cell <- as.data.frame(silh) %>%
+        dplyr::filter(cluster == 2) %>%
+        dplyr::mutate(cluster = a) %>%
+        arrange(desc(sil_width))
 
 
-    size <- nrow(sil.res.cell)
+      size <- nrow(sil.res.cell)
 
-    sil.sumA <- data.frame(cluster = a,
-                           iteration = "NO",
-                           size = size,
-                           avg_sil_width = mean(sil.res.cell$sil_width))
+      sil.sumA <- data.frame(cluster = a,
+                             iteration = "NO",
+                             size = size,
+                             avg_sil_width = mean(sil.res.cell$sil_width))
 
-    # dataframe for results of each iteration of shuffling
-    bots.df <- data.frame(matrix(nrow = 0, ncol = 4))
-    names(bots.df) <- c("cluster", "iteration", "size", "avg_sil_width")
+      # dataframe for results of each iteration of shuffling
+      bots.df <- data.frame(matrix(nrow = 0, ncol = 4))
+      names(bots.df) <- c("cluster", "iteration", "size", "avg_sil_width")
 
-    if (ntests > 0) {
-      # perform the shuffling
-      for (u in 1:ntests) {
-        # random vector
-        vec <- rep(1, length(cluster_labels))
-        # seeding for reproducibility
-        seed <- seed + which(clabels_unique == a)
-        set.seed(seed)
-        random_sample <- sample(1:length(cluster_labels), size)
-        vec[random_sample] <- 2
-        vec <- vec %>% as.factor() %>% as.numeric()
+      if(ntests > 0){
+        # perform the shuffling
+        for(u in 1:ntests){
+          # random vector
+          vec <- rep(1, length(labels))
+          # seeding for reproducibility
+          seed <- seed + which(tlabels == a)
+          set.seed(seed)
+          random_sample <- sample(1:len, size)
+          vec[random_sample] <- 2
+          vec <- vec %>% as.factor() %>% as.numeric()
 
-        # run silhouette
-        silh <- cluster::silhouette(vec, dist)
-        sil.res <- as.data.frame(silh) %>%
-                    dplyr::filter(cluster == 2)
+          # run silhoutte
+          silh <- cluster::silhouette(vec, dist)
+          sil.res <- as.data.frame(silh) %>%
+            dplyr::filter(cluster == 2)
 
-        sil.sumB <- data.frame(cluster = a,
-                               iteration = u,
-                               size = size,
-                               avg_sil_width = mean(sil.res$sil_width))
+          sil.sumB <- data.frame(cluster = a,
+                                 iteration = u,
+                                 size = size,
+                                 avg_sil_width = mean(sil.res$sil_width))
 
-        bots.df <- rbind(bots.df, sil.sumB)
+          bots.df <- rbind(bots.df, sil.sumB)
+
+        }
+
+        # compute p-value
+        sil.sumA$p_val <- p.val_zscore(obs = sil.sumA$avg_sil_width,
+                                       random.values = bots.df$avg_sil_width)
+        sil.sumA$p_val_adj <- p.adjust(sil.sumA$p_val,
+                                       method = "fdr",
+                                       n = length(tlabels))
+        sil.sumA$conf.int.95 <- NA
+        # Compute confidence interval
+        bots.df <- bots.df %>%
+          mutate(conf.int.95 = I(list(quantile(avg_sil_width, c(0.025,0.975)))))
+        bots.df$p_val <- NA
+        bots.df$p_val_adj <- NA
+
+        sil.sumA <- rbind(sil.sumA, bots.df)
 
       }
 
-      # compute p-value
-      sil.sumA$p_val <- p.val_zscore(obs = sil.sumA$avg_sil_width,
-                                     random.values = bots.df$avg_sil_width)
-      sil.sumA$p_val_adj <- p.adjust(sil.sumA$p_val,
-                                       method = "fdr",
-                                       n = length(clabels_unique))
-      sil.sumA$conf.int.95 <- NA
-      # Compute confidence interval
-      bots.df <- bots.df %>%
-                  mutate(conf.int.95 = I(list(quantile(avg_sil_width, c(0.025,0.975)))))
-      bots.df$p_val <- NA
-      bots.df$p_val_adj <- NA
-
-      sil.sumA <- rbind(sil.sumA, bots.df)
-    }
-
-    return(list("cell" = sil.res.cell, # silhouette score for each sample
-                "summary" = sil.sumA))
+      return(list("cell" = sil.res.cell, # silhoutte score for each sample
+                  "summary" = sil.sumA))
     }
   )
 
   # join results
-  sil.all <- lapply(sils, function(x) {x[["cell"]]}) %>%
-                data.table::rbindlist()
+  sil.all <- lapply(sils, function(x){x[["cell"]]}) %>%
+    data.table::rbindlist()
 
-  sil.sum <- lapply(sils, function(x) {x[["summary"]]}) %>%
-                data.table::rbindlist()
+  sil.sum <- lapply(sils, function(x){x[["summary"]]}) %>%
+    data.table::rbindlist()
 
 
   # order silhoute width per cell type
   sil.all <- sil.all %>%
-              dplyr::mutate(rowid = dplyr::row_number())
+    dplyr::mutate(rowid = dplyr::row_number())
 
 
   ret.list <- list("cell" = sil.all,
@@ -609,7 +612,7 @@ calc_sil_score <- function(cluster_labels = NULL, # vector of cluster labels
 # Compute p-value based on z score ----------------------------------------
 
 p.val_zscore <- function(obs = NULL,
-                          random.values = NULL) {
+                         random.values = NULL) {
 
   mean <- mean(random.values)
   sd <- sd(random.values)
