@@ -769,6 +769,7 @@ dev.off()
 ```
 
 
+
 # Change get.composition
 ```{r}
 object = bassez$BIOKEY_13_Pre
@@ -793,29 +794,38 @@ ctable = compositional_data(data = meta.data,
 
 ## tests
 ```{r}
-source("R/main.R")
+require(HiTME)
 source("R/utils.R")
+source("R/main.R")
 
 bassez <- readRDS("~/Dropbox/CSI/Standardized_SingleCell_Datasets/BassezA_2021_33958794/output/BassezA_2021_33958794_3patients.rds")
 
 ```
 
 ```{r}
-bassez <- Run.HiTME(bassez,
-                    ref.maps = ref.maps,
-                    split.by = "sample",
-                    remerge = T)
+bassez <- Seurat::SplitObject(bassez, split.by = "sample")
+
+for(a in names(bassez)){
+  bassez[[a]] <- Run.HiTME(bassez[[a]],
+                          ref.maps = ref.maps,
+                          split.by = "sample",
+                          remerge = F)
+}
 ```
 
 ```{r}
 hit <- list()
 for(a in names(bassez)){
-  hit[[a]] <- get.HiTObject(bassez,
+  hit[[a]] <- get.HiTObject(bassez[[a]],
                             group.by = list("layer1" = "scGate_multi",
                                           "layer2" = "functional.cluster",
-                                     "layer1.2" =  "annotation_chetah",
-                                     "layer0" = "baba"
-                                          ))
+                                           "layer1_authors" =  "cellType",
+                                           "layer2_authors" = "cellSubType",
+                                           "k" = "baba",
+                                           "sample" = "sample"
+                                          ),
+                            layers_links = c("scGate_multi" = "functional.cluster",
+                                             "cellType" = "cellSubType"))
 }
 ```
 
@@ -839,6 +849,35 @@ tes <- get.celltype.composition(object = bassez,
                                      "layer0" = "baba"
                                           ))
 ```
+
+
+```{r}
+# add misc slot, removed when merging
+x@misc[["layer1_param"]] <- list()
+x@misc[["layer1_param"]][["scGate_models"]] <- names(scGate.model)
+x@misc[["layer1_param"]][["additional.signatures"]] <- names(additional.signatures)
+
+if(!is.null(scGate.model)){
+x$scGate_multi <- factor(x$scGate_multi,
+                        levels = names(scGate.model))
+}
+if(!is.null(ref.maps)){
+# get ref.maps all cells types
+all.levels <- lapply(ref.maps, function(x){
+ unique(x$functional.cluster)
+})
+x$functional.cluster <- factor(x$functional.cluster,
+                              levels = unlist(all.levels))
+
+# add each level to misc
+names(all.levels) <- lapply(ref.maps, function(x){
+ x@misc$layer1_link
+})
+x@misc[["layer2_param"]][["functional.cluster"]][["all_references_levels"]] <- all.levels
+# all refs indicated in the function
+x@misc[["layer2_param"]][["functional.cluster"]][["References_user_specified"]] <- names(ref.maps)
+```
+
 
 
 
