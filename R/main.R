@@ -772,7 +772,7 @@ get.aggregated.profile <- function(object,
       } else {
         # Handle case if there is only one cell type
         avg.exp[[i]] <- obj_tmp@assays[["RNA"]]["counts"]
-        row_names <- names(avg.exp[[i]])
+        row_names <- rownames(avg.exp[[i]])
         col_name <- unique(obj_tmp@meta.data[[group.by.aggregated[[i]]]])
         avg.exp[[i]] <- Matrix::Matrix(rowSums(avg.exp[[i]]))
         rownames(avg.exp[[i]]) <- row_names
