@@ -691,10 +691,11 @@ set_parallel_params <- function(ncores,
     ncores <- 1
   }
 
-  if (ncores >= parallelly::availableCores()) {
-    ncores <- parallelly::availableCores() - 1
-    message("Using all or more cores available in this computer, reducing number of cores to ", ncores)
+  if (ncores > parallelly::availableCores()) {
+    ncores <- parallelly::availableCores()
+    message("Using more cores available in this computer, reducing number of cores to ", ncores)
   }
+
 
   # set parallelization parameters
   if (is.null(bparam)) {
