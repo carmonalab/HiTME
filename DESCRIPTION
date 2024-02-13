@@ -37,7 +37,7 @@ Imports:
   Hotelling (>= 1.0-8),
   MatrixGenerics (>= 1.12.3),
   parallelly (>= 1.36.0),
-  scGate (>= 1.6.2),
+  scGate (>= 1.6.1),
   ProjecTILs (>= 3.2.1),
   SignatuR (>= 0.1.2),
   dplyr (>= 1.1.4),
