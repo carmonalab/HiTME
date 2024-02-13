@@ -18,7 +18,7 @@
 #' @importFrom BiocParallel MulticoreParam bplapply
 #' @importFrom parallelly availableCores
 #' @importFrom dplyr mutate filter %>%
-#' @importFrom tibble column_to_rownames
+#' @importFrom tibble column_to_rownames rownames_to_column
 #' @importFrom scGate scGate get_scGateDB
 #' @import SignatuR
 #' @import scGate
@@ -526,9 +526,9 @@ get.HiTObject <- function(object,
 #' @param layer1_link Column of metadata linking layer1 prediction (e.g. scGate ~ CellOntology_ID) in order to perform subsetting for second layer classification.
 
 #' @importFrom Hotelling clr
-#' @importFrom dplyr group_by summarize filter ungroup mutate select left_join n
+#' @importFrom dplyr group_by summarize filter ungroup mutate select left_join n coalesce
 #' @importFrom tidyr pivot_wider
-#' @importFrom tibble column_to_rownames
+#' @importFrom tibble column_to_rownames rownames_to_column
 #'
 #' @return Cell type compositions as a list of data.frames containing cell counts, relative abundance (freq) and clr-transformed freq (freq_clr), respectively.
 #' @export get.celltype.composition
@@ -1020,12 +1020,14 @@ get.GOList <- function(GO_accession = NULL,
 #' @param object List of HiTObjects
 #' @param group.by Grouping variable for layers
 #' @param metadata.vars Variables to keep as metadata. (Default: NULL, keeping unique metadata columns per sample, dropping single-cell metadata)
+#' @param pseudobulk.matrix Paramater to determine whther obtain the pseudobulk matrix as a single matrix (`"unique"`), or as one matrix for each cell type in the layer (`"list"`). Default is returning a single unique matrix.
 #' @param ncores The number of cores to use, by default, all available cores - 2.
 #' @param bparam A \code{BiocParallel::bpparam()} object that tells how to parallelize. If provided, it overrides the `ncores` parameter.
 #' @param progressbar Whether to show a progressbar or not
 #' @param verbose Whether to show optional messages or not
 
-#' @importFrom dplyr mutate mutate_if filter %>% coalesce mutate_all full_join row_number
+#' @importFrom dplyr mutate mutate_if filter %>% mutate_all full_join
+#' @importFrom tibble column_to_rownames rownames_to_column
 #' @importFrom BiocParallel MulticoreParam bplapply
 #' @importFrom parallelly availableCores
 #' @importFrom data.table rbindlist
@@ -1038,6 +1040,7 @@ merge.HiTObjects <- function(object = NULL,
                              group.by = list("layer1" = c("scGate_multi"),
                                              "layer2" = c("functional.cluster")),
                              metadata.vars = NULL,
+                             pseudobulk.matrix = c("unique", "list"),
                              ncores = parallelly::availableCores() - 2,
                              bparam = NULL,
                              progressbar = FALSE,
@@ -1159,6 +1162,7 @@ merge.HiTObjects <- function(object = NULL,
       lapply("[[", gb) %>%
       lapply(function(x) {is.list(x) & !is.data.frame(x)}) %>%
       unlist()
+
     if (all(is_df_check)) {
       df <- bplapply(X = layer_present,
                      BPPARAM = param,
@@ -1193,7 +1197,11 @@ merge.HiTObjects <- function(object = NULL,
     message("Merging aggregated profiles of " , gb, "...")
 
     # Aggregated_profile Pseudobulk
-    celltypes <- lapply(names(object), function(x) { colnames(object[[x]]@aggregated_profile[["Pseudobulk"]][[gb]]) }) %>% unlist() %>% unique()
+    celltypes <- lapply(names(object),
+                        function(x) {
+                          colnames(object[[x]]@aggregated_profile[["Pseudobulk"]][[gb]])
+                          }) %>%
+                  unlist() %>% unique()
 
     for (ct in celltypes) {
       ct_present <- lapply(names(object), function(x) { ct %in% colnames(object[[x]]@aggregated_profile[["Pseudobulk"]][[gb]]) }) %>% unlist()
@@ -1207,6 +1215,23 @@ merge.HiTObjects <- function(object = NULL,
       df <- Matrix::Matrix(df, sparse = T)
       colnames(df) <- layer_ct_present
       avg.expr[[gb]][[ct]] <- df
+    }
+
+    # join each matrix per celltype into a single matrix changing the colnames to accommodate sample source
+    if(tolower(pseudobulk.matrix) == "unique"){
+      avg.expr[[gb]] <- lapply(names(avg.expr[[gb]]),
+                               function(x){
+                                 mat <- avg.expr[[gb]][[x]]
+                                 colnames(mat) <- paste(x, colnames(mat), sep = "__")
+                                 mat <- mat %>% as.data.frame() %>%
+                                        tibble::rownames_to_column("gene")
+                               }) %>%
+                        reduce(full_join, by = "gene") %>%
+                        # convert NA to 0
+                        mutate_if(is.numeric, ~ifelse(is.na(.), 0, .)) %>%
+                        tibble::column_to_rownames("gene") %>%
+                        as.matrix() %>%
+                        Matrix::Matrix(., sparse = T)
     }
 
     # Aggregated_profile Signatures
