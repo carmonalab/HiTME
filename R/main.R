@@ -360,6 +360,7 @@ Run.HiTME <- function(object = NULL,
 #'
 #' @param object A Seurat object
 #' @param group.by List with one or multiple Seurat object metadata columns with cell type predictions to group by (e.g. layer 1 cell type classification)
+#' @param split.by A Seurat object metadata column to split by compositional data (e.g. sample names) \link{get.celltype.composition}
 #' @param name.additional.signatures Names of additional signatures as found in object metadata to take into account.
 #' @param useNA logical whether to return aggregated profile for NA (undefined) cell types, default is FALSE.
 #' @param clr_zero_impute_perc Parameter for internal \link{get.celltype.composition}.
@@ -423,7 +424,7 @@ get.HiTObject <- function(object,
   pred.list <- list()
   for (a in names(group.by)) {
     pred.list[[a]] <- list()
-    pred.list[[a]] <- object@meta.data[,group.by[[a]], drop = F]
+    pred.list[[a]][[group.by[[a]]]] <- object@meta.data[,group.by[[a]], drop = F]
   }
 
 
@@ -435,7 +436,7 @@ get.HiTObject <- function(object,
     if (is.null(name.additional.signatures)) {
       name.additional.signatures <- object@misc$layer1_param$additional.signatures
     }
-    scgate.models <- object@misc$layer1_param$layer1_models
+    scgate.models <- object@misc$layer1_param$scGate_models
 
 
     if (!is.null(name.additional.signatures)) {
