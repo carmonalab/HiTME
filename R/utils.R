@@ -734,7 +734,8 @@ compositional_data <- function(data,
     dplyr::filter(if (!useNA) !is.na(.data[[group.by.1]])
                   else rep(TRUE, n())) %>%
     dplyr::group_by(across(all_of(gr_vars2))) %>%
-    dplyr::mutate(freq = cell_counts/sum(cell_counts) * 100) %>%
+    dplyr::mutate(freq = cell_counts/sum(cell_counts) * 100,
+                  !!group.by.1 := coalesce(.data[[group.by.1]], "NA")) %>%
     as.data.frame()
 
 
@@ -751,8 +752,6 @@ compositional_data <- function(data,
   num_cols <- names(clr.df)[num_cols_bool_idx]
   chr_cols <- names(clr.df)[!num_cols_bool_idx]
   clr.df.ref <- clr.df %>% dplyr::select(all_of(num_cols))
-
-  clr.df.ref[is.na(clr.df.ref)] <- clr_zero_impute_perc
 
   clr <- Hotelling::clr(clr.df.ref)
   # add extra cols (if any)
