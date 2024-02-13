@@ -900,11 +900,11 @@ get.aggregated.signature <- function(object,
     for (e in names(group.by.aggregated)) {
       # remove from aggregated data cell with less than min.cells.aggregated
       cnts <- compositional_data(meta.data,
-                                 group.by.1 = group.by.aggregated[[i]],
+                                 group.by.1 = group.by.aggregated[[e]],
                                  only.counts = T,
                                  useNA = useNA)
 
-      keep <- cnts[cnts[["cell_counts"]]>min.cells.aggregated,group.by.aggregated[[i]]] %>%
+      keep <- cnts[cnts[["cell_counts"]]>min.cells.aggregated,group.by.aggregated[[e]]] %>%
         unlist()
 
 
@@ -918,6 +918,8 @@ get.aggregated.signature <- function(object,
         aggr.sig[[e]] <- aggr.sig[[e]] %>%
                           dplyr::filter(!is.na(.data[[group.by.aggregated[[e]]]]))
       }
+
+
     }
   }
   return(aggr.sig)
