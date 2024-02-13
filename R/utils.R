@@ -718,7 +718,8 @@ compositional_data <- function(data,
                                split.by = NULL,
                                group.by.1 = NULL,
                                useNA = FALSE,
-                               clr_zero_impute_perc = 1
+                               clr_zero_impute_perc = 1,
+                               only.counts = FALSE
                               ) {
 
   # set grouping variables
@@ -730,7 +731,10 @@ compositional_data <- function(data,
     # drop = F keeps all levels of the factor
     dplyr::group_by(across(all_of(gr_vars)), .drop = F) %>%
     dplyr::summarize(cell_counts = dplyr::n()) %>%
-    dplyr::ungroup() %>%
+    dplyr::ungroup()
+
+  if(!only.counts){
+    ctable <- ctable %>%
     dplyr::filter(if (!useNA) !is.na(.data[[group.by.1]])
                   else rep(TRUE, n())) %>%
     dplyr::group_by(across(all_of(gr_vars2))) %>%
@@ -739,26 +743,27 @@ compositional_data <- function(data,
     as.data.frame()
 
 
-    # compute clr
-  clr.df <- ctable %>%
-    dplyr::select(-cell_counts) %>%
-    # add pseudocount
-    dplyr::mutate(freq = freq + clr_zero_impute_perc) %>%
-    tidyr::pivot_wider(names_from = group.by.1,
-                       values_from = "freq")
-  # accomodate df for clr transformation
-  ## Remove character columns
-  num_cols_bool_idx <- sapply(clr.df, is.numeric)
-  num_cols <- names(clr.df)[num_cols_bool_idx]
-  chr_cols <- names(clr.df)[!num_cols_bool_idx]
-  clr.df.ref <- clr.df %>% dplyr::select(all_of(num_cols))
+      # compute clr
+    clr.df <- ctable %>%
+      dplyr::select(-cell_counts) %>%
+      # add pseudocount
+      dplyr::mutate(freq = freq + clr_zero_impute_perc) %>%
+      tidyr::pivot_wider(names_from = group.by.1,
+                         values_from = "freq")
+    # accomodate df for clr transformation
+    ## Remove character columns
+    num_cols_bool_idx <- sapply(clr.df, is.numeric)
+    num_cols <- names(clr.df)[num_cols_bool_idx]
+    chr_cols <- names(clr.df)[!num_cols_bool_idx]
+    clr.df.ref <- clr.df %>% dplyr::select(all_of(num_cols))
 
-  clr <- Hotelling::clr(clr.df.ref)
-  # add extra cols (if any)
-  clr <- cbind(clr.df[,chr_cols],clr)  %>%
-          tidyr::pivot_longer(-chr_cols, names_to = group.by.1, values_to = "clr")
-  # join clr df to main dataframe
-  ctable <- dplyr::left_join(ctable, clr, by = c(chr_cols, group.by.1))
+    clr <- Hotelling::clr(clr.df.ref)
+    # add extra cols (if any)
+    clr <- cbind(clr.df[,chr_cols],clr)  %>%
+            tidyr::pivot_longer(-chr_cols, names_to = group.by.1, values_to = "clr")
+    # join clr df to main dataframe
+    ctable <- dplyr::left_join(ctable, clr, by = c(chr_cols, group.by.1))
+  }
 
   return(ctable)
 }
