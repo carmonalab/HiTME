@@ -8,6 +8,8 @@ get.HiTObject(
   object,
   group.by = list(layer1 = c("scGate_multi"), layer2 = c("functional.cluster")),
   split.by = NULL,
+  min.cells.composition = 10,
+  min.cells.aggregated = 10,
   name.additional.signatures = NULL,
   useNA = FALSE,
   clr_zero_impute_perc = 1,
@@ -21,6 +23,12 @@ get.HiTObject(
 \item{object}{A Seurat object}
 
 \item{group.by}{List with one or multiple Seurat object metadata columns with cell type predictions to group by (e.g. layer 1 cell type classification)}
+
+\item{split.by}{A Seurat object metadata column to split by compositional data (e.g. sample names) \link{get.celltype.composition}}
+
+\item{min.cells.composition}{Parameter for internal \link{get.celltype.composition}. Minimum number of cells annotated in a group.by parameter to render the cell type composition. If the number of cells annotated for a certain group.by parameter is less, compositional data will not be rendered. Default value is 10.}
+
+\item{min.cells.aggregated}{Parameter for internal \link{get.aggregated.profile} and \link{get.aggregated.signature}. Minimum number of cells per sample and cell type to aggregate data for pseudobulk or aggregated signatures. Aggregated data for cell types with less than that value will not be returned in aggregated data. Default value is 10.}
 
 \item{name.additional.signatures}{Names of additional signatures as found in object metadata to take into account.}
 

@@ -361,6 +361,8 @@ Run.HiTME <- function(object = NULL,
 #' @param object A Seurat object
 #' @param group.by List with one or multiple Seurat object metadata columns with cell type predictions to group by (e.g. layer 1 cell type classification)
 #' @param split.by A Seurat object metadata column to split by compositional data (e.g. sample names) \link{get.celltype.composition}
+#' @param min.cells.composition Parameter for internal \link{get.celltype.composition}. Minimum number of cells annotated in a group.by parameter to render the cell type composition. If the number of cells annotated for a certain group.by parameter is less, compositional data will not be rendered. Default value is 10.
+#' @param min.cells.aggregated Parameter for internal \link{get.aggregated.profile} and \link{get.aggregated.signature}. Minimum number of cells per sample and cell type to aggregate data for pseudobulk or aggregated signatures. Aggregated data for cell types with less than that value will not be returned in aggregated data. Default value is 10.
 #' @param name.additional.signatures Names of additional signatures as found in object metadata to take into account.
 #' @param useNA logical whether to return aggregated profile for NA (undefined) cell types, default is FALSE.
 #' @param clr_zero_impute_perc Parameter for internal \link{get.celltype.composition}.
@@ -382,6 +384,8 @@ get.HiTObject <- function(object,
                                           "layer2" = c("functional.cluster")
                                           ),
                           split.by = NULL,
+                          min.cells.composition = 10,
+                          min.cells.aggregated = 10,
                           name.additional.signatures = NULL,
                           useNA = FALSE,
                           clr_zero_impute_perc = 1,
@@ -477,6 +481,7 @@ get.HiTObject <- function(object,
 
   comp.prop <- get.celltype.composition(object,
                                         group.by.composition = group.by,
+                                        min.cells.composition = min.cells.composition,
                                         split.by = split.by,
                                         useNA = useNA,
                                         clr_zero_impute_perc = clr_zero_impute_perc,
@@ -488,11 +493,13 @@ get.HiTObject <- function(object,
   avg.expr <- get.aggregated.profile(object,
                                      group.by.aggregated = group.by,
                                      gene.filter = gene.filter,
+                                     min.cells.aggregated = min.cells.aggregated,
                                      assay = assay,
                                      useNA = useNA)
 
   aggr.signature <- get.aggregated.signature(object,
                                              group.by.aggregated = group.by,
+                                             min.cells.aggregated = min.cells.aggregated,
                                              name.additional.signatures = name.additional.signatures,
                                              useNA = useNA)
 
@@ -512,7 +519,7 @@ get.HiTObject <- function(object,
 #' @param object A seurat object
 #' @param group.by.composition The Seurat object metadata column(s) containing celltype annotations (provide as character vector, containing the metadata column name(s))
 #' @param split.by A Seurat object metadata column to split by (e.g. sample names)
-#' @param min.cells Set a minimum threshold for number of cells to calculate relative abundance (e.g. less than 10 cells -> no relative abundance will be calculated)
+#' @param min.cells.composition Set a minimum threshold for number of cells to calculate relative abundance (e.g. less than 10 cells -> no relative abundance will be calculated)
 #' @param useNA Whether to include not annotated cells or not (labelled as "NA" in the group.by.composition). Can be defined separately for each group.by.composition (provide single boolean or vector of booleans)
 #' @param layers_link Named vector indicating the relation of multiple layer classification, default is \code{c("scGate_multi", "functional.cluster")}. Name of the vector element ought to be layer1 and element layer2. This parameter is used to compute relative compositional data of layer2 within layer1 classes.
 #' @param clr_zero_impute_perc To calculate the clr-transformed relative abundance ("clr_freq"), zero values are not allowed and need to be imputed (e.g. by adding a pseudo cell count). Instead of adding a pseudo cell count of flat +1, here a pseudo cell count of +1% of the total cell count will be added to all cell types, to better take into consideration the relative abundance ratios (e.g. adding +1 cell to a total cell count of 10 cells would have a different, i.e. much larger effect, than adding +1 to 1000 cells).
@@ -543,7 +550,7 @@ get.HiTObject <- function(object,
 get.celltype.composition <- function(object = NULL,
                                      group.by.composition = NULL,
                                      split.by = NULL,
-                                     min.cells = 10,
+                                     min.cells.composition = 10,
                                      useNA = FALSE,
                                      layers_links = c("scGate_multi" = "functional.cluster"),
                                      clr_zero_impute_perc = 1,
@@ -642,10 +649,10 @@ get.celltype.composition <- function(object = NULL,
                                    clr_zero_impute_perc = clr_zero_impute_perc)
 
       # stop if very few cells
-      if (sum(ctable$cell_counts) < min.cells) {
-        warning(paste("There are less than ", min.cells,
+      if (sum(ctable$cell_counts) < min.cells.composition) {
+        warning(paste("There are less than ", min.cells.composition,
                       "cells detected for ", group.by.composition[[i]],
-                      ". This is too few to calculate a reasonable celltype composition.\nIf needed, set parameter min.cells = 0."))
+                      ". This is too few to calculate a reasonable celltype composition.\nIf needed, set parameter min.cells.composition = 0."))
         next
       }
 
@@ -704,17 +711,20 @@ get.celltype.composition <- function(object = NULL,
 #'
 #' @param object A seurat object or a list of seurat objects
 #' @param group.by.aggregated The Seurat object metadata column(s) containing celltype annotations
+#' @param min.cells.aggregated Minimum number of cells per sample and cell type to aggregate data for pseudobulk or aggregated signatures. Aggregated data for cell types with less than that value will not be returned in aggregated data. Default value is 10.
 #' @param assay Assay to retrieve information. By default "RNA".
 #' @param useNA logical whether to return aggregated profile for NA (undefined) cell types, default is FALSE.
 #' @param ... Extra parameters for internal Seurat functions: AverageExpression, AggregateExpression, FindVariableFeatures
 
 #' @importFrom Seurat AverageExpression AggregateExpression FindVariableFeatures
+#' @importFrom dplyr filter
 #' @return Average and aggregated expression as a list of matrices for all genes and indicated gene lists filtering.
 #' @export get.aggregated.profile
 
 
 get.aggregated.profile <- function(object,
                                    group.by.aggregated = NULL,
+                                   min.cells.aggregated = 10,
                                    assay = "RNA",
                                    useNA = FALSE,
                                    ...) {
@@ -757,13 +767,29 @@ get.aggregated.profile <- function(object,
 
     # compute pseudobulk
     suppressWarnings({
-      # Handle not annotated cells being labelled as NA
       obj_tmp <- object
+      # remove from aggregated data cell with less than min.cells.aggregated
+      cnts <- compositional_data(obj_tmp@meta.data,
+                                 group.by.1 = group.by.aggregated[[i]],
+                                 only.counts = T,
+                                 useNA = useNA)
+
+      keep <- cnts[cnts[["cell_counts"]]>min.cells.aggregated,group.by.aggregated[[i]]] %>%
+              unlist()
+
+      # remove cell types with less than min.cells.aggregated
+      obj_tmp@meta.data$fltr <- obj_tmp@meta.data[[group.by.aggregated[[i]]]]
+      obj_tmp <- obj_tmp[, as.character(obj_tmp$fltr) %in% keep]
+
+
+      # Handle not annotated cells being labelled as NA
       obj_tmp@meta.data[[group.by.aggregated[[i]]]] <- as.character(obj_tmp@meta.data[[group.by.aggregated[[i]]]])
       obj_tmp@meta.data[[group.by.aggregated[[i]]]][is.na(obj_tmp@meta.data[[group.by.aggregated[[i]]]])] <- "NA"
       obj_tmp@meta.data[[group.by.aggregated[[i]]]] <- as.factor(obj_tmp@meta.data[[group.by.aggregated[[i]]]])
 
-      if (length(unique(object@meta.data[[group.by.aggregated[[i]]]])) >= 2) {
+
+
+      if (length(unique(obj_tmp@meta.data[[group.by.aggregated[[i]]]])) >= 2) {
         avg.exp[[i]] <-
           Seurat::AggregateExpression(obj_tmp,
                                       group.by = group.by.aggregated[[i]],
@@ -797,6 +823,7 @@ get.aggregated.profile <- function(object,
 #'
 #' @param object A seurat object or metadata data frame.
 #' @param group.by.aggregated The Seurat object metadata column(s) containing celltype annotations (idents).
+#' @param min.cells.aggregated Minimum number of cells per sample and cell type to aggregate data for pseudobulk or aggregated signatures. Aggregated data for cell types with less than that value will not be returned in aggregated data. Default value is 10.
 #' @param name.additional.signatures Names of additional signatures to compute the aggregation per cell type.
 #' @param fun Function to aggregate the signature, e.g. mean or sum.
 #' @param useNA logical whether to return aggregated signatures for NA (undefined) cell types, default is FALSE.
@@ -808,6 +835,7 @@ get.aggregated.profile <- function(object,
 
 get.aggregated.signature <- function(object,
                                      group.by.aggregated = NULL,
+                                     min.cells.aggregated = 10,
                                      name.additional.signatures = NULL,
                                      fun = mean,
                                      useNA = FALSE) {
@@ -870,7 +898,18 @@ get.aggregated.signature <- function(object,
     aggr.sig <- list()
 
     for (e in names(group.by.aggregated)) {
+      # remove from aggregated data cell with less than min.cells.aggregated
+      cnts <- compositional_data(meta.data,
+                                 group.by.1 = group.by.aggregated[[i]],
+                                 only.counts = T,
+                                 useNA = useNA)
+
+      keep <- cnts[cnts[["cell_counts"]]>min.cells.aggregated,group.by.aggregated[[i]]] %>%
+        unlist()
+
+
       aggr.sig[[e]] <- meta.data %>%
+        dplyr::filter(.data[[group.by.aggregated[[e]]]] %in% keep) %>%
         dplyr::group_by(.data[[group.by.aggregated[[e]]]]) %>%
         dplyr::summarize_at(add.sig.cols, fun, na.rm = T)
 
@@ -1087,7 +1126,9 @@ merge.HiTObjects <- function(object = NULL,
     # Per HiTObject from input, get metadata column names which have all the same value.
     # E.g. each HiTObject is from a specific sample, so each HiTObject has metadata column "Sample" which contains all the same value (e.g. "sample1" for sample 1, "sample2" for sample 2, etc.)
     # Other metadata columns, e.g. scGate_multi can be dropped, as the merged HiTObject is a summary per sample, so single-cell metadata columns don't make sense.
-    umc <- lapply(names(HiT_summary_list), function (x) {apply(HiT_summary_list[[x]]@metadata, 2, function(y) length(unique(y))) == 1})
+    umc <- lapply(names(object), function (x) {
+              apply(object[[x]]@metadata, 2, function(y) length(unique(y))) == 1
+              })
     umc <- umc %>% Reduce("&", .)
     metadata.vars <- names(umc)[umc == T]
   }

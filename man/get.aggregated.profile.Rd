@@ -7,6 +7,7 @@
 get.aggregated.profile(
   object,
   group.by.aggregated = NULL,
+  min.cells.aggregated = 10,
   assay = "RNA",
   useNA = FALSE,
   ...
@@ -16,6 +17,8 @@ get.aggregated.profile(
 \item{object}{A seurat object or a list of seurat objects}
 
 \item{group.by.aggregated}{The Seurat object metadata column(s) containing celltype annotations}
+
+\item{min.cells.aggregated}{Minimum number of cells per sample and cell type to aggregate data for pseudobulk or aggregated signatures. Aggregated data for cell types with less than that value will not be returned in aggregated data. Default value is 10.}
 
 \item{assay}{Assay to retrieve information. By default "RNA".}
 

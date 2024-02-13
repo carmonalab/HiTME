@@ -8,7 +8,7 @@ get.celltype.composition(
   object = NULL,
   group.by.composition = NULL,
   split.by = NULL,
-  min.cells = 10,
+  min.cells.composition = 10,
   useNA = FALSE,
   layers_links = c(scGate_multi = "functional.cluster"),
   clr_zero_impute_perc = 1,
@@ -22,7 +22,7 @@ get.celltype.composition(
 
 \item{split.by}{A Seurat object metadata column to split by (e.g. sample names)}
 
-\item{min.cells}{Set a minimum threshold for number of cells to calculate relative abundance (e.g. less than 10 cells -> no relative abundance will be calculated)}
+\item{min.cells.composition}{Set a minimum threshold for number of cells to calculate relative abundance (e.g. less than 10 cells -> no relative abundance will be calculated)}
 
 \item{useNA}{Whether to include not annotated cells or not (labelled as "NA" in the group.by.composition). Can be defined separately for each group.by.composition (provide single boolean or vector of booleans)}
 
