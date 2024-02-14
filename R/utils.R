@@ -165,317 +165,6 @@ StandardizeCellNames <- function(cell.names, dictionary = NULL) {
 
 
 
-
-# Compute clustering score -------------------------------------------------
-
-get.cluster.score <- function(matrix = NULL,
-                              metadata = NULL,
-                              cluster.by = c("celltype", "sample"),
-                              ndim = NULL,
-                              nVarGenes = 500,
-                              gene.filter = NULL,
-                              GO_accession = NULL,
-                              black.list = NULL,
-                              ntests = 0,
-                              score = c("silhouette"),
-                              dist.method = "euclidean",
-                              hclust.method = "complete",
-                              ncores = parallelly::availableCores() - 2,
-                              bparam = NULL,
-                              progressbar = TRUE
-                              ) {
-
-  if (is.null(matrix) || !is.matrix(matrix)) {
-    stop("Please provide a matrix object.")
-  }
-
-  if (is.null(metadata) || !is.data.frame(metadata)) {
-    stop("Please provide a metadata object as dataframe")
-  }
-
-  # Get black list
-  if (is.null(black.list)) {
-    data("default_black_list")
-  }
-  black.list <- unlist(black.list)
-
-
-
-  # dataframe to store score result
-  cnames <- c("grouping", "dist_method", "score_method")
-  df.score <- expand.grid(cluster.by, dist.method, score)
-  # convert to characters, not factors
-  df.score <- lapply(df.score, as.character) %>% as.data.frame()
-  names(df.score) <- cnames
-
-  # empty list to fill in the loop
-  scores <- list()
-
-  # compute common PCA space using DESeq2
-  # do formula for design with the cluster.by elements in order
-  dformula <- formula(paste("~", paste(cluster.by, collapse =  " + ")))
-  dds <- DESeq2::DESeqDataSetFromMatrix(countData = matrix,
-                                        colData = metadata,
-                                        design = dformula)
-  dds <- DESeq2::estimateSizeFactors(dds)
-
-  nsub <- min(1000,
-              sum(rowMeans(BiocGenerics::counts(dds, normalized=TRUE)) > 5 ))
-  # transform counts usign vst
-  vsd <- DESeq2::vst(dds, blind = T, nsub = nsub)
-  vsd <- SummarizedExperiment::assay(vsd)
-
-  # Remove black listed genes from the matrix
-  vsd <- vsd[!rownames(vsd) %in% black.list,]
-
-  # get top variable genes
-  rv <- MatrixGenerics::rowVars(vsd)
-  select <- order(rv, decreasing=TRUE)[seq_len(min(nVarGenes, length(rv)))]
-  vsd <- vsd[select,]
-
-  # if (!is.null(gene.filter) && !is.list(gene.filter)) {
-  #   gene.filter <- list(gene.filter)
-  # }
-  #
-  #
-  # gene.filter.list <- list()
-  # # make a list of default subsetting genes
-  #
-  # # Dorothea transcription factors
-  # # data("entire_database", package = "dorothea")
-  # # gene.filter.list[["Dorothea_Transcription_Factors"]] <- entire_database$tf %>% unique()
-  #
-  # # Ribosomal genes
-  # gene.filter.list[["Ribosomal"]] <- SignatuR::GetSignature(SignatuR::SignatuR$Hs$Compartments$Ribo)
-  #
-  # # Add list genes from GO accessions
-  # # check if indicted additional GO accessions
-  # if (!is.null(GO_accession)) {
-  #   GO_additional <- get.GOList(GO_accession, ...)
-  # } else {
-  #   GO_additional <- NULL
-  # }
-  #
-  # #default gene list
-  # data("GO_accession_default")
-  # gene.filter.list <- c(gene.filter.list, GO_default, GO_additional)
-  #
-  # # Add defined list of genes to filter
-  # for (a in seq_along(gene.filter)) {
-  #   if (is.null(names(gene.filter[[a]]))) {
-  #     i.name <- paste0("GeneList_", a)
-  #   } else {
-  #     i.name <- names(gene.filter[[a]])
-  #   }
-  #   gene.filter.list[[i.name]] <- gene.filter[[a]]
-  # }
-
-  # subset genes accroding to gene filter list
-  # for (e in names(gene.filter.list)) {
-  #   keep <- gene.filter.list[[e]][gene.filter.list[[e]] %in%
-  #                                   rownames(avg.exp[[i]] )]
-  #   avg.exp[[i]][[e]] <- avg.exp[[i]] [keep, , drop = FALSE]
-  # }
-
-  # remove samples with low variability if needed
-  tryCatch({
-    pc <- stats::prcomp(t(vsd))
-  },
-  error = function(e) {
-    near_zero_var <- caret::nearZeroVar(vsd)
-    if (length(near_zero_var) > 0) {
-      vsd <- vsd[, -near_zero_var]
-      metadata <<- metadata[-near_zero_var, ]
-      pc <<- stats::prcomp(t(vsd))
-    } else if (length(near_zero_var) == ncol(vsd)) {
-      message("PCA compute not possible.\n")
-    }
-  })
-
-
-  # produce scree plot to know how many dimensions to use
-  eigen_val <- pc$sdev^2
-  # Filter only eigen values above 1 (Kaiser rule)
-  eigen_val <- eigen_val[eigen_val > 1]
-  prop_var <- eigen_val / sum(eigen_val)
-  # compute the accumulation of the proportional variance
-  prop_var_cum <- cumsum(prop_var)
-
-  plot_var <- data.frame(Proportion_variance = prop_var_cum,
-                         PC = 1:length(eigen_val)) %>%
-    ggplot2::ggplot(ggplot2::aes(PC, Proportion_variance)) +
-    ggplot2::geom_col(color = "lightblue")+
-    ggplot2::geom_line()+
-    ggplot2::geom_vline(xintercept = ndim,
-                        color = "red",
-                        linetype = 2) +
-    ggplot2::geom_label(ggplot2::aes(label = ifelse(PC == ndim,
-                                                 round(Proportion_variance,2), NA))) +
-    ggplot2::theme_bw() +
-    ggplot2::ggtitle(paste0(ndim, " first PC"))
-
-  # compute distance
-  for (x in 1:nrow(df.score)) {
-
-    # define the grouping by variable
-    gr.by <- as.character(df.score[x, 1])
-
-    dist <- stats::dist(pc$x[,1:ndim],
-                        method = df.score[x, 2])
-
-    # plot dendrogram
-    pc2 <- pc$x[,1:ndim] %>%
-      as.data.frame() %>%
-      mutate(celltype = metadata[[df.score[x, 1]]])
-
-    # Calculate the row-wise average grouping by row names
-    pc2 <- aggregate(. ~ celltype, data = pc2, FUN = mean) %>%
-                      tibble::column_to_rownames("celltype") %>%
-                      as.matrix()
-
-    dist_group <- stats::dist(pc2,
-                              method = df.score[x, 2])
-    hclust <- stats::hclust(dist_group,
-                            method = hclust.method)
-    dendo <- ggdendro::ggdendrogram(as.dendrogram(hclust)) +
-            ggtitle(paste0("Hierarchical clustering dendrogram - ",
-                           hclust.method))
-
-    # do not show legend if too many groups
-    leg.pos <- ifelse(length(unique(metadata[[gr.by]])) < 40,
-                      "right", "none")
-
-    if (df.score[x,3] == "silhouette") {
-      message("Computing silhouette score")
-
-      silh <- silhoutte_onelabel(metadata[[gr.by]],
-                             dist = dist,
-                             ntests = ntests,
-                             ncores = ncores,
-                             bparam = bparam,
-                             progressbar = progressbar)
-
-      whole.mean <- mean(silh$cell$sil_width)
-
-      # levels of cells for factors
-      lev_cells <- unique(silh$cell$cluster)
-
-      gpl <- silh$cell %>%
-        mutate(cluster = factor(cluster,
-                                levels = lev_cells)) %>%
-        dplyr::rename(!!gr.by := cluster) %>%
-        ggplot2::ggplot(ggplot2::aes(rowid, sil_width, fill = .data[[gr.by]])) +
-        ggplot2::geom_col() +
-        ggplot2::geom_hline(yintercept = whole.mean,
-                            color = "black",
-                            linetype = 2) +
-        ggplot2::labs(y = "Silhouette width",
-             title = paste0(gr.by, " - ", df.score[x, 2], "\nAverage silhouette width: ", round(whole.mean, 3))) +
-        ggplot2::guides(fill=guide_legend(ncol=4))+
-        ggplot2::theme(
-          panel.background = element_rect(fill = "white"),
-          axis.text.x = element_blank(),
-          axis.title.x = element_blank(),
-          axis.ticks.x = element_blank(),
-          legend.position = leg.pos
-        )
-    }
-
-    if (df.score[x,3] == "modularity") {
-      message("Computing Modularity score")
-      # transform to network the distance
-      graph <- graph.adjacency(
-                                as.matrix(as.dist(cor(matrix,
-                                                      method="pearson"))),
-                                mode="undirected",
-                                weighted=TRUE,
-                                diag=FALSE
-                              )
-      # simplify graph
-      graph <- simplify(graph, remove.multiple=TRUE, remove.loops=TRUE)
-
-      # Colour negative correlation edges as blue
-      E(graph)[which(E(graph)$weight<0)]$color <- "darkblue"
-      # Colour positive correlation edges as red
-      E(graph)[which(E(graph)$weight>0)]$color <- "darkred"
-      # Convert edge weights to absolute values
-      E(graph)$weight <- abs(E(graph)$weight)
-
-      # set grouping variable
-      V(graph)$group <- as.numeric(as.factor(metadata[[paste0(gr.by,"N")]]))
-      # calculate modularity
-      mod_score <- igraph::modularity(graph, V(graph)$group)
-
-      V(graph)$label <- NA
-
-      mod.pl <- plot(graph,
-                     vertex.color = V(graph)$group,
-                     main = "Network with Group Assignments")
-    }
-
-    # # plot for PCA
-    pc_sum <- summary(pc)
-    PC1_varexpl <- pc_sum$importance[2,"PC1"]
-    PC2_varexpl <- pc_sum$importance[2,"PC2"]
-
-    # get first 2 PC
-    pc.df <- pc$x[,1:2] %>% as.data.frame() %>%
-      tibble::rownames_to_column("sample_celltype") %>%
-      left_join(., metadata %>% tibble::rownames_to_column("sample_celltype"),
-                by = "sample_celltype")
-    pc.df[[gr.by]] <-  factor(pc.df[[gr.by]], levels = lev_cells)
-
-    pc.pl <- pc.df %>%
-      ggplot2::ggplot(ggplot2::aes(PC1, PC2, color = .data[[gr.by]])) +
-      ggplot2::geom_point() +
-      ggplot2::guides(color=guide_legend(ncol=2))+
-      labs(title = paste0(gr.by, " - ", " PCA"),
-           y = paste0("PC2 (", PC2_varexpl*100, " %)"),
-           x = paste0("PC1 (", PC1_varexpl*100, " %)"))+
-      ggplot2::theme(
-        panel.background = element_rect(fill = "white"),
-        legend.position = leg.pos,
-        legend.key = element_rect(fill = "white")
-      )
-    score.type <- as.character(df.score[x,3])
-
-
-  # plot of bootstraping
-  # conf.pl <- silh$summary %>%
-  #             dplyr::filter(iteration != "NO") %>%
-  #             ggplot2::ggplot(ggplot2::aes(x = avg_sil_width,
-  #                                          y = ..density..,
-  #                                          fill = cluster)) +
-  #             ggplot2::geom_density(alpha = 0.6, show.legend = F) +
-  #             ggplot2::geom_ribbon(aes(ymin = 0, ymax = ..density..), alpha = 0.05)
-  #             ggplot2::facet_wrap(~cluster, ncol = 2) +
-  #             ggplot2::theme_bw()
-  #
-  #             ggplot2::geom_vline(aes(xintercept = ifelse(iteration == "NO",
-  #                                                     avg_sil_width, NA)),
-  #                                 color = "Avg silhouette width"),
-  #                                 lty = 2, show.legend = T)
-  #             ggplot2::geom_vline(xintercept = quantile(cof_before[,2], c(0.05,0.95))[1],
-  #                            color = "Bootstrap"), lty = 2, show.legend = T)
-
-    # Build plot list
-    pl.list <- list( score.type = gpl,
-                     "PCA" = pc.pl,
-                     "Scree_plot" = plot_var,
-                     "Dendogram" = dendo)
-
-    # return list
-    ret <- list("whole_avgerage" = whole.mean,
-                "bygroup_average" = silh$summary,
-                "plots" = pl.list)
-
-    scores[[paste(df.score[x,], collapse = "_")]] <- ret
-  }
-  return(scores)
-}
-
-
-
 # Calculate silhouette score ----------------------------------------------
 
 silhoutte_onelabel <- function(labels = NULL, # vector of labels
@@ -767,3 +456,34 @@ compositional_data <- function(data,
 
   return(ctable)
 }
+
+
+# Normalize pseudobulk data using DESeq2 -------------------------------------------------
+
+DESeq2.normalize <- function(matrix,
+                             metadata,
+                             cluster.by,
+                             black.list
+                            ) {
+  # do formula for design with the cluster.by elements in order
+  dformula <- formula(paste("~", paste(cluster.by, collapse =  " + ")))
+  dds <- DESeq2::DESeqDataSetFromMatrix(countData = matrix,
+                                        colData = metadata,
+                                        design = dformula)
+  dds <- DESeq2::estimateSizeFactors(dds)
+
+  nsub <- min(1000,
+              sum(rowMeans(BiocGenerics::counts(dds, normalized=TRUE)) > 5 ))
+  # transform counts usign vst
+  vsd <- DESeq2::vst(dds, blind = T, nsub = nsub)
+  vsd <- SummarizedExperiment::assay(vsd)
+
+  # Remove black listed genes from the matrix
+  vsd <- vsd[!rownames(vsd) %in% black.list,]
+
+  return(vsd)
+
+}
+
+
+
