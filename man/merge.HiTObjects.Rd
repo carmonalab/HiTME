@@ -6,9 +6,9 @@
 \usage{
 \method{merge}{HiTObjects}(
   object = NULL,
-  group.by = list(layer1 = c("scGate_multi"), layer2 = c("functional.cluster")),
+  group.by = NULL,
   metadata.vars = NULL,
-  pseudobulk.matrix = c("unique", "list"),
+  pseudobulk.matrix = "unique",
   ncores = parallelly::availableCores() - 2,
   bparam = NULL,
   progressbar = FALSE,
@@ -18,7 +18,7 @@
 \arguments{
 \item{object}{List of HiTObjects}
 
-\item{group.by}{Grouping variable for layers}
+\item{group.by}{If only merging for certain layers of annotation is intended, layers names can be indicated here as vector. Otherwise all layers present in all HiT object will be merged.}
 
 \item{metadata.vars}{Variables to keep as metadata. (Default: NULL, keeping unique metadata columns per sample, dropping single-cell metadata)}
 

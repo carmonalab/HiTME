@@ -22,7 +22,7 @@ get.HiTObject(
 \arguments{
 \item{object}{A Seurat object}
 
-\item{group.by}{List with one or multiple Seurat object metadata columns with cell type predictions to group by (e.g. layer 1 cell type classification)}
+\item{group.by}{List or vector with one or multiple Seurat object metadata columns with cell type predictions to group by (e.g. layer 1 cell type classification)}
 
 \item{split.by}{A Seurat object metadata column to split by compositional data (e.g. sample names) \link{get.celltype.composition}}
 

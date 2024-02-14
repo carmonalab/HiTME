@@ -359,7 +359,7 @@ Run.HiTME <- function(object = NULL,
 #'
 #'
 #' @param object A Seurat object
-#' @param group.by List with one or multiple Seurat object metadata columns with cell type predictions to group by (e.g. layer 1 cell type classification)
+#' @param group.by List or vector with one or multiple Seurat object metadata columns with cell type predictions to group by (e.g. layer 1 cell type classification)
 #' @param split.by A Seurat object metadata column to split by compositional data (e.g. sample names) \link{get.celltype.composition}
 #' @param min.cells.composition Parameter for internal \link{get.celltype.composition}. Minimum number of cells annotated in a group.by parameter to render the cell type composition. If the number of cells annotated for a certain group.by parameter is less, compositional data will not be rendered. Default value is 10.
 #' @param min.cells.aggregated Parameter for internal \link{get.aggregated.profile} and \link{get.aggregated.signature}. Minimum number of cells per sample and cell type to aggregate data for pseudobulk or aggregated signatures. Aggregated data for cell types with less than that value will not be returned in aggregated data. Default value is 10.
@@ -1018,7 +1018,7 @@ get.GOList <- function(GO_accession = NULL,
 #' Merge HiTObjects
 #'
 #' @param object List of HiTObjects
-#' @param group.by Grouping variable for layers
+#' @param group.by If only merging for certain layers of annotation is intended, layers names can be indicated here as vector. Otherwise all layers present in all HiT object will be merged.
 #' @param metadata.vars Variables to keep as metadata. (Default: NULL, keeping unique metadata columns per sample, dropping single-cell metadata)
 #' @param pseudobulk.matrix Paramater to determine whther obtain the pseudobulk matrix as a single matrix (`"unique"`), or as one matrix for each cell type in the layer (`"list"`). Default is returning a single unique matrix.
 #' @param ncores The number of cores to use, by default, all available cores - 2.
@@ -1037,10 +1037,9 @@ get.GOList <- function(GO_accession = NULL,
 #'
 
 merge.HiTObjects <- function(object = NULL,
-                             group.by = list("layer1" = c("scGate_multi"),
-                                             "layer2" = c("functional.cluster")),
+                             group.by = NULL,
                              metadata.vars = NULL,
-                             pseudobulk.matrix = c("unique", "list"),
+                             pseudobulk.matrix = "unique",
                              ncores = parallelly::availableCores() - 2,
                              bparam = NULL,
                              progressbar = FALSE,
@@ -1060,29 +1059,29 @@ merge.HiTObjects <- function(object = NULL,
     }
   }
 
+  # fetch which layers are included in all HiT objects
+  layers_in_hit <- lapply(object, function(x){
+    a <- names(x@composition)
+    b <- names(x@aggregated_profile$Pseudobulk)
+    c <- names(x@aggregated_profile$Signatures)
+    u <- unique(c(a,b,c))
+    return(u)
+  })
 
-  if (is.null(group.by)) {
-    stop("Please provide at least one grouping variable for cell type classification common in all elements of the list of Hit objects")
-  } else {
-    if (!is.list(group.by)) {
-      group.by <- as.list(group.by)
-    }
-    # give name to list of grouping.by variables
-    for (v in seq_along(group.by)) {
-      if (is.null(names(group.by)[v]) || is.na(names(group.by)[v])) {
-        names(group.by)[v] <- paste0("layer", v)
-      }
-    }
+    # if group.by is not indicate (NULL) retrieve the layers persent in HiT object
+  if(is.null(group.by)){
+    group.by <- unique(unlist(layers_in_hit))
   }
 
-  if (suppressWarnings(!all(lapply(object, function(x) {any(group.by %in% names(x@metadata))})))) {
-    stop("Not all supplied HiT object contain ", paste(group.by, collapse = ", "),
-         "group.by elements in their metadata")
+
+  if (suppressWarnings(!all(lapply(layers_in_hit, function(x) {any(group.by %in% x)})))) {
+    stop("None of the supplied HiT object contain at least one of these layers: ", paste(group.by, collapse = ", "),
+         ".\nPlease make sure to indicate the name of the layer.")
   } else {
     present <- sapply(group.by,
                       function(char) {
-                        unlist(lapply(object,
-                                      function(df) {char %in% colnames(df@metadata)}
+                        unlist(lapply(layers_in_hit,
+                                      function(df) {char %in% df}
                         ))
                       }
     )
@@ -1144,7 +1143,7 @@ merge.HiTObjects <- function(object = NULL,
   avg.expr <- list()
   aggr.signature <- list()
 
-  for (gb in names(group.by)) {
+  for (gb in group.by) {
 
     layer_present <- rownames(present)[present[,gb]]
 
@@ -1152,6 +1151,7 @@ merge.HiTObjects <- function(object = NULL,
     # Composition
     message("Merging compositions of " , gb, "...")
 
+    # assess that all HiT objects in the list contain the composition data for that layer
     is_df_check <- object[layer_present] %>%
       lapply(slot, name = "composition") %>%
       lapply("[[", gb) %>%
@@ -1164,15 +1164,15 @@ merge.HiTObjects <- function(object = NULL,
       unlist()
 
     if (all(is_df_check)) {
-      df <- bplapply(X = layer_present,
+      df <- BiocParallel::bplapply(X = layer_present,
                      BPPARAM = param,
                      function(x) {
                        object[[x]]@composition[[gb]] %>% mutate(sample = x)
                      })
       df <- data.table::rbindlist(df, use.names=TRUE, fill=TRUE)
       comp.prop[[gb]] <- df
-    }
-    else if (all(is_list_check)) {
+
+    } else if (all(is_list_check)) {
       gb_sublevel_unique_names <- object[layer_present] %>%
         lapply(slot, name = "composition") %>%
         lapply("[[", gb) %>%
@@ -1180,7 +1180,7 @@ merge.HiTObjects <- function(object = NULL,
         unlist() %>%
         unique()
       for (i in gb_sublevel_unique_names) {
-        df <- bplapply(X = layer_present,
+        df <- BiocParallel::bplapply(X = layer_present,
                        BPPARAM = param,
                        function(x) {
                          if (!is.null(object[[x]]@composition[[gb]][[i]])) {
@@ -1197,6 +1197,7 @@ merge.HiTObjects <- function(object = NULL,
     message("Merging aggregated profiles of " , gb, "...")
 
     # Aggregated_profile Pseudobulk
+
     celltypes <- lapply(names(object),
                         function(x) {
                           colnames(object[[x]]@aggregated_profile[["Pseudobulk"]][[gb]])
@@ -1206,7 +1207,7 @@ merge.HiTObjects <- function(object = NULL,
     for (ct in celltypes) {
       ct_present <- lapply(names(object), function(x) { ct %in% colnames(object[[x]]@aggregated_profile[["Pseudobulk"]][[gb]]) }) %>% unlist()
       layer_ct_present <- names(object)[(names(object) %in% layer_present) & ct_present]
-      df <- bplapply(X = layer_ct_present,
+      df <- BiocParallel::bplapply(X = layer_ct_present,
                      BPPARAM = param,
                      function(x) {
                        object[[x]]@aggregated_profile[["Pseudobulk"]][[gb]][, ct]
@@ -1235,7 +1236,7 @@ merge.HiTObjects <- function(object = NULL,
     }
 
     # Aggregated_profile Signatures
-    df <- bplapply(X = layer_present,
+    df <- BiocParallel::bplapply(X = layer_present,
                    BPPARAM = param,
                    function(x) {
                      object[[x]]@aggregated_profile[["Signatures"]][[gb]] %>% mutate(sample = x)
