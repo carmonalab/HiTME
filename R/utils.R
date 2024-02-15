@@ -1,4 +1,4 @@
-# HiT class definition -------------------------------------------------
+# HiT class definition ##############################################################################
 
 ## Build S4 objects to store data
 methods::setClass(Class = "HiT",
@@ -8,12 +8,12 @@ methods::setClass(Class = "HiT",
                     composition = "list",
                     aggregated_profile = "list",
                     version = "list"
-                    )
+                  )
 )
 
 
 
-# ProjecTILs on multiple reference maps -------------------------------------------------
+# ProjecTILs on multiple reference maps #############################################################
 
 ProjecTILs.classifier.multi <- function(object,
                                         ref.maps,
@@ -118,7 +118,7 @@ ProjecTILs.classifier.multi <- function(object,
 
 
 
-# Match words with grep -------------------------------------------------
+# Match words with grep ##############################################################################
 
 match_dictionary <- function(cell_type,
                              dictionary = NULL) {
@@ -151,7 +151,7 @@ match_dictionary <- function(cell_type,
 }
 
 
-# sapply match_dictionary to all elements in vector -------------------------------------------------
+# sapply match_dictionary to all elements in vector ####################################################
 
 StandardizeCellNames <- function(cell.names, dictionary = NULL) {
 
@@ -165,7 +165,7 @@ StandardizeCellNames <- function(cell.names, dictionary = NULL) {
 
 
 
-# Calculate silhouette score ----------------------------------------------
+# Calculate silhouette score ##############################################################################
 
 silhoutte_onelabel <- function(labels = NULL, # vector of labels
                                dist = NULL, # distance object
@@ -203,14 +203,14 @@ silhoutte_onelabel <- function(labels = NULL, # vector of labels
   sils <- BiocParallel::bplapply(
     X = tlabels,
     BPPARAM = param,
-    function(a){
+    function(a) {
 
       x_one <- ifelse(labels == a, 2, 1) %>%
         as.factor() %>% as.numeric()
 
       silh <- cluster::silhouette(x_one, dist)
 
-      # silhoutte score for each sample
+      # silhouette score for each sample
       # change names back to character
       sil.res.cell <- as.data.frame(silh) %>%
         dplyr::filter(cluster == 2) %>%
@@ -229,9 +229,9 @@ silhoutte_onelabel <- function(labels = NULL, # vector of labels
       bots.df <- data.frame(matrix(nrow = 0, ncol = 4))
       names(bots.df) <- c("cluster", "iteration", "size", "avg_sil_width")
 
-      if(ntests > 0){
+      if (ntests > 0) {
         # perform the shuffling
-        for(u in 1:ntests){
+        for (u in 1:ntests) {
           # random vector
           vec <- rep(1, length(labels))
           # seeding for reproducibility
@@ -241,7 +241,7 @@ silhoutte_onelabel <- function(labels = NULL, # vector of labels
           vec[random_sample] <- 2
           vec <- vec %>% as.factor() %>% as.numeric()
 
-          # run silhoutte
+          # run silhouette
           silh <- cluster::silhouette(vec, dist)
           sil.res <- as.data.frame(silh) %>%
             dplyr::filter(cluster == 2)
@@ -272,16 +272,16 @@ silhoutte_onelabel <- function(labels = NULL, # vector of labels
 
       }
 
-      return(list("cell" = sil.res.cell, # silhoutte score for each sample
+      return(list("cell" = sil.res.cell, # silhouette score for each sample
                   "summary" = sil.sumA))
     }
   )
 
   # join results
-  sil.all <- lapply(sils, function(x){x[["cell"]]}) %>%
+  sil.all <- lapply(sils, function(x) {x[["cell"]]}) %>%
     data.table::rbindlist()
 
-  sil.sum <- lapply(sils, function(x){x[["summary"]]}) %>%
+  sil.sum <- lapply(sils, function(x) {x[["summary"]]}) %>%
     data.table::rbindlist()
 
 
@@ -298,7 +298,7 @@ silhoutte_onelabel <- function(labels = NULL, # vector of labels
 
 
 
-# Compute p-value based on z score ----------------------------------------
+# Compute p-value based on z score ##############################################################################
 
 p.val_zscore <- function(obs = NULL,
                          random.values = NULL) {
@@ -312,7 +312,7 @@ p.val_zscore <- function(obs = NULL,
 
 
 
-# Plot shuffling interval confidence -------------------------------------------------
+# Plot shuffling interval confidence ######################################################
 
 plot.score <- function(df = NULL,
                        type = "density") {
@@ -323,30 +323,30 @@ plot.score <- function(df = NULL,
     for (a in names(spl)) {
 
       it <- spl[[a]] %>% filter(iteration != "NO") %>%
-            mutate(adj_p_val = NA)
+        mutate(adj_p_val = NA)
       obs <- spl[[a]] %>% filter(iteration == "NO")
       xit <- data.frame(vline_x = unlist(it[1,"conf.int.95"]))
       xobs <- data.frame(vline_x = obs$avg_sil_width)
       pl.list[[a]] <- it %>%
-            ggplot(aes(x=avg_sil_width)) +
-            geom_density(fill = "grey") +
-            geom_vline(data = xit,
-                       aes(xintercept = vline_x,
+        ggplot(aes(x=avg_sil_width)) +
+        geom_density(fill = "grey") +
+        geom_vline(data = xit,
+                   aes(xintercept = vline_x,
                        color = "confidence_interval95"),
-                       linetype = 2) +
-            geom_vline(data = xobs,
-                       aes(xintercept = vline_x,
-                           color = "Observed_value"),
-                       linetype = 2) +
-            geom_text(x = mean(c(xit$vline_x[2], xobs$vline_x)),
-                      y = max(density(it$avg_sil_width)$y)*0.7,
-                      label = paste("adj_pval:",round(obs$adj_p_val,2)),
-                      vjust = 1, hjust = 1.5) +
-            theme_bw() +
+                   linetype = 2) +
+        geom_vline(data = xobs,
+                   aes(xintercept = vline_x,
+                       color = "Observed_value"),
+                   linetype = 2) +
+        geom_text(x = mean(c(xit$vline_x[2], xobs$vline_x)),
+                  y = max(density(it$avg_sil_width)$y)*0.7,
+                  label = paste("adj_pval:",round(obs$adj_p_val,2)),
+                  vjust = 1, hjust = 1.5) +
+        theme_bw() +
         scale_color_manual(name = "linetypes" ,
                            values = c(Observed_value = "blue",
                                       confidence_interval95 = "red")) +
-            ggtitle(paste(a, "- Number of samples:", obs$size))
+        ggtitle(paste(a, "- Number of samples:", obs$size))
 
     }
     pl <- ggpubr::ggarrange(plotlist = pl.list, common.legend = T)
@@ -357,25 +357,25 @@ plot.score <- function(df = NULL,
     df0 <- df %>%
       filter(iteration == "NO") %>%
       mutate(adj_p_val = ifelse(is.nan(adj_p_val), 1, adj_p_val),
-              Sign = ifelse(adj_p_val < 0.05, "Sig", "Not_Sig"))
+             Sign = ifelse(adj_p_val < 0.05, "Sig", "Not_Sig"))
 
     pl <- df0 %>%
-          ggplot(aes(cluster, avg_sil_width,
-                     fill = Sign)) +
-          geom_col() +
-          theme_bw()
+      ggplot(aes(cluster, avg_sil_width,
+                 fill = Sign)) +
+      geom_col() +
+      theme_bw()
   }
   return(pl)
 }
 
 
 
-# Set the parallelization parameters using Biocparallel -------------------------------------------------
+# Set the parallelization parameters using Biocparallel #######################################################
 
 set_parallel_params <- function(ncores,
-                               bparam,
-                               progressbar)
-                              {
+                                bparam,
+                                progressbar)
+{
   if (is.null(ncores)) {
     ncores <- 1
   }
@@ -384,7 +384,6 @@ set_parallel_params <- function(ncores,
     ncores <- parallelly::availableCores()
     message("Using more cores available in this computer, reducing number of cores to ", ncores)
   }
-
 
   # set parallelization parameters
   if (is.null(bparam)) {
@@ -401,7 +400,7 @@ set_parallel_params <- function(ncores,
 }
 
 
-# Compute compositional data with dplyr -------------------------------------------------
+# Compute compositional data with dplyr ###################################################################
 
 compositional_data <- function(data,
                                split.by = NULL,
@@ -409,7 +408,7 @@ compositional_data <- function(data,
                                useNA = FALSE,
                                clr_zero_impute_perc = 1,
                                only.counts = FALSE
-                              ) {
+) {
 
   # set grouping variables
   gr_vars <- c(split.by, group.by.1)
@@ -422,23 +421,23 @@ compositional_data <- function(data,
     dplyr::summarize(cell_counts = dplyr::n()) %>%
     dplyr::ungroup()
 
-  if(!only.counts){
+  if (!only.counts) {
     ctable <- ctable %>%
-    dplyr::filter(if (!useNA) !is.na(.data[[group.by.1]])
-                  else rep(TRUE, n())) %>%
-    dplyr::group_by(across(all_of(gr_vars2))) %>%
-    dplyr::mutate(freq = cell_counts/sum(cell_counts) * 100,
-                  !!group.by.1 := coalesce(.data[[group.by.1]], "NA")) %>%
-    as.data.frame()
+      dplyr::filter(if (!useNA) !is.na(.data[[group.by.1]])
+                    else rep(TRUE, n())) %>%
+      dplyr::group_by(across(all_of(gr_vars2))) %>%
+      dplyr::mutate(freq = cell_counts/sum(cell_counts) * 100,
+                    !!group.by.1 := coalesce(.data[[group.by.1]], "NA")) %>%
+      as.data.frame()
 
-
-      # compute clr
+    # compute clr
     clr.df <- ctable %>%
       dplyr::select(-cell_counts) %>%
       # add pseudocount
       dplyr::mutate(freq = freq + clr_zero_impute_perc) %>%
       tidyr::pivot_wider(names_from = group.by.1,
                          values_from = "freq")
+
     # accomodate df for clr transformation
     ## Remove character columns
     num_cols_bool_idx <- sapply(clr.df, is.numeric)
@@ -447,9 +446,10 @@ compositional_data <- function(data,
     clr.df.ref <- clr.df %>% dplyr::select(all_of(num_cols))
 
     clr <- Hotelling::clr(clr.df.ref)
+
     # add extra cols (if any)
     clr <- cbind(clr.df[,chr_cols],clr)  %>%
-            tidyr::pivot_longer(-chr_cols, names_to = group.by.1, values_to = "clr")
+      tidyr::pivot_longer(-chr_cols, names_to = group.by.1, values_to = "clr")
     # join clr df to main dataframe
     ctable <- dplyr::left_join(ctable, clr, by = c(chr_cols, group.by.1))
   }
@@ -458,13 +458,13 @@ compositional_data <- function(data,
 }
 
 
-# Normalize pseudobulk data using DESeq2 -------------------------------------------------
+# Normalize pseudobulk data using DESeq2 ##############################################################################
 
 DESeq2.normalize <- function(matrix,
                              metadata,
                              cluster.by,
                              black.list
-                            ) {
+) {
   # do formula for design with the cluster.by elements in order
   dformula <- formula(paste("~", paste(cluster.by, collapse =  " + ")))
   dds <- DESeq2::DESeqDataSetFromMatrix(countData = matrix,
