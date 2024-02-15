@@ -370,6 +370,9 @@ plot.score <- function(df = NULL,
 
 
 
+
+
+
 # Set the parallelization parameters using Biocparallel #######################################################
 
 set_parallel_params <- function(ncores,
@@ -398,6 +401,23 @@ set_parallel_params <- function(ncores,
   }
   return(param)
 }
+
+
+
+# Plot PCA ##############################################################################
+
+plot_PCA <- function(data = NULL,
+                     invisible = c("var", "quali"),
+                     color.cluster.by = "none") {
+  res.pca <- prcomp(t(data))
+  p <- fviz_pca(res.pca,
+                habillage = color.cluster.by,
+                label = "var",
+                pointsize = 3,
+                invisible = c("var", "quali"))
+  return(p)
+}
+
 
 
 # Compute compositional data with dplyr ###################################################################
@@ -484,6 +504,3 @@ DESeq2.normalize <- function(matrix,
   return(vsd)
 
 }
-
-
-
