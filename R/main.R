@@ -205,7 +205,7 @@ Run.HiTME <- function(object = NULL,
     message("Not running coarse cell type classification as no scGate model was indicated.\n")
   }
 
-    # Instance if we want to run additional signatures but not scGate
+  # Instance if we want to run additional signatures but not scGate
   if (is.null(scGate.model) && !is.null(additional.signatures)) {
     message("Running additional Signatures but not Running scGate classification\n")
     object <- lapply(
@@ -214,9 +214,9 @@ Run.HiTME <- function(object = NULL,
         if (class(x) != "Seurat") {
           stop("Not Seurat object included, cannot be processed.\n")
         }
-          x <- UCell::AddModuleScore_UCell(x,
-                                          features = additional.signatures,
-                                          BPPARAM = param)
+        x <- UCell::AddModuleScore_UCell(x,
+                                         features = additional.signatures,
+                                         BPPARAM = param)
         return(x)
       }
     )
@@ -245,20 +245,20 @@ Run.HiTME <- function(object = NULL,
 
       message("## Running Projectils\n")
 
-        object <- lapply(
-          X = object,
-          function(x) {
-            if (class(x) != "Seurat") {
-              stop("Not Seurat object included, cannot be processed.\n")
-            }
-            x <- ProjecTILs.classifier.multi(x,
-                                             ref.maps = ref.maps,
-                                             bparam = param,
-                                             layer1_link = layer1_link)
-            return(x)
+      object <- lapply(
+        X = object,
+        function(x) {
+          if (class(x) != "Seurat") {
+            stop("Not Seurat object included, cannot be processed.\n")
           }
-        )
-    message("Finished Projectils\n####################################################\n")
+          x <- ProjecTILs.classifier.multi(x,
+                                           ref.maps = ref.maps,
+                                           bparam = param,
+                                           layer1_link = layer1_link)
+          return(x)
+        }
+      )
+      message("Finished Projectils\n####################################################\n")
     }
 
   } else {
@@ -326,7 +326,7 @@ Run.HiTME <- function(object = NULL,
           x <- get.HiTObject(x,
                              group.by = group.by,
                              useNA = useNA
-                             )
+          )
         }
       )
 
@@ -382,7 +382,7 @@ Run.HiTME <- function(object = NULL,
 get.HiTObject <- function(object,
                           group.by = list("layer1" = c("scGate_multi"),
                                           "layer2" = c("functional.cluster")
-                                          ),
+                          ),
                           split.by = NULL,
                           min.cells.composition = 10,
                           min.cells.aggregated = 10,
@@ -424,7 +424,7 @@ get.HiTObject <- function(object,
   }
 
 
-    # make list of list for layers for predictions slot
+  # make list of list for layers for predictions slot
   pred.list <- list()
   for (a in names(group.by)) {
     pred.list[[a]] <- list()
@@ -458,12 +458,12 @@ get.HiTObject <- function(object,
     }
 
     if (!is.null(name.additional.signatures) && !is.null(scgate.models)) {
-    ucell <- names(object@meta.data)[!names(object@meta.data) %in% c(sig, scgate)] %>%
-              grep("_UCell$", ., value = T)
+      ucell <- names(object@meta.data)[!names(object@meta.data) %in% c(sig, scgate)] %>%
+        grep("_UCell$", ., value = T)
 
-    ucell.df <- object@meta.data[, ucell]
+      ucell.df <- object@meta.data[, ucell]
 
-    pred.list[[layer.scgate]][["UCell_scores"]] <- ucell.df
+      pred.list[[layer.scgate]][["UCell_scores"]] <- ucell.df
     }
   }
 
@@ -504,12 +504,12 @@ get.HiTObject <- function(object,
                                              useNA = useNA)
 
   hit <- methods::new("HiT",
-                       metadata = object@meta.data,
-                       predictions = pred.list,
-                       aggregated_profile = list("Pseudobulk" = avg.expr,
-                                                 "Signatures" = aggr.signature),
-                       composition = comp.prop
-                      )
+                      metadata = object@meta.data,
+                      predictions = pred.list,
+                      aggregated_profile = list("Pseudobulk" = avg.expr,
+                                                "Signatures" = aggr.signature),
+                      composition = comp.prop
+  )
   return(hit)
 }
 
@@ -566,7 +566,7 @@ get.celltype.composition <- function(object = NULL,
     meta.data <- object@meta.data
     if (is.null(meta.data)) {
       stop("No metadata found in this Seurat object")
-      }
+    }
   } else {
     stop("Not Seurat object or dataframe included, cannot be processed.\n")
   }
@@ -617,12 +617,12 @@ get.celltype.composition <- function(object = NULL,
 
   # Factorize cell type to keep all in compositional data
   meta.data <- meta.data %>%
-                dplyr::mutate_at(unlist(group.by.composition), as.factor)
+    dplyr::mutate_at(unlist(group.by.composition), as.factor)
 
   # evaluate which layers are included in group.by.composition and layers_links
   for (l in seq_along(layers_links)) {
     if (!all(c(names(layers_links[l]), layers_links[l]) %in%
-           group.by.composition)) {
+             group.by.composition)) {
       message("Not computing relative proportion values of layer2 within layer1 for ",
               paste0(names(layers_links[l]), " -> ", layers_links[l]))
     }
@@ -640,59 +640,59 @@ get.celltype.composition <- function(object = NULL,
 
   for (i in seq_along(group.by.composition)) {
 
-      suppressMessages(
-        {
-      ctable <- compositional_data(data = meta.data,
-                                   split.by = split.by,
-                                   group.by.1 = group.by.composition[[i]],
-                                   useNA = useNA[i],
-                                   clr_zero_impute_perc = clr_zero_impute_perc)
+    suppressMessages(
+      {
+        ctable <- compositional_data(data = meta.data,
+                                     split.by = split.by,
+                                     group.by.1 = group.by.composition[[i]],
+                                     useNA = useNA[i],
+                                     clr_zero_impute_perc = clr_zero_impute_perc)
 
-      # stop if very few cells
-      if (sum(ctable$cell_counts) < min.cells.composition) {
-        warning(paste("There are less than ", min.cells.composition,
-                      "cells detected for ", group.by.composition[[i]],
-                      ". This is too few to calculate a reasonable celltype composition.\nIf needed, set parameter min.cells.composition = 0."))
-        next
-      }
+        # stop if very few cells
+        if (sum(ctable$cell_counts) < min.cells.composition) {
+          warning(paste("There are less than ", min.cells.composition,
+                        "cells detected for ", group.by.composition[[i]],
+                        ". This is too few to calculate a reasonable celltype composition.\nIf needed, set parameter min.cells.composition = 0."))
+          next
+        }
 
-      # get proportion relative to layer1 types
-      if (group.by.composition[[i]] %in% layers_links) {
-        lay <- layers_links[which(layers_links == group.by.composition[[i]])]
-        if (lay %in% names(object@misc$layer2_param)) {
-          meta.split <- split(meta.data, meta.data[[names(lay)]])
-          # switch list names to cell ontology ID
-          cellonto_dic <- lapply(meta.split, function(x) {
-                          nam <- unique(x[[names(lay)]])
-                          val <- unique(x[[layer1_link]])
-                          names(val) <- nam
-                          return(val)
+        # get proportion relative to layer1 types
+        if (group.by.composition[[i]] %in% layers_links) {
+          lay <- layers_links[which(layers_links == group.by.composition[[i]])]
+          if (lay %in% names(object@misc$layer2_param)) {
+            meta.split <- split(meta.data, meta.data[[names(lay)]])
+            # switch list names to cell ontology ID
+            cellonto_dic <- lapply(meta.split, function(x) {
+              nam <- unique(x[[names(lay)]])
+              val <- unique(x[[layer1_link]])
+              names(val) <- nam
+              return(val)
             }) %>% unname() %>%  unlist()
 
-          levs <- object@misc$layer2_param[[lay]]$levels2_per_levels1
-          names(levs) <- names(cellonto_dic[match(names(levs), cellonto_dic)])
+            levs <- object@misc$layer2_param[[lay]]$levels2_per_levels1
+            names(levs) <- names(cellonto_dic[match(names(levs), cellonto_dic)])
 
-          # If a celltype was not detected, drop it
-          levs <- levs[!is.na(names(levs))]
+            # If a celltype was not detected, drop it
+            levs <- levs[!is.na(names(levs))]
 
-          # Filter only layer1 cells with representation in layer2
-          meta.split <- meta.split[names(levs)]
+            # Filter only layer1 cells with representation in layer2
+            meta.split <- meta.split[names(levs)]
 
-          # add factor to group by layer1
-          for (f in names(meta.split)) {
-            meta.split[[f]]$functional.cluster <- factor(meta.split[[f]]$functional.cluster,
-                                                         levels = levs[[f]])
+            # add factor to group by layer1
+            for (f in names(meta.split)) {
+              meta.split[[f]]$functional.cluster <- factor(meta.split[[f]]$functional.cluster,
+                                                           levels = levs[[f]])
+            }
+
+            ctable.split <- lapply(meta.split, compositional_data,
+                                   split.by = split.by,
+                                   group.by.1 = group.by.composition[[i]],
+                                   useNA = useNA[i])
+            ctable <- c(all = list(ctable),
+                        ctable.split)
           }
-
-          ctable.split <- lapply(meta.split, compositional_data,
-                                 split.by = split.by,
-                                 group.by.1 = group.by.composition[[i]],
-                                 useNA = useNA[i])
-          ctable <- c(all = list(ctable),
-                         ctable.split)
         }
-      }
-        })
+      })
 
     ## Append
     celltype.compositions[[names(group.by.composition)[i]]] <- ctable
@@ -775,7 +775,7 @@ get.aggregated.profile <- function(object,
                                  useNA = useNA)
 
       keep <- cnts[cnts[["cell_counts"]]>min.cells.aggregated,group.by.aggregated[[i]]] %>%
-              unlist()
+        unlist()
 
       # remove cell types with less than min.cells.aggregated
       obj_tmp@meta.data$fltr <- obj_tmp@meta.data[[group.by.aggregated[[i]]]]
@@ -888,7 +888,7 @@ get.aggregated.signature <- function(object,
   } else {
 
     if (!any(grepl(paste(name.additional.signatures, collapse = "|"),
-                  names(meta.data)))) {
+                   names(meta.data)))) {
       stop("No additional signatures found in this object metadata")
     }
 
@@ -913,10 +913,10 @@ get.aggregated.signature <- function(object,
         dplyr::group_by(.data[[group.by.aggregated[[e]]]]) %>%
         dplyr::summarize_at(add.sig.cols, fun, na.rm = T)
 
-        # filter out NA if useNA=F
+      # filter out NA if useNA=F
       if (!useNA) {
         aggr.sig[[e]] <- aggr.sig[[e]] %>%
-                          dplyr::filter(!is.na(.data[[group.by.aggregated[[e]]]]))
+          dplyr::filter(!is.na(.data[[group.by.aggregated[[e]]]]))
       }
 
 
@@ -1005,9 +1005,9 @@ get.GOList <- function(GO_accession = NULL,
     if (length(names(gene.data)) != length(GO_accession)) {
       warning("Additional GO accession provided not found in GO database")
     }
-  names(gene.data) <- paste0(names(gene.data), "_",
-                             names(GO_accession)[GO_accession %in% names(gene.data)]) %>%
-                      gsub(" ", "_", .)
+    names(gene.data) <- paste0(names(gene.data), "_",
+                               names(GO_accession)[GO_accession %in% names(gene.data)]) %>%
+      gsub(" ", "_", .)
   } else {
     gene.data <- NULL
   }
@@ -1060,7 +1060,7 @@ merge.HiTObjects <- function(object = NULL,
   }
 
   # fetch which layers are included in all HiT objects
-  layers_in_hit <- lapply(object, function(x){
+  layers_in_hit <- lapply(object, function(x) {
     a <- names(x@composition)
     b <- names(x@aggregated_profile$Pseudobulk)
     c <- names(x@aggregated_profile$Signatures)
@@ -1068,8 +1068,8 @@ merge.HiTObjects <- function(object = NULL,
     return(u)
   })
 
-    # if group.by is not indicate (NULL) retrieve the layers persent in HiT object
-  if(is.null(group.by)){
+  # if group.by is not indicate (NULL) retrieve the layers persent in HiT object
+  if (is.null(group.by)) {
     group.by <- unique(unlist(layers_in_hit))
   }
 
@@ -1131,8 +1131,8 @@ merge.HiTObjects <- function(object = NULL,
     # E.g. each HiTObject is from a specific sample, so each HiTObject has metadata column "Sample" which contains all the same value (e.g. "sample1" for sample 1, "sample2" for sample 2, etc.)
     # Other metadata columns, e.g. scGate_multi can be dropped, as the merged HiTObject is a summary per sample, so single-cell metadata columns don't make sense.
     umc <- lapply(names(object), function (x) {
-              apply(object[[x]]@metadata, 2, function(y) length(unique(y))) == 1
-              })
+      apply(object[[x]]@metadata, 2, function(y) length(unique(y))) == 1
+    })
     umc <- umc %>% Reduce("&", .)
     metadata.vars <- names(umc)[umc == T]
   }
@@ -1165,10 +1165,10 @@ merge.HiTObjects <- function(object = NULL,
 
     if (all(is_df_check)) {
       df <- BiocParallel::bplapply(X = layer_present,
-                     BPPARAM = param,
-                     function(x) {
-                       object[[x]]@composition[[gb]] %>% mutate(sample = x)
-                     })
+                                   BPPARAM = param,
+                                   function(x) {
+                                     object[[x]]@composition[[gb]] %>% mutate(sample = x)
+                                   })
       df <- data.table::rbindlist(df, use.names=TRUE, fill=TRUE)
       comp.prop[[gb]] <- df
 
@@ -1181,12 +1181,12 @@ merge.HiTObjects <- function(object = NULL,
         unique()
       for (i in gb_sublevel_unique_names) {
         df <- BiocParallel::bplapply(X = layer_present,
-                       BPPARAM = param,
-                       function(x) {
-                         if (!is.null(object[[x]]@composition[[gb]][[i]])) {
-                           object[[x]]@composition[[gb]][[i]] %>% mutate(sample = x)
-                         }
-                       })
+                                     BPPARAM = param,
+                                     function(x) {
+                                       if (!is.null(object[[x]]@composition[[gb]][[i]])) {
+                                         object[[x]]@composition[[gb]][[i]] %>% mutate(sample = x)
+                                       }
+                                     })
         df <- data.table::rbindlist(df, use.names=TRUE, fill=TRUE)
         comp.prop[[gb]][[i]] <- df
       }
@@ -1201,17 +1201,17 @@ merge.HiTObjects <- function(object = NULL,
     celltypes <- lapply(names(object),
                         function(x) {
                           colnames(object[[x]]@aggregated_profile[["Pseudobulk"]][[gb]])
-                          }) %>%
-                  unlist() %>% unique()
+                        }) %>%
+      unlist() %>% unique()
 
     for (ct in celltypes) {
       ct_present <- lapply(names(object), function(x) { ct %in% colnames(object[[x]]@aggregated_profile[["Pseudobulk"]][[gb]]) }) %>% unlist()
       layer_ct_present <- names(object)[(names(object) %in% layer_present) & ct_present]
       df <- BiocParallel::bplapply(X = layer_ct_present,
-                     BPPARAM = param,
-                     function(x) {
-                       object[[x]]@aggregated_profile[["Pseudobulk"]][[gb]][, ct]
-                     })
+                                   BPPARAM = param,
+                                   function(x) {
+                                     object[[x]]@aggregated_profile[["Pseudobulk"]][[gb]][, ct]
+                                   })
       df <- do.call(cbind, df)
       df <- Matrix::Matrix(df, sparse = T)
       colnames(df) <- layer_ct_present
@@ -1219,28 +1219,28 @@ merge.HiTObjects <- function(object = NULL,
     }
 
     # join each matrix per celltype into a single matrix changing the colnames to accommodate sample source
-    if(tolower(pseudobulk.matrix) == "unique"){
+    if (tolower(pseudobulk.matrix) == "unique") {
       avg.expr[[gb]] <- lapply(names(avg.expr[[gb]]),
-                               function(x){
+                               function(x) {
                                  mat <- avg.expr[[gb]][[x]]
                                  colnames(mat) <- paste(x, colnames(mat), sep = "__")
                                  mat <- mat %>% as.data.frame() %>%
-                                        tibble::rownames_to_column("gene")
+                                   tibble::rownames_to_column("gene")
                                }) %>%
-                        reduce(full_join, by = "gene") %>%
-                        # convert NA to 0
-                        mutate_if(is.numeric, ~ifelse(is.na(.), 0, .)) %>%
-                        tibble::column_to_rownames("gene") %>%
-                        as.matrix() %>%
-                        Matrix::Matrix(., sparse = T)
+        reduce(full_join, by = "gene") %>%
+        # convert NA to 0
+        mutate_if (is.numeric, ~ifelse(is.na(.), 0, .)) %>%
+        tibble::column_to_rownames("gene") %>%
+        as.matrix() %>%
+        Matrix::Matrix(., sparse = T)
     }
 
     # Aggregated_profile Signatures
     df <- BiocParallel::bplapply(X = layer_present,
-                   BPPARAM = param,
-                   function(x) {
-                     object[[x]]@aggregated_profile[["Signatures"]][[gb]] %>% mutate(sample = x)
-                   })
+                                 BPPARAM = param,
+                                 function(x) {
+                                   object[[x]]@aggregated_profile[["Signatures"]][[gb]] %>% mutate(sample = x)
+                                 })
     df <- data.table::rbindlist(df, use.names=TRUE, fill=TRUE)
     aggr.signature[[gb]] <- df
   }
@@ -1305,25 +1305,25 @@ get.cluster.score <- function(object = NULL,
                               ncores = parallelly::availableCores() - 2,
                               bparam = NULL,
                               progressbar = TRUE
-                              ) {
+) {
 
   if (is.null(object) || (!is.matrix(object) && class(object) != "HiT")) {
     stop("Please provide a Hit class object or a count matrix.\n")
   }
 
   # Construct metadata for DESeq2 if HiT object is provided and metadata not
-  if(class(object) == "HiT"){
+  if (class(object) == "HiT") {
     matrix.list <- object@aggregated_profile$Pseudobulk
 
-    metadata.list <- lapply(matrix.list, function(x){
+    metadata.list <- lapply(matrix.list, function(x) {
       df <- data.frame(rn = colnames(x))
       df <- df %>%
-            tidyr::separate(rn,
-                            into = c("celltype", "sample"),
-                            sep = "__",
-                            remove = F) %>%
-            left_join(., object@metadata, by = "sample") %>%
-            tibble::column_to_rownames("rn")
+        tidyr::separate(rn,
+                        into = c("celltype", "sample"),
+                        sep = "__",
+                        remove = F) %>%
+        left_join(., object@metadata, by = "sample") %>%
+        tibble::column_to_rownames("rn")
     })
 
 
@@ -1331,7 +1331,7 @@ get.cluster.score <- function(object = NULL,
     if (is.null(metadata) || !is.data.frame(metadata)) {
       stop("Please provide a metadata object as dataframe for this matrix.\n")
     }
-    if(!all.equal(rownames(metadata), colnames(object))){
+    if (!all.equal(rownames(metadata), colnames(object))) {
       stop("Different rownames in metadata and colnames in count matrix.\n")
     }
     matrix.list <- list("Hit.merged" = object)
@@ -1345,9 +1345,9 @@ get.cluster.score <- function(object = NULL,
   black.list <- unlist(black.list)
 
   # filter genes accordingly
-  if(is.null(gene.filter) || toupper(gene.filter) == "HGV"){
+  if (is.null(gene.filter) || toupper(gene.filter) == "HGV") {
     gene.filter <- list("HGV" = "HGV")
-  } else if("default_filter" %in% names(gene.filter) || "default_filter" %in% gene.filter){
+  } else if ("default_filter" %in% names(gene.filter) || "default_filter" %in% gene.filter) {
     # get predetermined list of genes
     data("GO_accession_default")
     gene.filter <- c(list("HGV" = "HGV"),
@@ -1366,20 +1366,20 @@ get.cluster.score <- function(object = NULL,
   # empty list to fill in the loop
   scores <- list()
 
-  for(m in names(matrix.list)){
+  for (m in names(matrix.list)) {
     matrix <- matrix.list[[m]]
     metadata <- metadata.list[[m]]
     scores[[m]] <- list()
     # compute common PCA space using DESeq2, removing black.list genes
     vsd.all <- DESeq2.normalize(matrix = matrix,
-                            metadata = metadata,
-                            cluster.by = cluster.by,
-                            black.list = black.list)
+                                metadata = metadata,
+                                cluster.by = cluster.by,
+                                black.list = black.list)
 
-    for(sub in names(gene.filter)){
+    for (sub in names(gene.filter)) {
 
 
-      if(sub == "HGV"){
+      if (sub == "HGV") {
         # get top variable genes
         rv <- MatrixGenerics::rowVars(vsd.all)
         select <- order(rv, decreasing=TRUE)[seq_len(min(nVarGenes, length(rv)))]
@@ -1390,7 +1390,7 @@ get.cluster.score <- function(object = NULL,
 
       vsd <- vsd.all[select[select %in% rownames(vsd.all)],]
 
-      if(nrow(vsd)>=ndim){
+      if (nrow(vsd)>=ndim) {
         scores[[m]][[sub]] <- list()
         tryCatch({
           pc <- stats::prcomp(t(vsd))
@@ -1611,11 +1611,11 @@ get.cluster.score <- function(object = NULL,
 #'
 
 plot.celltype.freq <- function(object = NULL,
-                                group.by = list("layer1" = c("scGate_multi"),
-                                                "layer2" = c("functional.cluster")
-                                ),
-                                split.by = NULL,
-                                by.x = "celltype") {
+                               group.by = list("layer1" = c("scGate_multi"),
+                                               "layer2" = c("functional.cluster")
+                               ),
+                               split.by = NULL,
+                               by.x = "celltype") {
 
   if (is.null(object)) {
     stop("Please provide a single one or a list of HiT object")
@@ -1656,20 +1656,20 @@ plot.celltype.freq <- function(object = NULL,
          " group.by elements in their metadata")
   }
   # remove group by if not present in any sample
-    present <- sapply(group.by,
-                      function(char) {
-                        any(unlist(lapply(object,
-                                      function(df) {char %in% colnames(df@metadata)}
-                        )))
+  present <- sapply(group.by,
+                    function(char) {
+                      any(unlist(lapply(object,
+                                        function(df) {char %in% colnames(df@metadata)}
+                      )))
 
-                      }
-    )
-    if (length(group.by[present]) != length(group.by)) {
-      warning("Celltype classification for ", paste(as.vector(group.by[!present]), collapse = ", "),
-              " not present in any object")
+                    }
+  )
+  if (length(group.by[present]) != length(group.by)) {
+    warning("Celltype classification for ", paste(as.vector(group.by[!present]), collapse = ", "),
+            " not present in any object")
 
-      group.by <- group.by[present]
-    }
+    group.by <- group.by[present]
+  }
 
 
   # check splitting by variables
@@ -1679,12 +1679,12 @@ plot.celltype.freq <- function(object = NULL,
               " metadata elements in their metadata")
     }
     present <- sapply(split.by,
-                    function(char) {
-                      any(unlist(lapply(object,
-                                    function(df) {char %in% colnames(df@metadata)}
-                      )))
+                      function(char) {
+                        any(unlist(lapply(object,
+                                          function(df) {char %in% colnames(df@metadata)}
+                        )))
 
-                    }
+                      }
     )
     if (length(split.by[present]) != length(split.by)) {
       warning("Metadata variable ", paste(as.vector(split.by[!present]), collapse = ", "),
@@ -1697,7 +1697,7 @@ plot.celltype.freq <- function(object = NULL,
   df <- lapply(names(object), function(y) {
     sel <- names(object[[y]]@metadata) %in% c(group.by, split.by)
     a <- object[[y]]@metadata[,sel, drop = F] %>%
-          dplyr::mutate(sample = y)
+      dplyr::mutate(sample = y)
     return(a)
   }) %>%
     data.table::rbindlist(fill = T) %>% as.data.frame()
@@ -1753,8 +1753,8 @@ plot.celltype.freq <- function(object = NULL,
   # rotat x-axis label
   pl.list <- lapply(pl.list, function(x) {
     x + ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45,
-                                                       hjust = 1,
-                                                       vjust = 1))
+                                                           hjust = 1,
+                                                           vjust = 1))
   })
 
   for (spl in split.by) {
@@ -1847,22 +1847,22 @@ plot.confusion.matrix <- function(object = NULL,
 
 
   if (tolower(type) == "tile") {
-  plot <- pz %>% as.data.frame() %>%
-    ggplot2::ggplot(ggplot2::aes(Var1, Var2,
-               fill = Freq)) +
-    ggplot2::geom_tile() +
-    ggplot2::scale_fill_gradient(name = legend,
-                                  low = "#FFFFC8",
-                                  high = "#7D0025") +
-    ggplot2::labs(x = var.1,
-                  y = var.2) +
-    ggplot2::geom_label(ggplot2::aes(label = ifelse(Freq>0,
-                                                    round(Freq,1),
-                                                    NA)),
-                        color = "white",
-                        alpha = 0.6,
-                        fill = "black") +
-    cowplot::theme_cowplot()
+    plot <- pz %>% as.data.frame() %>%
+      ggplot2::ggplot(ggplot2::aes(Var1, Var2,
+                                   fill = Freq)) +
+      ggplot2::geom_tile() +
+      ggplot2::scale_fill_gradient(name = legend,
+                                   low = "#FFFFC8",
+                                   high = "#7D0025") +
+      ggplot2::labs(x = var.1,
+                    y = var.2) +
+      ggplot2::geom_label(ggplot2::aes(label = ifelse(Freq>0,
+                                                      round(Freq,1),
+                                                      NA)),
+                          color = "white",
+                          alpha = 0.6,
+                          fill = "black") +
+      cowplot::theme_cowplot()
   } else if (grepl("bar|col", type, ignore.case = T)) {
     plot <- pz %>% as.data.frame() %>%
       ggplot2::ggplot(ggplot2::aes(Var1, Freq,
@@ -1875,9 +1875,9 @@ plot.confusion.matrix <- function(object = NULL,
   }
 
   plot <- plot +
-          ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45,
-                                                             hjust = 1,
-                                                             vjust = 1))
+    ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45,
+                                                       hjust = 1,
+                                                       vjust = 1))
   return(plot)
 }
 
@@ -1902,9 +1902,9 @@ plot.confusion.matrix <- function(object = NULL,
 #'
 
 plot_gene_gating <- function(object = NULL,
-                        scGate.model = NULL,
-                        group.by = NULL,
-                        split.by = NULL) {
+                             scGate.model = NULL,
+                             group.by = NULL,
+                             split.by = NULL) {
 
   if (is.null(object)) {
     stop("Please provide a Seurat object or a list of them")
