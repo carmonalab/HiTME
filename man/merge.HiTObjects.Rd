@@ -8,7 +8,7 @@
   object = NULL,
   group.by = NULL,
   metadata.vars = NULL,
-  pseudobulk.matrix = "unique",
+  pseudobulk.matrix = "list",
   ncores = parallelly::availableCores() - 2,
   bparam = NULL,
   progressbar = FALSE,
@@ -22,7 +22,7 @@
 
 \item{metadata.vars}{Variables to keep as metadata. (Default: NULL, keeping unique metadata columns per sample, dropping single-cell metadata)}
 
-\item{pseudobulk.matrix}{Paramater to determine whther obtain the pseudobulk matrix as a single matrix (\code{"unique"}), or as one matrix for each cell type in the layer (\code{"list"}). Default is returning a single unique matrix.}
+\item{pseudobulk.matrix}{Paramater to determine whther obtain the pseudobulk matrix as a single matrix (\code{"unique"}), or as one matrix for each cell type in the layer (\code{"list"})}
 
 \item{ncores}{The number of cores to use, by default, all available cores - 2.}
 
