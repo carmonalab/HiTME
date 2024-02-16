@@ -211,7 +211,6 @@ compositional_data <- function(data,
   gr_vars <- c(split.by, group.by.1)
   gr_vars2 <- c(split.by)
 
-
   ctable <- data %>%
     # drop = F keeps all levels of the factor
     dplyr::group_by(across(all_of(gr_vars)), .drop = F) %>%
@@ -227,31 +226,33 @@ compositional_data <- function(data,
                     !!group.by.1 := coalesce(.data[[group.by.1]], "NA")) %>%
       as.data.frame()
 
-    # compute clr
-    clr.df <- ctable %>%
-      dplyr::select(-cell_counts) %>%
-      # add pseudocount
-      dplyr::mutate(freq = freq + clr_zero_impute_perc) %>%
-      tidyr::pivot_wider(names_from = group.by.1,
-                         values_from = "freq")
+    if (nrow(ctable) > 0) {
+      # compute clr
+      clr.df <- ctable %>%
+        dplyr::select(-cell_counts) %>%
+        # add pseudocount
+        dplyr::mutate(freq = freq + clr_zero_impute_perc) %>%
+        tidyr::pivot_wider(names_from = group.by.1,
+                           values_from = "freq")
 
-    # accomodate df for clr transformation
-    ## Remove character columns
-    num_cols_bool_idx <- sapply(clr.df, is.numeric)
-    num_cols <- names(clr.df)[num_cols_bool_idx]
-    chr_cols <- names(clr.df)[!num_cols_bool_idx]
-    clr.df.ref <- clr.df %>% dplyr::select(all_of(num_cols))
+      # accomodate df for clr transformation
+      ## Remove character columns
+      num_cols_bool_idx <- sapply(clr.df, is.numeric)
+      num_cols <- names(clr.df)[num_cols_bool_idx]
+      chr_cols <- names(clr.df)[!num_cols_bool_idx]
+      clr.df.ref <- clr.df %>% dplyr::select(all_of(num_cols))
 
-    clr <- Hotelling::clr(clr.df.ref)
+      clr <- Hotelling::clr(clr.df.ref)
 
-    # add extra cols (if any)
-    clr <- cbind(clr.df[,chr_cols],clr)  %>%
-      tidyr::pivot_longer(-chr_cols, names_to = group.by.1, values_to = "clr")
-    # join clr df to main dataframe
-    ctable <- dplyr::left_join(ctable, clr, by = c(chr_cols, group.by.1))
+      # add extra cols (if any)
+      clr <- cbind(clr.df[,chr_cols],clr)  %>%
+        tidyr::pivot_longer(-chr_cols, names_to = group.by.1, values_to = "clr")
+      # join clr df to main dataframe
+      ctable <- dplyr::left_join(ctable, clr, by = c(chr_cols, group.by.1))
+    }
+
+    return(ctable)
   }
-
-  return(ctable)
 }
 
 
@@ -283,9 +284,9 @@ get.scores <- function(matrix,
     if (s == "Silhouette") {
       message("Computing Silhouette score")
       results[[s]] <- silhouette_onelabel(labels = cluster_labels,
-                                              dist = dist(t(matrix)),
-                                              ntests = ntests,
-                                              seed = seed)
+                                          dist = dist(t(matrix)),
+                                          ntests = ntests,
+                                          seed = seed)
 
       score_plot <- ggplot(results[[s]]$cell, aes(fill = cluster, y = sil_width, x = rowid)) +
         geom_bar(position="dodge", stat="identity")+
@@ -351,7 +352,8 @@ get.scores <- function(matrix,
 
 
   # Plot PCA ###############################################
-  results[["PCA"]][["plot"]] <- plot_PCA(matrix)
+  results[["PCA"]][["plot"]] <- plot_PCA(matrix,
+                                         color.cluster.by = cluster_labels)
 
   # Plot dendrogram  (TODO NEEDS REWORK) ###############################################
   # pc2 <- pc$x[,1:ndim] %>%
