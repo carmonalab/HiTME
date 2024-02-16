@@ -413,7 +413,7 @@ DESeq2.normalize <- function(matrix,
 
   # Normalize pseudobulk data using DESeq2
   # do formula for design with the cluster.by elements in order
-  dformula <- formula(~ cluster.by)
+  dformula <- formula(paste("~", cluster.by))
   dds <- DESeq2::DESeqDataSetFromMatrix(countData = matrix,
                                         colData = metadata,
                                         design = dformula)

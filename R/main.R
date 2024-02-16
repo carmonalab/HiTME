@@ -1402,16 +1402,16 @@ get.cluster.score <- function(object = NULL,
         X = names(object@aggregated_profile$Pseudobulk[[layer]]),
         BPPARAM = param,
         function(i){
-          j <- names(object@aggregated_profile$Pseudobulk[[layer]])[i]
           mat <- object@aggregated_profile$Pseudobulk[[layer]][[i]]
+          meta <- metadata %>% filter(sample %in% colnames(mat))
+          cluster_labels <- meta[[cluster_col]]
+
           mat <- preproc_pseudobulk(matrix = mat,
-                                    metadata,
+                                    meta,
                                     cluster.by,
                                     nVarGenes = 500,
                                     gene.filter = "HVG",
                                     black.list = NULL)
-
-          cluster_labels <- metadata %>% filter(sample %in% colnames(pb_mat)) %>% .[[cluster_col]]
 
           res <- get.scores(matrix = mat,
                             cluster_labels = cluster_labels,
