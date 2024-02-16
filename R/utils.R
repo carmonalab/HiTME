@@ -431,9 +431,9 @@ DESeq2.normalize <- function(matrix,
   # filter genes accordingly
   if (gene.filter == "HVG") {
     # get top variable genes
-    rv <- MatrixGenerics::rowVars(vsd.all)
+    rv <- MatrixGenerics::rowVars(vsd)
     select <- order(rv, decreasing=TRUE)[seq_len(min(nVarGenes, length(rv)))]
-    select <- rownames(vsd.all)[select]
+    select <- rownames(vsd)[select]
 
   } else if (gene.filter == "default_filter") {
     # get predetermined list of genes
