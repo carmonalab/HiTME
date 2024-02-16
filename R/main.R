@@ -1344,7 +1344,7 @@ get.cluster.score <- function(object = NULL,
 
   # Process data ###############################################
   for (cluster_col in cluster.by) {
-    browser()
+
     ## Process celltype composition ###############################################
     comp_layers <- names(object@composition)
 
