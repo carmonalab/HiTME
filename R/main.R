@@ -1020,7 +1020,7 @@ get.GOList <- function(GO_accession = NULL,
 #' @param object List of HiTObjects
 #' @param group.by If only merging for certain layers of annotation is intended, layers names can be indicated here as vector. Otherwise all layers present in all HiT object will be merged.
 #' @param metadata.vars Variables to keep as metadata. (Default: NULL, keeping unique metadata columns per sample, dropping single-cell metadata)
-#' @param pseudobulk.matrix Paramater to determine whther obtain the pseudobulk matrix as a single matrix (\code{"unique"}), or as one matrix for each cell type in the layer (\code{"list"}). Default is returning a single unique matrix.
+#' @param pseudobulk.matrix Paramater to determine whther obtain the pseudobulk matrix as a single matrix (\code{"unique"}), or as one matrix for each cell type in the layer (\code{"list"})
 #' @param ncores The number of cores to use, by default, all available cores - 2.
 #' @param bparam A \code{BiocParallel::bpparam()} object that tells how to parallelize. If provided, it overrides the `ncores` parameter.
 #' @param progressbar Whether to show a progressbar or not
@@ -1039,7 +1039,7 @@ get.GOList <- function(GO_accession = NULL,
 merge.HiTObjects <- function(object = NULL,
                              group.by = NULL,
                              metadata.vars = NULL,
-                             pseudobulk.matrix = "unique",
+                             pseudobulk.matrix = "list",
                              ncores = parallelly::availableCores() - 2,
                              bparam = NULL,
                              progressbar = FALSE,
@@ -1264,7 +1264,7 @@ merge.HiTObjects <- function(object = NULL,
 #' @param dist.method Method to compute distance between celltypes, default is euclidean.
 #' @param ndim Number of dimensions to be use for PCA clustering metrics. Default is 10.
 #' @param nVarGenes Number of variable genes to assess samples. Default is 500.
-#' @param gene.filter Named list of genes to subset their aggregated expression. Default is \code{"HGV"} or \code{NULL} would indicate "Highly variable genes", number of genes can be set at \code{nVarGenes}. If "default_filter" is indicated transcription factor (GO:0003700), cytokines (GO:0005125), cytokine receptors (GO:0004896), chemokines (GO:0008009), and chemokines receptors (GO:0004950) are subsetted out of the total genes and accounted for. For additional GO accession gene list you may use the function \link{getGOList} to fetch them from biomaRt.
+#' @param gene.filter Named list of genes to subset their aggregated expression. Default is \code{"HVG"} or \code{NULL} would indicate "Highly variable genes", number of genes can be set at \code{nVarGenes}. If "default_filter" is indicated transcription factor (GO:0003700), cytokines (GO:0005125), cytokine receptors (GO:0004896), chemokines (GO:0008009), and chemokines receptors (GO:0004950) are subsetted out of the total genes and accounted for. For additional GO accession gene list you may use the function \link{getGOList} to fetch them from biomaRt.
 #' @param black.list List of genes to discard from clustering, if "default" object "default_black_list" object is used. Alternative black listed genes can be provided as a vector or list.
 #' @param ncores The number of cores to use, by default, all available cores - 2.
 #' @param bparam A \code{BiocParallel::bpparam()} object that tells how to parallelize. If provided, it overrides the `ncores` parameter.
@@ -1285,6 +1285,10 @@ merge.HiTObjects <- function(object = NULL,
 #' @importFrom SummarizedExperiment assay
 #' @importFrom BiocGenerics counts
 #' @importFrom ggdendro ggdendrogram
+#' @importFrom stringr str_to_title
+#' @importFrom stats prcomp
+#' @importFrom factoextra fviz_pca
+#' @importFrom tidyr pivot_wider
 
 #' @return Metrics of cell types pseudobulk clustering
 #' @export get.cluster.score
@@ -1293,302 +1297,141 @@ merge.HiTObjects <- function(object = NULL,
 
 get.cluster.score <- function(object = NULL,
                               metadata = NULL,
-                              cluster.by = c("celltype", "sample"),
-                              ndim = 10,
-                              nVarGenes = 500,
-                              gene.filter = "HGV",
-                              black.list = NULL,
-                              ntests = 0,
-                              score = c("silhouette"),
+                              cluster.by = c("condition", "batch"),
+                              scores = c("Silhouette", "Modularity"),
                               dist.method = "euclidean",
                               hclust.method = "complete",
+
+                              # For silhouette scores
+                              ntests = 0, # number of shuffling events
+                              seed = 22, # seed for random shuffling
+
+                              # Pseudobulk params
+                              ndim = 10,
+                              nVarGenes = 500,
+                              gene.filter = "HVG",
+                              black.list = NULL,
+
                               ncores = parallelly::availableCores() - 2,
                               bparam = NULL,
-                              progressbar = TRUE
-) {
+                              progressbar = TRUE) {
 
-  if (is.null(object) || (!is.matrix(object) && class(object) != "HiT")) {
+  if (is.null(object) || (!class(object) == "HiT")) {
     stop("Please provide a Hit class object or a count matrix.\n")
   }
 
-  # Construct metadata for DESeq2 if HiT object is provided and metadata not
-  if (class(object) == "HiT") {
-    matrix.list <- object@aggregated_profile$Pseudobulk
-
-    metadata.list <- lapply(matrix.list, function(x) {
-      df <- data.frame(rn = colnames(x))
-      df <- df %>%
-        tidyr::separate(rn,
-                        into = c("celltype", "sample"),
-                        sep = "__",
-                        remove = F) %>%
-        left_join(., object@metadata, by = "sample") %>%
-        tibble::column_to_rownames("rn")
-    })
-
-
-  } else {
-    if (is.null(metadata) || !is.data.frame(metadata)) {
-      stop("Please provide a metadata object as dataframe for this matrix.\n")
-    }
-    if (!all.equal(rownames(metadata), colnames(object))) {
-      stop("Different rownames in metadata and colnames in count matrix.\n")
-    }
-    matrix.list <- list("Hit.merged" = object)
-    metadata.list <- list("Hit.merged" = metadata)
+  if (is.null(metadata) || !is.data.frame(metadata)) {
+    stop("Please provide a metadata object as dataframe for this HiTObject\n")
   }
 
-  # Get black list
-  if (is.null(black.list)) {
-    data("default_black_list")
-  }
-  black.list <- unlist(black.list)
+  scores <- str_to_title(tolower(scores))
 
-  # filter genes accordingly
-  if (is.null(gene.filter) || toupper(gene.filter) == "HGV") {
-    gene.filter <- list("HGV" = "HGV")
-  } else if ("default_filter" %in% names(gene.filter) || "default_filter" %in% gene.filter) {
-    # get predetermined list of genes
-    data("GO_accession_default")
-    gene.filter <- c(list("HGV" = "HGV"),
-                     GO_default)
-  }
+  # set parallelization parameters
+  param <- set_parallel_params(ncores = ncores,
+                               bparam = bparam,
+                               progressbar = progressbar)
 
-
-
-  # dataframe to store score result
+  # dataframe to store scores result
   cnames <- c("grouping", "dist_method", "score_method")
-  df.score <- expand.grid(cluster.by, dist.method, score)
+  df.scores <- expand.grid(cluster.by, dist.method, scores)
   # convert to characters, not factors
-  df.score <- lapply(df.score, as.character) %>% as.data.frame()
-  names(df.score) <- cnames
+  df.scores <- lapply(df.scores, as.character) %>% as.data.frame()
+  names(df.scores) <- cnames
 
   # empty list to fill in the loop
-  scores <- list()
-
-  for (m in names(matrix.list)) {
-    matrix <- matrix.list[[m]]
-    metadata <- metadata.list[[m]]
-    scores[[m]] <- list()
-    # compute common PCA space using DESeq2, removing black.list genes
-    vsd.all <- DESeq2.normalize(matrix = matrix,
-                                metadata = metadata,
-                                cluster.by = cluster.by,
-                                black.list = black.list)
-
-    for (sub in names(gene.filter)) {
+  results <- list()
 
 
-      if (sub == "HGV") {
-        # get top variable genes
-        rv <- MatrixGenerics::rowVars(vsd.all)
-        select <- order(rv, decreasing=TRUE)[seq_len(min(nVarGenes, length(rv)))]
-        select <- rownames(vsd.all)[select]
-      } else{
-        select <- gene.filter[[sub]]
-      }
+  # Process data ###############################################
+  for (cluster_col in cluster.by) {
+    browser()
+    ## Process celltype composition ###############################################
+    comp_layers <- names(object@composition)
 
-      vsd <- vsd.all[select[select %in% rownames(vsd.all)],]
+    for (layer in comp_layers) {
+      if (is.data.frame(object@composition[[layer]])) {
+        layer_colname <- colnames(object@composition[[layer]])[1]
+        mat <- object@composition[[layer]][, c(layer_colname, "clr", "sample"), with = F]
+        mat <- mat %>%
+          tidyr::pivot_wider(names_from = sample, values_from = clr) %>%
+          na.omit() %>%
+          column_to_rownames(var = layer_colname) %>%
+          scale(center = T, scale = F)
 
-      if (nrow(vsd)>=ndim) {
-        scores[[m]][[sub]] <- list()
-        tryCatch({
-          pc <- stats::prcomp(t(vsd))
-        },
-        error = function(e) {
-          near_zero_var <- caret::nearZeroVar(vsd)
-          if (length(near_zero_var) > 0) {
-            vsd <- vsd[, -near_zero_var]
-            metadata <<- metadata[-near_zero_var, ]
-            pc <<- stats::prcomp(t(vsd))
-          } else if (length(near_zero_var) == ncol(vsd)) {
-            message("PCA compute not possible.\n")
+        cluster_labels <- metadata %>% filter(sample %in% colnames(mat)) %>% .[[cluster_col]]
+
+        results[[cluster_col]][["composition"]][[layer]] <- get.scores(matrix = mat,
+                                                                       cluster_labels = cluster_labels,
+                                                                       scores = scores,
+                                                                       ntests = ntests,
+                                                                       seed = seed)
+
+      } else if (is.list(object@composition[[layer]])) {
+        results[[cluster_col]][["composition"]][[layer]] <- BiocParallel::bplapply(
+          X = names(object@composition[[layer]]),
+          BPPARAM = param,
+          function(i){
+            layer_colname <- colnames(object@composition[[layer]][[i]])[1]
+            mat <- object@composition[[layer]][[i]][, c(layer_colname, "clr", "sample"), with = F]
+            mat <- mat %>%
+              tidyr::pivot_wider(names_from = sample, values_from = clr) %>%
+              na.omit() %>%
+              column_to_rownames(var = layer_colname) %>%
+              scale(center = T, scale = F)
+
+            cluster_labels <- metadata %>% filter(sample %in% colnames(mat)) %>% .[[cluster_col]]
+
+            ret <- get.scores(matrix = mat,
+                              cluster_labels = cluster_labels,
+                              scores = scores,
+                              ntests = ntests,
+                              seed = seed)
+            return(ret)
           }
-        })
-
-        # produce scree plot to know how many dimensions to use
-        eigen_val <- pc$sdev^2
-        # Filter only eigen values above 1 (Kaiser rule)
-        eigen_val <- eigen_val[eigen_val > 1]
-        prop_var <- eigen_val / sum(eigen_val)
-        # compute the accumulation of the proportional variance
-        prop_var_cum <- cumsum(prop_var)
-
-        plot_var <- data.frame(Proportion_variance = prop_var_cum,
-                               PC = 1:length(eigen_val)) %>%
-          ggplot2::ggplot(ggplot2::aes(PC, Proportion_variance)) +
-          ggplot2::geom_col(color = "lightblue")+
-          ggplot2::geom_line()+
-          ggplot2::geom_vline(xintercept = ndim,
-                              color = "red",
-                              linetype = 2) +
-          ggplot2::geom_label(ggplot2::aes(label = ifelse(PC == ndim,
-                                                          round(Proportion_variance,2), NA))) +
-          ggplot2::theme_bw() +
-          ggplot2::ggtitle(paste0(ndim, " first PC"))
-
-        # compute distance
-        for (x in 1:nrow(df.score)) {
-
-          # define the grouping by variable
-          gr.by <- as.character(df.score[x, 1])
-
-          dist <- stats::dist(pc$x[,1:ndim],
-                              method = df.score[x, 2])
-
-          # plot dendrogram
-          pc2 <- pc$x[,1:ndim] %>%
-            as.data.frame() %>%
-            mutate(celltype = metadata[[df.score[x, 1]]])
-
-          # Calculate the row-wise average grouping by row names
-          pc2 <- aggregate(. ~ celltype, data = pc2, FUN = mean) %>%
-            tibble::column_to_rownames("celltype") %>%
-            as.matrix()
-
-          dist_group <- stats::dist(pc2,
-                                    method = df.score[x, 2])
-          hclust <- stats::hclust(dist_group,
-                                  method = hclust.method)
-          dendo <- ggdendro::ggdendrogram(as.dendrogram(hclust)) +
-            ggtitle(paste0("Hierarchical clustering dendrogram - ",
-                           hclust.method))
-
-          # do not show legend if too many groups
-          leg.pos <- ifelse(length(unique(metadata[[gr.by]])) < 40,
-                            "right", "none")
-
-          if (df.score[x,3] == "silhouette") {
-            message("Computing silhouette score")
-
-            silh <- silhoutte_onelabel(metadata[[gr.by]],
-                                       dist = dist,
-                                       ntests = ntests,
-                                       ncores = ncores,
-                                       bparam = bparam,
-                                       progressbar = progressbar)
-
-            whole.mean <- mean(silh$cell$sil_width)
-
-            # levels of cells for factors
-            lev_cells <- unique(silh$cell$cluster)
-
-            gpl <- silh$cell %>%
-              mutate(cluster = factor(cluster,
-                                      levels = lev_cells)) %>%
-              dplyr::rename(!!gr.by := cluster) %>%
-              ggplot2::ggplot(ggplot2::aes(rowid, sil_width, fill = .data[[gr.by]])) +
-              ggplot2::geom_col() +
-              ggplot2::geom_hline(yintercept = whole.mean,
-                                  color = "black",
-                                  linetype = 2) +
-              ggplot2::labs(y = "Silhouette width",
-                            title = paste0(gr.by, " - ", df.score[x, 2], "\nAverage silhouette width: ", round(whole.mean, 3))) +
-              ggplot2::guides(fill=guide_legend(ncol=4))+
-              ggplot2::theme(
-                panel.background = element_rect(fill = "white"),
-                axis.text.x = element_blank(),
-                axis.title.x = element_blank(),
-                axis.ticks.x = element_blank(),
-                legend.position = leg.pos
-              )
-          }
-
-          if (df.score[x,3] == "modularity") {
-            message("Computing Modularity score")
-            # transform to network the distance
-            graph <- graph.adjacency(
-              as.matrix(as.dist(cor(matrix,
-                                    method="pearson"))),
-              mode="undirected",
-              weighted=TRUE,
-              diag=FALSE
-            )
-            # simplify graph
-            graph <- simplify(graph, remove.multiple=TRUE, remove.loops=TRUE)
-
-            # Colour negative correlation edges as blue
-            E(graph)[which(E(graph)$weight<0)]$color <- "darkblue"
-            # Colour positive correlation edges as red
-            E(graph)[which(E(graph)$weight>0)]$color <- "darkred"
-            # Convert edge weights to absolute values
-            E(graph)$weight <- abs(E(graph)$weight)
-
-            # set grouping variable
-            V(graph)$group <- as.numeric(as.factor(metadata[[paste0(gr.by,"N")]]))
-            # calculate modularity
-            mod_score <- igraph::modularity(graph, V(graph)$group)
-
-            V(graph)$label <- NA
-
-            mod.pl <- plot(graph,
-                           vertex.color = V(graph)$group,
-                           main = "Network with Group Assignments")
-          }
-
-          # plot for PCA
-          pc_sum <- summary(pc)
-          PC1_varexpl <- pc_sum$importance[2,"PC1"]
-          PC2_varexpl <- pc_sum$importance[2,"PC2"]
-
-          # get first 2 PC
-          pc.df <- pc$x[,1:2] %>% as.data.frame() %>%
-            tibble::rownames_to_column("sample_celltype") %>%
-            left_join(., metadata %>% tibble::rownames_to_column("sample_celltype"),
-                      by = "sample_celltype")
-          pc.df[[gr.by]] <-  factor(pc.df[[gr.by]], levels = lev_cells)
-
-          pc.pl <- pc.df %>%
-            ggplot2::ggplot(ggplot2::aes(PC1, PC2, color = .data[[gr.by]])) +
-            ggplot2::geom_point() +
-            ggplot2::guides(color=guide_legend(ncol=2))+
-            labs(title = paste0(gr.by, " - ", " PCA"),
-                 y = paste0("PC2 (", PC2_varexpl*100, " %)"),
-                 x = paste0("PC1 (", PC1_varexpl*100, " %)"))+
-            ggplot2::theme(
-              panel.background = element_rect(fill = "white"),
-              legend.position = leg.pos,
-              legend.key = element_rect(fill = "white")
-            )
-
-          score.type <- as.character(df.score[x,3])
-
-
-          # plot of bootstraping
-          # conf.pl <- silh$summary %>%
-          #             dplyr::filter(iteration != "NO") %>%
-          #             ggplot2::ggplot(ggplot2::aes(x = avg_sil_width,
-          #                                          y = ..density..,
-          #                                          fill = cluster)) +
-          #             ggplot2::geom_density(alpha = 0.6, show.legend = F) +
-          #             ggplot2::geom_ribbon(aes(ymin = 0, ymax = ..density..), alpha = 0.05)
-          #             ggplot2::facet_wrap(~cluster, ncol = 2) +
-          #             ggplot2::theme_bw()
-          #
-          #             ggplot2::geom_vline(aes(xintercept = ifelse(iteration == "NO",
-          #                                                     avg_sil_width, NA)),
-          #                                 color = "Avg silhouette width"),
-          #                                 lty = 2, show.legend = T)
-          #             ggplot2::geom_vline(xintercept = quantile(cof_before[,2], c(0.05,0.95))[1],
-          #                            color = "Bootstrap"), lty = 2, show.legend = T)
-
-          # Build plot list
-          pl.list <- list( score.type = gpl,
-                           "PCA" = pc.pl,
-                           "Scree_plot" = plot_var,
-                           "Dendogram" = dendo)
-
-          # return list
-          ret <- list("whole_average" = whole.mean,
-                      "bygroup_average" = silh$summary,
-                      "plots" = pl.list)
-
-          scores[[m]][[sub]][[paste(df.score[x,], collapse = "_")]] <- ret
-        }
+        )
+        names(results[[cluster_col]][["composition"]][[layer]]) <- names(object@composition[[layer]])
       }
     }
+
+
+    ## Process pseudobulk ###############################################
+    pb_layers <- names(object@aggregated_profile$Pseudobulk)
+
+    for (layer in pb_layers) {
+      results[[cluster_col]][["pseudobulk"]][[layer]] <- BiocParallel::bplapply(
+        X = names(object@aggregated_profile$Pseudobulk[[layer]]),
+        BPPARAM = param,
+        function(i){
+          j <- names(object@aggregated_profile$Pseudobulk[[layer]])[i]
+          mat <- object@aggregated_profile$Pseudobulk[[layer]][[i]]
+          mat <- preproc_pseudobulk(matrix = mat,
+                                    metadata,
+                                    cluster.by,
+                                    nVarGenes = 500,
+                                    gene.filter = "HVG",
+                                    black.list = NULL)
+
+          cluster_labels <- metadata %>% filter(sample %in% colnames(pb_mat)) %>% .[[cluster_col]]
+
+          res <- get.scores(matrix = mat,
+                            cluster_labels = cluster_labels,
+                            scores = scores,
+                            ntests = ntests,
+                            seed = seed)
+          return(res)
+        }
+      )
+      names(results[[cluster_col]][["pseudobulk"]][[layer]]) <- names(object@aggregated_profile$Pseudobulk[[layer]])
+    }
+
+
+    ## Process signatures (TODO NEEDS REWORK) ###############################################
+
+
   }
-  return(scores)
+
+
+  return(results)
 }
 
 

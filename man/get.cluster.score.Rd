@@ -7,15 +7,16 @@
 get.cluster.score(
   object = NULL,
   metadata = NULL,
-  cluster.by = c("celltype", "sample"),
-  ndim = 10,
-  nVarGenes = 500,
-  gene.filter = "HGV",
-  black.list = NULL,
-  ntests = 0,
-  score = c("silhouette"),
+  cluster.by = c("condition", "batch"),
+  scores = c("Silhouette", "Modularity"),
   dist.method = "euclidean",
   hclust.method = "complete",
+  ntests = 0,
+  seed = 22,
+  ndim = 10,
+  nVarGenes = 500,
+  gene.filter = "HVG",
+  black.list = NULL,
   ncores = parallelly::availableCores() - 2,
   bparam = NULL,
   progressbar = TRUE
@@ -28,23 +29,23 @@ get.cluster.score(
 
 \item{cluster.by}{Vector indicating the variable for clustering, default is celltype (for the annotation) and sample}
 
+\item{dist.method}{Method to compute distance between celltypes, default is euclidean.}
+
 \item{ndim}{Number of dimensions to be use for PCA clustering metrics. Default is 10.}
 
 \item{nVarGenes}{Number of variable genes to assess samples. Default is 500.}
 
-\item{gene.filter}{Named list of genes to subset their aggregated expression. Default is \code{"HGV"} or \code{NULL} would indicate "Highly variable genes", number of genes can be set at \code{nVarGenes}. If "default_filter" is indicated transcription factor (GO:0003700), cytokines (GO:0005125), cytokine receptors (GO:0004896), chemokines (GO:0008009), and chemokines receptors (GO:0004950) are subsetted out of the total genes and accounted for. For additional GO accession gene list you may use the function \link{getGOList} to fetch them from biomaRt.}
+\item{gene.filter}{Named list of genes to subset their aggregated expression. Default is \code{"HVG"} or \code{NULL} would indicate "Highly variable genes", number of genes can be set at \code{nVarGenes}. If "default_filter" is indicated transcription factor (GO:0003700), cytokines (GO:0005125), cytokine receptors (GO:0004896), chemokines (GO:0008009), and chemokines receptors (GO:0004950) are subsetted out of the total genes and accounted for. For additional GO accession gene list you may use the function \link{getGOList} to fetch them from biomaRt.}
 
 \item{black.list}{List of genes to discard from clustering, if "default" object "default_black_list" object is used. Alternative black listed genes can be provided as a vector or list.}
-
-\item{score}{Score to compute clustering of samples based on cell type prediction, either Silhoutte or modularity.}
-
-\item{dist.method}{Method to compute distance between celltypes, default is euclidean.}
 
 \item{ncores}{The number of cores to use, by default, all available cores - 2.}
 
 \item{bparam}{A \code{BiocParallel::bpparam()} object that tells how to parallelize. If provided, it overrides the \code{ncores} parameter.}
 
 \item{progressbar}{Whether to show a progressbar or not}
+
+\item{score}{Score to compute clustering of samples based on cell type prediction, either Silhoutte or modularity.}
 }
 \value{
 Metrics of cell types pseudobulk clustering
