@@ -1344,8 +1344,10 @@ get.cluster.score <- function(object = NULL,
 
   # Process data ###############################################
   for (cluster_col in cluster.by) {
+    message("Processing ", cluster_col)
 
     ## Process celltype composition ###############################################
+    message("Processing cell type composition")
     comp_layers <- names(object@composition)
 
     for (layer in comp_layers) {
@@ -1360,11 +1362,13 @@ get.cluster.score <- function(object = NULL,
 
         cluster_labels <- metadata %>% filter(sample %in% colnames(mat)) %>% .[[cluster_col]]
 
-        results[[cluster_col]][["composition"]][[layer]] <- get.scores(matrix = mat,
-                                                                       cluster_labels = cluster_labels,
-                                                                       scores = scores,
-                                                                       ntests = ntests,
-                                                                       seed = seed)
+        if (length(unique(cluster_labels)) > 1) {
+          results[[cluster_col]][["composition"]][[layer]] <- get.scores(matrix = mat,
+                                                                         cluster_labels = cluster_labels,
+                                                                         scores = scores,
+                                                                         ntests = ntests,
+                                                                         seed = seed)
+        }
 
       } else if (is.list(object@composition[[layer]])) {
         results[[cluster_col]][["composition"]][[layer]] <- BiocParallel::bplapply(
@@ -1381,12 +1385,16 @@ get.cluster.score <- function(object = NULL,
 
             cluster_labels <- metadata %>% filter(sample %in% colnames(mat)) %>% .[[cluster_col]]
 
-            ret <- get.scores(matrix = mat,
-                              cluster_labels = cluster_labels,
-                              scores = scores,
-                              ntests = ntests,
-                              seed = seed)
-            return(ret)
+            if (length(unique(cluster_labels)) > 1) {
+              ret <- get.scores(matrix = mat,
+                                cluster_labels = cluster_labels,
+                                scores = scores,
+                                ntests = ntests,
+                                seed = seed)
+              return(ret)
+            } else {
+              return(NULL)
+            }
           }
         )
         names(results[[cluster_col]][["composition"]][[layer]]) <- names(object@composition[[layer]])
@@ -1395,6 +1403,7 @@ get.cluster.score <- function(object = NULL,
 
 
     ## Process pseudobulk ###############################################
+    message("Processing pseudobulks")
     pb_layers <- names(object@aggregated_profile$Pseudobulk)
 
     for (layer in pb_layers) {
@@ -1406,19 +1415,23 @@ get.cluster.score <- function(object = NULL,
           meta <- metadata %>% filter(sample %in% colnames(mat))
           cluster_labels <- meta[[cluster_col]]
 
-          mat <- preproc_pseudobulk(matrix = mat,
-                                    meta,
-                                    cluster.by,
-                                    nVarGenes = 500,
-                                    gene.filter = "HVG",
-                                    black.list = NULL)
+          if (length(unique(cluster_labels)) > 1) {
+            mat <- preproc_pseudobulk(matrix = mat,
+                                      meta,
+                                      cluster_col,
+                                      nVarGenes = 500,
+                                      gene.filter = "HVG",
+                                      black.list = NULL)
 
-          res <- get.scores(matrix = mat,
-                            cluster_labels = cluster_labels,
-                            scores = scores,
-                            ntests = ntests,
-                            seed = seed)
-          return(res)
+            res <- get.scores(matrix = mat,
+                              cluster_labels = cluster_labels,
+                              scores = scores,
+                              ntests = ntests,
+                              seed = seed)
+            return(res)
+          } else {
+            return(NULL)
+          }
         }
       )
       names(results[[cluster_col]][["pseudobulk"]][[layer]]) <- names(object@aggregated_profile$Pseudobulk[[layer]])
