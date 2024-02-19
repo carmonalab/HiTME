@@ -11,6 +11,7 @@ get.cluster.score(
   scores = c("Silhouette", "Modularity"),
   dist.method = "euclidean",
   hclust.method = "complete",
+  all.concatenated.na.handling = "drop",
   ntests = 0,
   seed = 22,
   ndim = 10,
@@ -30,6 +31,10 @@ get.cluster.score(
 \item{cluster.by}{Vector indicating the variable for clustering, default is celltype (for the annotation) and sample}
 
 \item{dist.method}{Method to compute distance between celltypes, default is euclidean.}
+
+\item{hclust.method}{Hierarchical clustering method for hclust. Options are: "single", "complete", "average" (= UPGMA), "mcquitty" (= WPGMA), "median" (= WPGMC) or "centroid" (= UPGMC). (See hclust package for details)}
+
+\item{all.concatenated.na.handling}{How to handle missing values in the "all cell types concatenated vector". Options are "drop" (drop rows, conservative method) or "zero_impute" (replaces missing values with zeros, use with caution as it might change your sample clustering based on number of missing values per sample/group)}
 
 \item{ndim}{Number of dimensions to be use for PCA clustering metrics. Default is 10.}
 
