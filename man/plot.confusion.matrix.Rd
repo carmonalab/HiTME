@@ -2,7 +2,7 @@
 % Please edit documentation in R/main.R
 \name{plot.confusion.matrix}
 \alias{plot.confusion.matrix}
-\title{Built confusion matrix-like plots between different cell type classification approaches}
+\title{Build confusion matrix-like plots between different cell type classification approaches}
 \usage{
 \method{plot}{confusion.matrix}(
   object = NULL,
@@ -20,15 +20,15 @@
 
 \item{var.2}{2nd of grouping variables on the x-axis.}
 
-\item{relative}{Wheter to show absolute number of cells, or relative number cells out of the 1st variable indicted. Default is FALSE.}
+\item{relative}{Whether to show absolute number of cells, or relative number cells out of the 1st variable indicted. Default is FALSE.}
 
 \item{useNA}{Whether to include not annotated cells or not (labelled as "NA"). Can be "no", "ifany", or "always". See \code{?table} for more information. Default is "ifany".}
 
-\item{type}{Type of plot to render. Either "tile" (default) as a confusion matrixs or "barplot".}
+\item{type}{Type of plot to render. Either "tile" (default) as a confusion matrices or "barplot".}
 }
 \value{
-Plots to evaluate the correspondance between different classification methods.
+Plots to evaluate the correspondence between different classification methods.
 }
 \description{
-Built confusion matrix-like plots between different cell type classification approaches
+Build confusion matrix-like plots between different cell type classification approaches
 }
