@@ -526,7 +526,7 @@ get.HiTObject <- function(object,
 #' @param layer1_link Column of metadata linking layer1 prediction (e.g. scGate ~ CellOntology_ID) in order to perform subsetting for second layer classification.
 
 #' @importFrom Hotelling clr
-#' @importFrom dplyr group_by summarize filter ungroup mutate select left_join n coalesce
+#' @importFrom dplyr group_by summarize filter ungroup mutate select left_join n coalesce bind_rows
 #' @importFrom tidyr pivot_wider
 #' @importFrom tibble column_to_rownames rownames_to_column
 #'
@@ -688,8 +688,9 @@ get.celltype.composition <- function(object = NULL,
                                    split.by = split.by,
                                    group.by.1 = group.by.composition[[i]],
                                    useNA = useNA[i])
-            ctable <- c(all = list(ctable),
-                        ctable.split)
+
+            ctable <- c(ctable.split)
+            ctable[["all_concatenated"]] <- dplyr::bind_rows(ctable.split)
           }
         }
       })
@@ -774,7 +775,7 @@ get.aggregated.profile <- function(object,
                                  only.counts = T,
                                  useNA = useNA)
 
-      keep <- cnts[cnts[["cell_counts"]]>min.cells.aggregated,group.by.aggregated[[i]]] %>%
+      keep <- cnts[cnts[["cell_counts"]] > min.cells.aggregated,group.by.aggregated[[i]]] %>%
         unlist()
 
       # remove cell types with less than min.cells.aggregated
@@ -1262,6 +1263,8 @@ merge.HiTObjects <- function(object = NULL,
 #' @param cluster.by Vector indicating the variable for clustering, default is celltype (for the annotation) and sample
 #' @param score Score to compute clustering of samples based on cell type prediction, either Silhoutte or modularity.
 #' @param dist.method Method to compute distance between celltypes, default is euclidean.
+#' @param hclust.method Hierarchical clustering method for hclust. Options are: "single", "complete", "average" (= UPGMA), "mcquitty" (= WPGMA), "median" (= WPGMC) or "centroid" (= UPGMC). (See hclust package for details)
+#' @param all.concatenated.na.handling How to handle missing values in the "all cell types concatenated vector". Options are "drop" (drop rows, conservative method) or "zero_impute" (replaces missing values with zeros, use with caution as it might change your sample clustering based on number of missing values per sample/group)
 #' @param ndim Number of dimensions to be use for PCA clustering metrics. Default is 10.
 #' @param nVarGenes Number of variable genes to assess samples. Default is 500.
 #' @param gene.filter Named list of genes to subset their aggregated expression. Default is \code{"HVG"} or \code{NULL} would indicate "Highly variable genes", number of genes can be set at \code{nVarGenes}. If "default_filter" is indicated transcription factor (GO:0003700), cytokines (GO:0005125), cytokine receptors (GO:0004896), chemokines (GO:0008009), and chemokines receptors (GO:0004950) are subsetted out of the total genes and accounted for. For additional GO accession gene list you may use the function \link{getGOList} to fetch them from biomaRt.
@@ -1301,6 +1304,7 @@ get.cluster.score <- function(object = NULL,
                               scores = c("Silhouette", "Modularity"),
                               dist.method = "euclidean",
                               hclust.method = "complete",
+                              all.concatenated.na.handling = "drop",
 
                               # For silhouette scores
                               ntests = 0, # number of shuffling events
@@ -1377,15 +1381,22 @@ get.cluster.score <- function(object = NULL,
           function(i){
             layer_colname <- colnames(object@composition[[layer]][[i]])[1]
             mat <- object@composition[[layer]][[i]][, c(layer_colname, "clr", "sample"), with = F]
+            mat <- mat %>% tidyr::pivot_wider(names_from = sample, values_from = clr)
+
+            if (all.concatenated.na.handling == "drop") {
+              mat <- na.omit(mat)
+            }
+            if (all.concatenated.na.handling == "zero_impute") {
+              mat[is.na(mat)] <- 0
+            }
+
             mat <- mat %>%
-              tidyr::pivot_wider(names_from = sample, values_from = clr) %>%
-              na.omit() %>%
               column_to_rownames(var = layer_colname) %>%
               scale(center = T, scale = F)
 
             cluster_labels <- metadata %>% filter(sample %in% colnames(mat)) %>% .[[cluster_col]]
 
-            if (length(unique(cluster_labels)) > 1) {
+            if (length(unique(cluster_labels)) > 1 && nrow(mat) > 1) {
               ret <- get.scores(matrix = mat,
                                 cluster_labels = cluster_labels,
                                 scores = scores,
