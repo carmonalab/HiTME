@@ -204,8 +204,7 @@ compositional_data <- function(data,
                                group.by.1 = NULL,
                                useNA = FALSE,
                                clr_zero_impute_perc = 1,
-                               only.counts = FALSE
-) {
+                               only.counts = FALSE) {
 
   # set grouping variables
   gr_vars <- c(split.by, group.by.1)
@@ -250,9 +249,8 @@ compositional_data <- function(data,
       # join clr df to main dataframe
       ctable <- dplyr::left_join(ctable, clr, by = c(chr_cols, group.by.1))
     }
-
-    return(ctable)
   }
+  return(ctable)
 }
 
 
