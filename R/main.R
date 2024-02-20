@@ -1310,6 +1310,11 @@ get.cluster.score <- function(object = NULL,
                               ntests = 0, # number of shuffling events
                               seed = 22, # seed for random shuffling
 
+                              # For PCA
+                              pca_comps_labs_invisible = c("quali"),
+                              pca_pb_labs_invisible = c("var", "quali"),
+                              pca_sig_labs_invisible = c("quali"),
+
                               # Pseudobulk params
                               ndim = 10,
                               nVarGenes = 500,
@@ -1371,7 +1376,8 @@ get.cluster.score <- function(object = NULL,
                                                                          cluster_labels = cluster_labels,
                                                                          scores = scores,
                                                                          ntests = ntests,
-                                                                         seed = seed)
+                                                                         seed = seed,
+                                                                         invisible = pca_comps_labs_invisible)
         }
 
       } else if (is.list(object@composition[[layer]])) {
@@ -1397,12 +1403,13 @@ get.cluster.score <- function(object = NULL,
             cluster_labels <- metadata %>% filter(sample %in% colnames(mat)) %>% .[[cluster_col]]
 
             if (length(unique(cluster_labels)) > 1 && nrow(mat) > 1) {
-              ret <- get.scores(matrix = mat,
+              res <- get.scores(matrix = mat,
                                 cluster_labels = cluster_labels,
                                 scores = scores,
                                 ntests = ntests,
-                                seed = seed)
-              return(ret)
+                                seed = seed,
+                                invisible = pca_comps_labs_invisible)
+              return(res)
             } else {
               return(NULL)
             }
@@ -1414,15 +1421,15 @@ get.cluster.score <- function(object = NULL,
 
 
     ## Process pseudobulk ###############################################
-    message("Processing pseudobulks")
-    pb_layers <- names(object@aggregated_profile$Pseudobulk)
+    message("Processing Pseudobulks")
+    pb_layers <- names(object@aggregated_profile[["Pseudobulk"]])
 
     for (layer in pb_layers) {
-      results[[cluster_col]][["pseudobulk"]][[layer]] <- BiocParallel::bplapply(
-        X = names(object@aggregated_profile$Pseudobulk[[layer]]),
+      results[[cluster_col]][["Pseudobulk"]][[layer]] <- BiocParallel::bplapply(
+        X = names(object@aggregated_profile[["Pseudobulk"]][[layer]]),
         BPPARAM = param,
         function(i){
-          mat <- object@aggregated_profile$Pseudobulk[[layer]][[i]]
+          mat <- object@aggregated_profile[["Pseudobulk"]][[layer]][[i]]
           meta <- metadata %>% filter(sample %in% colnames(mat))
           cluster_labels <- meta[[cluster_col]]
 
@@ -1438,20 +1445,61 @@ get.cluster.score <- function(object = NULL,
                               cluster_labels = cluster_labels,
                               scores = scores,
                               ntests = ntests,
-                              seed = seed)
+                              seed = seed,
+                              invisible = pca_sig_labs_invisible)
             return(res)
           } else {
             return(NULL)
           }
         }
       )
-      names(results[[cluster_col]][["pseudobulk"]][[layer]]) <- names(object@aggregated_profile$Pseudobulk[[layer]])
+      names(results[[cluster_col]][["Pseudobulk"]][[layer]]) <- names(object@aggregated_profile[["Pseudobulk"]][[layer]])
     }
 
 
-    ## Process signatures (TODO NEEDS REWORK) ###############################################
+    ## Process signatures ###############################################
+    message("Processing Signatures")
+    comp_layers <- names(object@aggregated_profile[["Signatures"]])
 
+    for (layer in comp_layers) {
+      cols <- colnames(object@aggregated_profile[["Signatures"]][[layer]])
+      layer_colname <- cols[1]
+      signatures <- cols[2:(length(cols) - 1)]
 
+      results[[cluster_col]][["Signatures"]][[layer]] <- BiocParallel::bplapply(
+        X = signatures,
+        BPPARAM = param,
+        function(i){
+          mat <- object@aggregated_profile[["Signatures"]][[layer]][, c(layer_colname, i, "sample"), with = F]
+          mat <- mat %>%
+            tidyr::pivot_wider(names_from = sample, values_from = i)
+
+          if (all.concatenated.na.handling == "drop") {
+            mat <- na.omit(mat)
+          }
+          if (all.concatenated.na.handling == "zero_impute") {
+            mat[is.na(mat)] <- 0
+          }
+
+          mat <- mat %>%
+            column_to_rownames(var = layer_colname) %>%
+            scale(center = T, scale = F)
+
+          cluster_labels <- metadata %>% filter(sample %in% colnames(mat)) %>% .[[cluster_col]]
+
+          if (length(unique(cluster_labels)) > 1) {
+            res <- get.scores(matrix = mat,
+                              cluster_labels = cluster_labels,
+                              scores = scores,
+                              ntests = ntests,
+                              invisible = pca_sig_labs_invisible,
+                              seed = seed)
+          }
+          return(res)
+        }
+      )
+      names(results[[cluster_col]][["Signatures"]][[layer]]) <- signatures
+    }
   }
 
 
