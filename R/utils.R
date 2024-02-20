@@ -270,6 +270,9 @@ get.scores <- function(matrix,
                        ntests = 0, # number of shuffling events
                        seed = 22, # seed for random shuffling
 
+                       # For PCA
+                       invisible = c("var", "quali"),
+
                        ncores = parallelly::availableCores() - 2,
                        bparam = NULL,
                        progressbar = TRUE) {
@@ -281,7 +284,6 @@ get.scores <- function(matrix,
 
     ## Silhouette (TODO add plot and 95% CI) ###############################################
     if (s == "Silhouette") {
-      message("Computing Silhouette score")
       results[[s]] <- silhouette_onelabel(labels = cluster_labels,
                                           dist = dist(t(matrix)),
                                           ntests = ntests,
@@ -352,7 +354,8 @@ get.scores <- function(matrix,
 
   # Plot PCA ###############################################
   results[["PCA"]][["plot"]] <- plot_PCA(matrix,
-                                         color.cluster.by = cluster_labels)
+                                         color.cluster.by = cluster_labels,
+                                         invisible = invisible)
 
   # Plot dendrogram  (TODO NEEDS REWORK) ###############################################
   # pc2 <- pc$x[,1:ndim] %>%
@@ -652,9 +655,9 @@ plot_PCA <- function(matrix,
                      color.cluster.by = "none") {
   res.pca <- stats::prcomp(t(matrix))
   p <- factoextra::fviz_pca(res.pca,
-                habillage = color.cluster.by,
-                label = "var",
-                pointsize = 3,
-                invisible = c("var", "quali"))
+                            habillage = color.cluster.by,
+                            label = "var",
+                            pointsize = 3,
+                            invisible = invisible)
   return(p)
 }
