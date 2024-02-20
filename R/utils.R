@@ -223,7 +223,8 @@ compositional_data <- function(data,
       dplyr::group_by(across(all_of(gr_vars2))) %>%
       dplyr::mutate(freq = cell_counts/sum(cell_counts) * 100,
                     !!group.by.1 := coalesce(.data[[group.by.1]], "NA")) %>%
-      as.data.frame()
+      as.data.frame() %>%
+      na.omit()
 
     if (nrow(ctable) > 0) {
       # compute clr
