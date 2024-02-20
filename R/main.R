@@ -394,7 +394,6 @@ get.HiTObject <- function(object,
                           assay = "RNA",
                           layer1_link = "CellOntology_ID") {
 
-
   if (is.null(object)) {
     stop("Please provide a Seurat object")
   } else if (class(object) != "Seurat") {
@@ -788,22 +787,24 @@ get.aggregated.profile <- function(object,
       obj_tmp@meta.data[[group.by.aggregated[[i]]]][is.na(obj_tmp@meta.data[[group.by.aggregated[[i]]]])] <- "NA"
       obj_tmp@meta.data[[group.by.aggregated[[i]]]] <- as.factor(obj_tmp@meta.data[[group.by.aggregated[[i]]]])
 
-
+      # Calculate total (sample) pseudobulk
+      avg.exp[[i]] <- obj_tmp@assays[["RNA"]]["counts"]
+      row_names <- rownames(avg.exp[[i]])
+      avg.exp[[i]] <- Matrix::Matrix(rowSums(avg.exp[[i]]))
+      rownames(avg.exp[[i]]) <- row_names
+      colnames(avg.exp[[i]]) <- "all"
 
       if (length(unique(obj_tmp@meta.data[[group.by.aggregated[[i]]]])) >= 2) {
-        avg.exp[[i]] <-
+        mat <-
           Seurat::AggregateExpression(obj_tmp,
                                       group.by = group.by.aggregated[[i]],
                                       assays = assay,
                                       verbose = F,
                                       ...)[[assay]]
+        avg.exp[[i]] <- cbind(avg.exp[[i]], mat)
       } else {
         # Handle case if there is only one cell type
-        avg.exp[[i]] <- obj_tmp@assays[["RNA"]]["counts"]
-        row_names <- rownames(avg.exp[[i]])
-        col_name <- unique(obj_tmp@meta.data[[group.by.aggregated[[i]]]])
-        avg.exp[[i]] <- Matrix::Matrix(rowSums(avg.exp[[i]]))
-        rownames(avg.exp[[i]]) <- row_names
+        col_name <- as.character(unique(obj_tmp@meta.data[[group.by.aggregated[[i]]]]))
         colnames(avg.exp[[i]]) <- col_name
       }
     })
@@ -840,7 +841,6 @@ get.aggregated.signature <- function(object,
                                      name.additional.signatures = NULL,
                                      fun = mean,
                                      useNA = FALSE) {
-
 
   # input can be a Seurat object or a dataframe containing its meta.data
   # convert object to metadata if seurat object is provided
@@ -1198,7 +1198,6 @@ merge.HiTObjects <- function(object = NULL,
     message("Merging aggregated profiles of " , gb, "...")
 
     # Aggregated_profile Pseudobulk
-
     celltypes <- lapply(names(object),
                         function(x) {
                           colnames(object[[x]]@aggregated_profile[["Pseudobulk"]][[gb]])
@@ -1235,6 +1234,7 @@ merge.HiTObjects <- function(object = NULL,
         as.matrix() %>%
         Matrix::Matrix(., sparse = T)
     }
+
 
     # Aggregated_profile Signatures
     df <- BiocParallel::bplapply(X = layer_present,
