@@ -1365,12 +1365,11 @@ get.cluster.score <- function(object = NULL,
 
     for (layer in comp_layers) {
       if (is.data.frame(object@composition[[layer]])) {
-        layer_colname <- colnames(object@composition[[layer]])[1]
-        mat <- object@composition[[layer]][, c(layer_colname, "clr", "sample"), with = F]
+        mat <- object@composition[[layer]][, c("celltype", "clr", "sample"), with = F]
         mat <- mat %>%
           tidyr::pivot_wider(names_from = sample, values_from = clr) %>%
           na.omit() %>%
-          column_to_rownames(var = layer_colname) %>%
+          column_to_rownames(var = "celltype") %>%
           scale(center = T, scale = F)
 
         cluster_labels <- metadata %>% filter(sample %in% colnames(mat)) %>% .[[cluster_col]]
@@ -1387,22 +1386,22 @@ get.cluster.score <- function(object = NULL,
           X = names(object@composition[[layer]]),
           BPPARAM = param,
           function(i){
-            layer_colname <- colnames(object@composition[[layer]][[i]])[1]
-            mat <- object@composition[[layer]][[i]][, c(layer_colname, "clr", "sample"), with = F]
-            mat <- mat %>% tidyr::pivot_wider(names_from = sample, values_from = clr)
+            mat <- object@composition[[layer]][[i]][, c("celltype", "clr", "sample"), with = F]
+            mat <- mat %>% tidyr::pivot_wider(names_from = sample, values_from = clr) %>%
+              column_to_rownames(var = "celltype")
 
             if (all.concatenated.na.handling == "drop") {
               mat <- na.omit(mat)
             }
             if (all.concatenated.na.handling == "impute") {
-              # Impute with row min
-              ind <- which(is.na(mat), arr.ind=TRUE)
-              mat[ind] <- MatrixGenerics::rowMins(as.matrix(mat),  na.rm = TRUE)[ind[,1]]
+              if (any(is.na(mat))) {
+                # Impute with row min
+                ind <- which(is.na(mat), arr.ind=TRUE)
+                mat[ind] <- MatrixGenerics::rowMins(as.matrix(mat),  na.rm = TRUE)[ind[,1]]
+              }
             }
 
-            mat <- mat %>%
-              column_to_rownames(var = layer_colname) %>%
-              scale(center = T, scale = F)
+            mat <- scale(mat, center = T, scale = F)
 
             cluster_labels <- metadata %>% filter(sample %in% colnames(mat)) %>% .[[cluster_col]]
 
@@ -1437,20 +1436,24 @@ get.cluster.score <- function(object = NULL,
           meta <- metadata %>% filter(sample %in% colnames(mat))
           cluster_labels <- meta[[cluster_col]]
 
-          mat <- preproc_pseudobulk(matrix = mat,
-                                    meta,
-                                    cluster_col,
-                                    nVarGenes = 500,
-                                    gene.filter = "HVG",
-                                    black.list = NULL)
+          if (length(unique(cluster_labels)) > 1) {
+            mat <- preproc_pseudobulk(matrix = mat,
+                                      metadata = meta,
+                                      cluster.by = cluster_col,
+                                      nVarGenes = 500,
+                                      gene.filter = "HVG",
+                                      black.list = NULL)
 
-          res <- get.scores(matrix = mat,
-                            cluster_labels = cluster_labels,
-                            scores = scores,
-                            ntests = ntests,
-                            seed = seed,
-                            invisible = pca_sig_labs_invisible)
-          return(res)
+            res <- get.scores(matrix = mat,
+                              cluster_labels = cluster_labels,
+                              scores = scores,
+                              ntests = ntests,
+                              seed = seed,
+                              invisible = pca_sig_labs_invisible)
+            return(res)
+          } else{
+            return(NULL)
+          }
         }
       )
       names(results[[cluster_col]][["Pseudobulk"]][[layer]]) <- names(object@aggregated_profile[["Pseudobulk"]][[layer]])
@@ -1463,16 +1466,16 @@ get.cluster.score <- function(object = NULL,
 
     for (layer in comp_layers) {
       cols <- colnames(object@aggregated_profile[["Signatures"]][[layer]])
-      layer_colname <- cols[1]
       signatures <- cols[2:(length(cols) - 1)]
 
       results[[cluster_col]][["Signatures"]][[layer]] <- BiocParallel::bplapply(
         X = signatures,
         BPPARAM = param,
         function(i){
-          mat <- object@aggregated_profile[["Signatures"]][[layer]][, c(layer_colname, i, "sample"), with = F]
+          mat <- object@aggregated_profile[["Signatures"]][[layer]][, c("celltype", i, "sample"), with = F]
           mat <- mat %>%
-            tidyr::pivot_wider(names_from = sample, values_from = i)
+            tidyr::pivot_wider(names_from = sample, values_from = i) %>%
+            column_to_rownames(var = "celltype")
 
           if (all.concatenated.na.handling == "drop") {
             mat <- na.omit(mat)
@@ -1481,9 +1484,7 @@ get.cluster.score <- function(object = NULL,
             mat[is.na(mat)] <- 0
           }
 
-          mat <- mat %>%
-            column_to_rownames(var = layer_colname) %>%
-            scale(center = T, scale = F)
+          mat <- scale(mat, center = T, scale = F)
 
           cluster_labels <- metadata %>% filter(sample %in% colnames(mat)) %>% .[[cluster_col]]
 
