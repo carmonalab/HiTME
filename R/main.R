@@ -1284,7 +1284,7 @@ merge.HiTObjects <- function(object = NULL,
 #' @importFrom caret nearZeroVar
 #' @importFrom ggplot2 aes geom_point guides theme geom_col labs geom_hline guide_legend geom_vline theme_bw ggtitle
 #' @importFrom DESeq2 DESeqDataSetFromMatrix vst estimateSizeFactors
-#' @importFrom MatrixGenerics rowVars
+#' @importFrom MatrixGenerics rowVars rowMins
 #' @importFrom SummarizedExperiment assay
 #' @importFrom BiocGenerics counts
 #' @importFrom ggdendro ggdendrogram
@@ -1304,7 +1304,7 @@ get.cluster.score <- function(object = NULL,
                               scores = c("Silhouette", "Modularity"),
                               dist.method = "euclidean",
                               hclust.method = "complete",
-                              all.concatenated.na.handling = "drop",
+                              all.concatenated.na.handling = "impute",
 
                               # For silhouette scores
                               ntests = 0, # number of shuffling events
@@ -1392,8 +1392,10 @@ get.cluster.score <- function(object = NULL,
             if (all.concatenated.na.handling == "drop") {
               mat <- na.omit(mat)
             }
-            if (all.concatenated.na.handling == "zero_impute") {
-              mat[is.na(mat)] <- 0
+            if (all.concatenated.na.handling == "impute") {
+              # Impute with row min
+              ind <- which(is.na(mat), arr.ind=TRUE)
+              mat[ind] <- MatrixGenerics::rowMins(as.matrix(mat),  na.rm = TRUE)[ind[,1]]
             }
 
             mat <- mat %>%
@@ -1477,7 +1479,7 @@ get.cluster.score <- function(object = NULL,
           if (all.concatenated.na.handling == "drop") {
             mat <- na.omit(mat)
           }
-          if (all.concatenated.na.handling == "zero_impute") {
+          if (all.concatenated.na.handling == "impute") {
             mat[is.na(mat)] <- 0
           }
 
