@@ -478,54 +478,54 @@ silhouette_onelabel <- function(labels = NULL, # vector of labels
     stop("Please provide a number for setting seed")
   }
 
-  tlabels <- unique(labels)
-
-  len <- length(labels)
+  # browser()
 
   sils <- lapply(
-    tlabels,
+    unique(labels),
     function(a) {
 
-      x_one <- ifelse(labels == a, 2, 1) %>%
-        as.factor() %>% as.numeric()
+      clus1 <- ifelse(labels == a, 1, 2)
 
-      silh <- cluster::silhouette(x_one, dist)
+      sil <- cluster::silhouette(clus1, dist)
 
       # silhouette score for each sample
       # change names back to character
-      sil.res.cell <- as.data.frame(silh) %>%
-        dplyr::filter(cluster == 2) %>%
+      sil_clus1 <- as.data.frame(sil) %>%
+        dplyr::filter(cluster == 1) %>%
         dplyr::mutate(cluster = a) %>%
         arrange(desc(sil_width))
 
 
-      size <- nrow(sil.res.cell)
+      size <- nrow(sil_clus1)
 
       sil.sumA <- data.frame(cluster = a,
                              iteration = "NO",
                              size = size,
-                             avg_sil_width = mean(sil.res.cell$sil_width))
+                             avg_sil_width = mean(sil_clus1$sil_width))
 
       # dataframe for results of each iteration of shuffling
       bots.df <- data.frame(matrix(nrow = 0, ncol = 4))
-      names(bots.df) <- c("cluster", "iteration", "size", "avg_sil_width")
+      names(bots.df) <- names(sil.sumA)
 
       if (ntests > 0) {
+
         # perform the shuffling
+
         for (u in 1:ntests) {
+
           # random vector
-          vec <- rep(1, length(labels))
+          vec <- rep(2, length(labels))
+
           # seeding for reproducibility
-          seed <- seed + which(tlabels == a)
-          set.seed(seed)
-          random_sample <- sample(1:len, size)
-          vec[random_sample] <- 2
+          set.seed(seed + u)
+          random_sample <- sample(1:length(labels), size)
+          vec[random_sample] <- 1
           vec <- vec %>% as.factor() %>% as.numeric()
 
           # run silhouette
-          silh <- cluster::silhouette(vec, dist)
-          sil.res <- as.data.frame(silh) %>%
-            dplyr::filter(cluster == 2)
+          sil <- cluster::silhouette(vec, dist)
+          sil.res <- as.data.frame(sil) %>%
+            dplyr::filter(cluster == 1)
 
           sil.sumB <- data.frame(cluster = a,
                                  iteration = u,
@@ -541,7 +541,7 @@ silhouette_onelabel <- function(labels = NULL, # vector of labels
                                        random.values = bots.df$avg_sil_width)
         sil.sumA$p_val_adj <- p.adjust(sil.sumA$p_val,
                                        method = "fdr",
-                                       n = length(tlabels))
+                                       n = length(unique(labels)))
         sil.sumA$conf.int.95 <- NA
         # Compute confidence interval
         bots.df <- bots.df %>%
@@ -553,7 +553,7 @@ silhouette_onelabel <- function(labels = NULL, # vector of labels
 
       }
 
-      return(list("cell" = sil.res.cell, # silhouette score for each sample
+      return(list("cell" = sil_clus1, # silhouette score for each sample
                   "summary" = sil.sumA))
     }
   )
