@@ -1375,14 +1375,12 @@ get.cluster.score <- function(object = NULL,
 
         cluster_labels <- metadata %>% filter(sample %in% colnames(mat)) %>% .[[cluster_col]]
 
-        if (length(unique(cluster_labels)) > 1) {
-          results[[cluster_col]][["composition"]][[layer]] <- get.scores(matrix = mat,
-                                                                         cluster_labels = cluster_labels,
-                                                                         scores = scores,
-                                                                         ntests = ntests,
-                                                                         seed = seed,
-                                                                         invisible = pca_comps_labs_invisible)
-        }
+        results[[cluster_col]][["composition"]][[layer]] <- get.scores(matrix = mat,
+                                                                       cluster_labels = cluster_labels,
+                                                                       scores = scores,
+                                                                       ntests = ntests,
+                                                                       seed = seed,
+                                                                       invisible = pca_comps_labs_invisible)
 
       } else if (is.list(object@composition[[layer]])) {
         results[[cluster_col]][["composition"]][[layer]] <- BiocParallel::bplapply(
@@ -1408,7 +1406,7 @@ get.cluster.score <- function(object = NULL,
 
             cluster_labels <- metadata %>% filter(sample %in% colnames(mat)) %>% .[[cluster_col]]
 
-            if (length(unique(cluster_labels)) > 1 && nrow(mat) > 1) {
+            if (nrow(mat) > 1) {
               res <- get.scores(matrix = mat,
                                 cluster_labels = cluster_labels,
                                 scores = scores,
@@ -1439,24 +1437,20 @@ get.cluster.score <- function(object = NULL,
           meta <- metadata %>% filter(sample %in% colnames(mat))
           cluster_labels <- meta[[cluster_col]]
 
-          if (length(unique(cluster_labels)) > 1) {
-            mat <- preproc_pseudobulk(matrix = mat,
-                                      meta,
-                                      cluster_col,
-                                      nVarGenes = 500,
-                                      gene.filter = "HVG",
-                                      black.list = NULL)
+          mat <- preproc_pseudobulk(matrix = mat,
+                                    meta,
+                                    cluster_col,
+                                    nVarGenes = 500,
+                                    gene.filter = "HVG",
+                                    black.list = NULL)
 
-            res <- get.scores(matrix = mat,
-                              cluster_labels = cluster_labels,
-                              scores = scores,
-                              ntests = ntests,
-                              seed = seed,
-                              invisible = pca_sig_labs_invisible)
-            return(res)
-          } else {
-            return(NULL)
-          }
+          res <- get.scores(matrix = mat,
+                            cluster_labels = cluster_labels,
+                            scores = scores,
+                            ntests = ntests,
+                            seed = seed,
+                            invisible = pca_sig_labs_invisible)
+          return(res)
         }
       )
       names(results[[cluster_col]][["Pseudobulk"]][[layer]]) <- names(object@aggregated_profile[["Pseudobulk"]][[layer]])
@@ -1493,14 +1487,12 @@ get.cluster.score <- function(object = NULL,
 
           cluster_labels <- metadata %>% filter(sample %in% colnames(mat)) %>% .[[cluster_col]]
 
-          if (length(unique(cluster_labels)) > 1) {
-            res <- get.scores(matrix = mat,
-                              cluster_labels = cluster_labels,
-                              scores = scores,
-                              ntests = ntests,
-                              invisible = pca_sig_labs_invisible,
-                              seed = seed)
-          }
+          res <- get.scores(matrix = mat,
+                            cluster_labels = cluster_labels,
+                            scores = scores,
+                            ntests = ntests,
+                            invisible = pca_sig_labs_invisible,
+                            seed = seed)
           return(res)
         }
       )
