@@ -528,6 +528,7 @@ get.HiTObject <- function(object,
 #' @importFrom dplyr group_by summarize filter ungroup mutate select left_join n coalesce bind_rows
 #' @importFrom tidyr pivot_wider
 #' @importFrom tibble column_to_rownames rownames_to_column
+#' @importFrom rrapply rrapply
 #'
 #' @return Cell type compositions as a list of data.frames containing cell counts, relative abundance (freq) and clr-transformed freq (freq_clr), respectively.
 #' @export get.celltype.composition
@@ -689,7 +690,6 @@ get.celltype.composition <- function(object = NULL,
                                    useNA = useNA[i])
 
             ctable <- c(ctable.split)
-            ctable[["all_concatenated"]] <- dplyr::bind_rows(ctable.split)
           }
         }
       })
@@ -697,6 +697,10 @@ get.celltype.composition <- function(object = NULL,
     ## Append
     celltype.compositions[[names(group.by.composition)[i]]] <- ctable
   }
+
+  # Combine all celltype modules into one big concatenated df
+  flat_list <- rrapply::rrapply(celltype.compositions, classes = "data.frame", how = "flatten")
+  celltype.compositions[["all_concatenated"]] <- bind_rows(flat_list)
 
   return(celltype.compositions)
 
