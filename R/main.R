@@ -920,7 +920,7 @@ get.aggregated.signature <- function(object,
           dplyr::filter(!is.na(.data[[group.by.aggregated[[e]]]]))
       }
 
-
+      colnames(aggr.sig[[e]])[1] <- "celltype"
     }
   }
   return(aggr.sig)
