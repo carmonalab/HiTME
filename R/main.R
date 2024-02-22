@@ -698,10 +698,6 @@ get.celltype.composition <- function(object = NULL,
     celltype.compositions[[names(group.by.composition)[i]]] <- ctable
   }
 
-  # Combine all celltype modules into one big concatenated df
-  flat_list <- rrapply::rrapply(celltype.compositions, classes = "data.frame", how = "flatten")
-  celltype.compositions[["all_concatenated"]] <- bind_rows(flat_list)
-
   return(celltype.compositions)
 
 }
@@ -1249,6 +1245,10 @@ merge.HiTObjects <- function(object = NULL,
     df <- data.table::rbindlist(df, use.names=TRUE, fill=TRUE)
     aggr.signature[[gb]] <- df
   }
+
+  # Combine all celltype modules into one big concatenated df
+  flat_list <- rrapply::rrapply(comp.prop, classes = "data.frame", how = "flatten")
+  comp.prop[["all_concatenated"]] <- bind_rows(flat_list)
 
   hit <- methods::new("HiT",
                       metadata = metadata,
