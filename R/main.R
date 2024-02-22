@@ -778,7 +778,7 @@ get.aggregated.profile <- function(object,
                                  only.counts = T,
                                  useNA = useNA)
 
-      keep <- cnts[cnts[["cell_counts"]] > min.cells.aggregated,group.by.aggregated[[i]]] %>%
+      keep <- cnts[cnts[["cell_counts"]] > min.cells.aggregated, 1] %>%
         unlist()
 
       # remove cell types with less than min.cells.aggregated
@@ -909,7 +909,7 @@ get.aggregated.signature <- function(object,
                                  only.counts = T,
                                  useNA = useNA)
 
-      keep <- cnts[cnts[["cell_counts"]]>min.cells.aggregated,group.by.aggregated[[e]]] %>%
+      keep <- cnts[cnts[["cell_counts"]]>min.cells.aggregated, 1] %>%
         unlist()
 
 
