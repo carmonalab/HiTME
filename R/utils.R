@@ -283,106 +283,114 @@ get.scores <- function(matrix,
 
   results <- list()
 
-  for (s in scores) {
+  # Check if there are at least 2 or more clusters
+  if (length(unique(cluster_labels)) > 1) {
+    for (s in scores) {
 
-    ## Silhouette (TODO add plot and 95% CI) ###############################################
-    if (s == "Silhouette") {
-      results[[s]] <- silhouette_onelabel(labels = cluster_labels,
-                                          dist = dist(t(matrix)),
-                                          ntests = ntests,
-                                          seed = seed)
+      ## Silhouette (TODO add plot and 95% CI) ###############################################
+      if (s == "Silhouette") {
+        results[[s]] <- silhouette_onelabel(labels = cluster_labels,
+                                            dist = dist(t(matrix)),
+                                            ntests = ntests,
+                                            seed = seed)
 
-      score_plot <- ggplot(results[[s]]$cell, aes(fill = cluster, y = sil_width, x = rowid)) +
-        geom_bar(position="dodge", stat="identity")+
-        theme(axis.title.x=element_blank(),
-              axis.text.x=element_blank(),
-              axis.ticks.x=element_blank()) +
-        ggtitle(paste("Average silhouette width = ", round(mean(results[[s]]$summary$avg_sil_width), 3)))
+        score_plot <- ggplot(results[[s]]$cell, aes(fill = cluster, y = sil_width, x = rowid)) +
+          geom_bar(position="dodge", stat="identity")+
+          theme(axis.title.x=element_blank(),
+                axis.text.x=element_blank(),
+                axis.ticks.x=element_blank()) +
+          ggtitle(paste("Average silhouette width = ", round(mean(results[[s]]$summary$avg_sil_width), 3)))
+      }
+
+      # Plot  and add 95% CI ###############################################
+      # plot of bootstraping
+      # conf.pl <- silh$summary %>%
+      #             dplyr::filter(iteration != "NO") %>%
+      #             ggplot2::ggplot(ggplot2::aes(x = avg_sil_width,
+      #                                          y = ..density..,
+      #                                          fill = cluster)) +
+      #             ggplot2::geom_density(alpha = 0.6, show.legend = F) +
+      #             ggplot2::geom_ribbon(aes(ymin = 0, ymax = ..density..), alpha = 0.05)
+      #             ggplot2::facet_wrap(~cluster, ncol = 2) +
+      #             ggplot2::theme_bw()
+      #
+      #             ggplot2::geom_vline(aes(xintercept = ifelse(iteration == "NO",
+      #                                                     avg_sil_width, NA)),
+      #                                 color = "Avg silhouette width"),
+      #                                 lty = 2, show.legend = T)
+      #             ggplot2::geom_vline(xintercept = quantile(cof_before[,2], c(0.05,0.95))[1],
+      #                            color = "Bootstrap"), lty = 2, show.legend = T)
+
+
+      ## Modularity (TODO NEEDS REWORK) ###############################################
+      # if (s == "Modularity") {
+      #   message("Computing Modularity score")
+      #   # transform to network the distance
+      #   graph <- graph.adjacency(
+      #     as.matrix(as.dist(cor(matrix,
+      #                           method = "pearson"))),
+      #     mode = "undirected",
+      #     weighted = TRUE,
+      #     diag = FALSE
+      #   )
+      #   # simplify graph
+      #   graph <- simplify(graph, remove.multiple = TRUE, remove.loops = TRUE)
+      #
+      #   # Colour negative correlation edges as blue
+      #   E(graph)[which(E(graph)$weight<0)]$color <- "darkblue"
+      #   # Colour positive correlation edges as red
+      #   E(graph)[which(E(graph)$weight>0)]$color <- "darkred"
+      #   # Convert edge weights to absolute values
+      #   E(graph)$weight <- abs(E(graph)$weight)
+      #
+      #   # set grouping variable
+      #   V(graph)$group <- as.numeric(as.factor(metadata[[paste0(gr.by,"N")]]))
+      #   # calculate modularity
+      #   mod_score <- igraph::modularity(graph, V(graph)$group)
+      #
+      #   V(graph)$label <- NA
+      #
+      #   mod.pl <- plot(graph,
+      #                  vertex.color = V(graph)$group,
+      #                  main = "Network with Group Assignments")
+      # }
     }
 
-    # Plot  and add 95% CI ###############################################
-    # plot of bootstraping
-    # conf.pl <- silh$summary %>%
-    #             dplyr::filter(iteration != "NO") %>%
-    #             ggplot2::ggplot(ggplot2::aes(x = avg_sil_width,
-    #                                          y = ..density..,
-    #                                          fill = cluster)) +
-    #             ggplot2::geom_density(alpha = 0.6, show.legend = F) +
-    #             ggplot2::geom_ribbon(aes(ymin = 0, ymax = ..density..), alpha = 0.05)
-    #             ggplot2::facet_wrap(~cluster, ncol = 2) +
-    #             ggplot2::theme_bw()
+
+    # Plot PCA ###############################################
+    results[["PCA"]][["plot"]] <- plot_PCA(matrix,
+                                           color.cluster.by = cluster_labels,
+                                           invisible = invisible)
+
+    # Plot dendrogram  (TODO NEEDS REWORK) ###############################################
+    # pc2 <- pc$x[,1:ndim] %>%
+    #   as.data.frame() %>%
+    #   mutate(celltype = metadata[[df.score[x, 1]]])
     #
-    #             ggplot2::geom_vline(aes(xintercept = ifelse(iteration == "NO",
-    #                                                     avg_sil_width, NA)),
-    #                                 color = "Avg silhouette width"),
-    #                                 lty = 2, show.legend = T)
-    #             ggplot2::geom_vline(xintercept = quantile(cof_before[,2], c(0.05,0.95))[1],
-    #                            color = "Bootstrap"), lty = 2, show.legend = T)
+    # # Calculate the row-wise average grouping by row names
+    # pc2 <- aggregate(. ~ celltype, data = pc2, FUN = mean) %>%
+    #   tibble::column_to_rownames("celltype") %>%
+    #   as.matrix()
+    #
+    # dist_group <- stats::dist(pc2,
+    #                           method = df.score[x, 2])
+    # hclust <- stats::hclust(dist_group,
+    #                         method = hclust.method)
+    # dendo <- ggdendro::ggdendrogram(as.dendrogram(hclust)) +
+    #   ggtitle(paste0("Hierarchical clustering dendrogram - ",
+    #                  hclust.method))
 
 
-    ## Modularity (TODO NEEDS REWORK) ###############################################
-    # if (s == "Modularity") {
-    #   message("Computing Modularity score")
-    #   # transform to network the distance
-    #   graph <- graph.adjacency(
-    #     as.matrix(as.dist(cor(matrix,
-    #                           method = "pearson"))),
-    #     mode = "undirected",
-    #     weighted = TRUE,
-    #     diag = FALSE
-    #   )
-    #   # simplify graph
-    #   graph <- simplify(graph, remove.multiple = TRUE, remove.loops = TRUE)
-    #
-    #   # Colour negative correlation edges as blue
-    #   E(graph)[which(E(graph)$weight<0)]$color <- "darkblue"
-    #   # Colour positive correlation edges as red
-    #   E(graph)[which(E(graph)$weight>0)]$color <- "darkred"
-    #   # Convert edge weights to absolute values
-    #   E(graph)$weight <- abs(E(graph)$weight)
-    #
-    #   # set grouping variable
-    #   V(graph)$group <- as.numeric(as.factor(metadata[[paste0(gr.by,"N")]]))
-    #   # calculate modularity
-    #   mod_score <- igraph::modularity(graph, V(graph)$group)
-    #
-    #   V(graph)$label <- NA
-    #
-    #   mod.pl <- plot(graph,
-    #                  vertex.color = V(graph)$group,
-    #                  main = "Network with Group Assignments")
-    # }
+    # Combine plots  (TODO NEEDS REWORK) ###############################################
+
+
+    return(results)
+
+  } else {
+
+    return(NULL)
+
   }
-
-
-  # Plot PCA ###############################################
-  results[["PCA"]][["plot"]] <- plot_PCA(matrix,
-                                         color.cluster.by = cluster_labels,
-                                         invisible = invisible)
-
-  # Plot dendrogram  (TODO NEEDS REWORK) ###############################################
-  # pc2 <- pc$x[,1:ndim] %>%
-  #   as.data.frame() %>%
-  #   mutate(celltype = metadata[[df.score[x, 1]]])
-  #
-  # # Calculate the row-wise average grouping by row names
-  # pc2 <- aggregate(. ~ celltype, data = pc2, FUN = mean) %>%
-  #   tibble::column_to_rownames("celltype") %>%
-  #   as.matrix()
-  #
-  # dist_group <- stats::dist(pc2,
-  #                           method = df.score[x, 2])
-  # hclust <- stats::hclust(dist_group,
-  #                         method = hclust.method)
-  # dendo <- ggdendro::ggdendrogram(as.dendrogram(hclust)) +
-  #   ggtitle(paste0("Hierarchical clustering dendrogram - ",
-  #                  hclust.method))
-
-
-  # Combine plots  (TODO NEEDS REWORK) ###############################################
-
-
-  return(results)
 }
 
 ## Pre-process pseudobulk data helpers ##############################################################################
@@ -478,7 +486,6 @@ silhouette_onelabel <- function(labels = NULL, # vector of labels
     stop("Please provide a number for setting seed")
   }
 
-  # browser()
 
   sils <- lapply(
     unique(labels),
