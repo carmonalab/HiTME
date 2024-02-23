@@ -689,6 +689,10 @@ get.celltype.composition <- function(object = NULL,
                                    group.by.1 = group.by.composition[[i]],
                                    useNA = useNA[i])
 
+            # Keep only subtypes with a minimum amount of cells
+            ctable.split <- ctable.split %>%
+              keep( ~ sum(.$cell_counts) >= min.cells.composition)
+
             ctable <- c(ctable.split)
           }
         }
