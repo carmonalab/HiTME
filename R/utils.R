@@ -283,8 +283,8 @@ get.scores <- function(matrix,
 
   results <- list()
 
-  # Check if there are at least 2 or more clusters
-  if (length(unique(cluster_labels)) > 1) {
+  # Check if there are at least 2 or more clusters and that there are more than 2 samples
+  if (length(unique(cluster_labels)) > 1 & length(cluster_labels) > 2) {
     for (s in scores) {
 
       ## Silhouette (TODO add plot and 95% CI) ###############################################
