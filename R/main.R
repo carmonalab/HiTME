@@ -1449,7 +1449,7 @@ get.cluster.score <- function(object = NULL,
                               scores = scores,
                               ntests = ntests,
                               seed = seed,
-                              invisible = pca_sig_labs_invisible)
+                              invisible = pca_pb_labs_invisible)
             return(res)
           } else{
             return(NULL)
