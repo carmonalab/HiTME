@@ -51,6 +51,7 @@ Imports:
   ggdendro (>= 0.1.23),
   methods (>= 4.3.1),
   tibble (>= 3.2.1)
+  rrapply (>= 1.2.6)
 Suggests: 
     knitr,
     rmarkdown,
