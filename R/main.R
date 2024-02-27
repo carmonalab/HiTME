@@ -1152,7 +1152,7 @@ merge.HiTObjects <- function(object = NULL,
 
     layer_present <- rownames(present)[present[,gb]]
 
-
+  browser()
     # Composition
     message("Merging compositions of " , gb, "...")
 
@@ -1244,7 +1244,9 @@ merge.HiTObjects <- function(object = NULL,
     df <- BiocParallel::bplapply(X = layer_present,
                                  BPPARAM = param,
                                  function(x) {
-                                   object[[x]]@aggregated_profile[["Signatures"]][[gb]] %>% mutate(sample = x)
+                                   if (!is.null(object[[x]]@aggregated_profile[["Signatures"]][[gb]])) {
+                                     object[[x]]@aggregated_profile[["Signatures"]][[gb]] %>% mutate(sample = x)
+                                   }
                                  })
     df <- data.table::rbindlist(df, use.names=TRUE, fill=TRUE)
     aggr.signature[[gb]] <- df
