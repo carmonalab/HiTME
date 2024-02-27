@@ -1309,6 +1309,7 @@ merge.HiTObjects <- function(object = NULL,
 get.cluster.score <- function(object = NULL,
                               metadata = NULL,
                               cluster.by = c("condition", "batch"),
+                              batching = NULL,
                               scores = c("Silhouette", "Modularity"),
                               dist.method = "euclidean",
                               hclust.method = "complete",
@@ -1376,53 +1377,119 @@ get.cluster.score <- function(object = NULL,
           column_to_rownames(var = "celltype") %>%
           scale(center = T, scale = F)
 
-        cluster_labels <- metadata %>% filter(sample %in% colnames(mat)) %>% .[[cluster_col]]
+        if (is.null(batching)) {
+          cluster_labels <- metadata %>%
+            filter(sample %in% colnames(mat)) %>%
+            .[[cluster_col]]
 
-        results[[cluster_col]][["composition"]][[layer]] <- get.scores(matrix = mat,
-                                                                       cluster_labels = cluster_labels,
-                                                                       scores = scores,
-                                                                       ntests = ntests,
-                                                                       seed = seed,
-                                                                       invisible = pca_comps_labs_invisible)
+          results[[cluster_col]][["composition"]][[layer]] <-
+            get.scores(matrix = mat,
+                       cluster_labels = cluster_labels,
+                       scores = scores,
+                       ntests = ntests,
+                       seed = seed,
+                       invisible = pca_comps_labs_invisible)
+        } else {
+          for (b_var in batching) {
+            if (b_var != cluster_col) {
+              for (b in unique(metadata[[b_var]])) {
+                meta <- metadata %>%
+                  filter(get(b_var) == b) %>%
+                  filter(sample %in% colnames(mat))
 
-      } else if (is.list(object@composition[[layer]])) {
-        results[[cluster_col]][["composition"]][[layer]] <- BiocParallel::bplapply(
-          X = names(object@composition[[layer]]),
-          BPPARAM = param,
-          function(i){
-            mat <- object@composition[[layer]][[i]][, c("celltype", "clr", "sample"), with = F]
-            mat <- mat %>% tidyr::pivot_wider(names_from = sample, values_from = clr) %>%
-              column_to_rownames(var = "celltype")
+                cluster_labels <- meta[[cluster_col]]
 
-            if (all.concatenated.na.handling == "drop") {
-              mat <- na.omit(mat)
-            }
-            if (all.concatenated.na.handling == "impute") {
-              if (any(is.na(mat))) {
-                # Impute with row min
-                ind <- which(is.na(mat), arr.ind=TRUE)
-                mat[ind] <- MatrixGenerics::rowMins(as.matrix(mat),  na.rm = TRUE)[ind[,1]]
+                m <- mat[ , colnames(mat) %in% meta$sample] %>% scale(center = T, scale = F)
+
+                results[[cluster_col]][["composition"]][[layer]][[b_var]][[b]] <-
+                  get.scores(matrix = m,
+                             cluster_labels = cluster_labels,
+                             scores = scores,
+                             ntests = ntests,
+                             seed = seed,
+                             invisible = pca_comps_labs_invisible)
               }
             }
-
-            mat <- scale(mat, center = T, scale = F)
-
-            cluster_labels <- metadata %>% filter(sample %in% colnames(mat)) %>% .[[cluster_col]]
-
-            if (nrow(mat) > 1) {
-              res <- get.scores(matrix = mat,
-                                cluster_labels = cluster_labels,
-                                scores = scores,
-                                ntests = ntests,
-                                seed = seed,
-                                invisible = pca_comps_labs_invisible)
-              return(res)
-            } else {
-              return(NULL)
-            }
           }
-        )
-        names(results[[cluster_col]][["composition"]][[layer]]) <- names(object@composition[[layer]])
+        }
+
+      } else if (is.list(object@composition[[layer]])) {
+        results[[cluster_col]][["composition"]][[layer]] <-
+          BiocParallel::bplapply(
+            X = names(object@composition[[layer]]),
+            BPPARAM = param,
+            function(i){
+              mat <- object@composition[[layer]][[i]][, c("celltype", "clr", "sample"), with = F]
+              mat <- mat %>%
+                tidyr::pivot_wider(names_from = sample, values_from = clr) %>%
+                column_to_rownames(var = "celltype")
+
+              if (all.concatenated.na.handling == "drop") {
+                mat <- na.omit(mat)
+              }
+              if (all.concatenated.na.handling == "impute") {
+                if (any(is.na(mat))) {
+                  # Impute with row min
+                  ind <- which(is.na(mat), arr.ind=TRUE)
+                  mat[ind] <- MatrixGenerics::rowMins(as.matrix(mat),  na.rm = TRUE)[ind[,1]]
+                }
+              }
+
+              mat <- scale(mat, center = T, scale = F)
+
+              if (is.null(batching)) {
+                cluster_labels <- metadata %>%
+                  filter(sample %in% colnames(mat)) %>%
+                  .[[cluster_col]]
+
+                if (nrow(mat) > 1) {
+                  res <- get.scores(matrix = mat,
+                                    cluster_labels = cluster_labels,
+                                    scores = scores,
+                                    ntests = ntests,
+                                    seed = seed,
+                                    invisible = pca_comps_labs_invisible)
+                  return(res)
+                } else {
+                  return(NULL)
+                }
+
+              } else {
+                res <- list()
+                for (b_var in batching) {
+                  if (b_var != cluster_col) {
+                    for (b in unique(metadata[[b_var]])) {
+                      meta <- metadata %>%
+                        filter(get(b_var) == b) %>%
+                        filter(sample %in% colnames(mat))
+
+                      cluster_labels <- meta[[cluster_col]]
+
+                      m <- mat[ , colnames(mat) %in% meta$sample] %>%
+                        scale(center = T, scale = F)
+
+                      if (nrow(m) > 1) {
+                        res[[b_var]][[b]] <-
+                          get.scores(matrix = m,
+                                     cluster_labels = cluster_labels,
+                                     scores = scores,
+                                     ntests = ntests,
+                                     seed = seed,
+                                     invisible = pca_comps_labs_invisible)
+                      }
+                    }
+                  }
+                }
+                if(length(res) == 0) {
+                  return(NULL)
+                } else {
+                  return(res)
+                }
+              }
+            }
+          )
+        names(results[[cluster_col]][["composition"]][[layer]]) <-
+          names(object@composition[[layer]])
       }
     }
 
@@ -1437,30 +1504,73 @@ get.cluster.score <- function(object = NULL,
         BPPARAM = param,
         function(i){
           mat <- object@aggregated_profile[["Pseudobulk"]][[layer]][[i]]
-          meta <- metadata %>% filter(sample %in% colnames(mat))
+          meta <- metadata %>%
+            filter(sample %in% colnames(mat))
           cluster_labels <- meta[[cluster_col]]
 
-          if (length(unique(cluster_labels)) > 1) {
-            mat <- preproc_pseudobulk(matrix = mat,
-                                      metadata = meta,
-                                      cluster.by = cluster_col,
-                                      nVarGenes = 500,
-                                      gene.filter = "HVG",
-                                      black.list = NULL)
+          if (is.null(batching)) {
+            if (length(unique(cluster_labels)) > 1) {
+              mat <- preproc_pseudobulk(matrix = mat,
+                                        metadata = meta,
+                                        cluster.by = cluster_col,
+                                        nVarGenes = 500,
+                                        gene.filter = "HVG",
+                                        black.list = NULL)
 
-            res <- get.scores(matrix = mat,
-                              cluster_labels = cluster_labels,
-                              scores = scores,
-                              ntests = ntests,
-                              seed = seed,
-                              invisible = pca_pb_labs_invisible)
-            return(res)
-          } else{
-            return(NULL)
+              res <- get.scores(matrix = mat,
+                                cluster_labels = cluster_labels,
+                                scores = scores,
+                                ntests = ntests,
+                                seed = seed,
+                                invisible = pca_pb_labs_invisible)
+              return(res)
+            } else {
+              return(NULL)
+            }
+          } else {
+            res <- list()
+            for (b_var in batching) {
+              if (b_var != cluster_col) {
+                for (b in unique(metadata[[b_var]])) {
+                  met <- metadata %>%
+                    filter(get(b_var) == b) %>%
+                    filter(sample %in% colnames(mat))
+
+                  cluster_labels <- met[[cluster_col]]
+
+                  m <- mat[ , colnames(mat) %in% met$sample]
+
+                  if (length(unique(cluster_labels)) > 1) {
+                    m <- preproc_pseudobulk(matrix = m,
+                                            metadata = met,
+                                            cluster.by = cluster_col,
+                                            nVarGenes = 500,
+                                            gene.filter = "HVG",
+                                            black.list = NULL)
+
+                    if (nrow(m) > 1) {
+                      res[[b_var]][[b]] <-
+                        get.scores(matrix = m,
+                                   cluster_labels = cluster_labels,
+                                   scores = scores,
+                                   ntests = ntests,
+                                   seed = seed,
+                                   invisible = pca_comps_labs_invisible)
+                    }
+                  }
+                }
+              }
+            }
+            if(length(res) == 0) {
+              return(NULL)
+            } else {
+              return(res)
+            }
           }
         }
       )
-      names(results[[cluster_col]][["Pseudobulk"]][[layer]]) <- names(object@aggregated_profile[["Pseudobulk"]][[layer]])
+      names(results[[cluster_col]][["Pseudobulk"]][[layer]]) <-
+        names(object@aggregated_profile[["Pseudobulk"]][[layer]])
     }
 
 
@@ -1490,15 +1600,47 @@ get.cluster.score <- function(object = NULL,
 
           mat <- scale(mat, center = T, scale = F)
 
-          cluster_labels <- metadata %>% filter(sample %in% colnames(mat)) %>% .[[cluster_col]]
+          if (is.null(batching)) {
+            cluster_labels <- metadata %>%
+              filter(sample %in% colnames(mat)) %>%
+              .[[cluster_col]]
 
-          res <- get.scores(matrix = mat,
-                            cluster_labels = cluster_labels,
-                            scores = scores,
-                            ntests = ntests,
-                            invisible = pca_sig_labs_invisible,
-                            seed = seed)
-          return(res)
+            res <- get.scores(matrix = mat,
+                              cluster_labels = cluster_labels,
+                              scores = scores,
+                              ntests = ntests,
+                              invisible = pca_sig_labs_invisible,
+                              seed = seed)
+            return(res)
+          } else {
+            res <- list()
+            for (b_var in batching) {
+              if (b_var != cluster_col) {
+                for (b in unique(metadata[[b_var]])) {
+                  meta <- metadata %>%
+                    filter(get(b_var) == b) %>%
+                    filter(sample %in% colnames(mat))
+
+                  cluster_labels <- meta[[cluster_col]]
+
+                  m <- mat[ , colnames(mat) %in% meta$sample] %>% scale(center = T, scale = F)
+
+                  res[[b_var]][[b]] <-
+                    get.scores(matrix = m,
+                               cluster_labels = cluster_labels,
+                               scores = scores,
+                               ntests = ntests,
+                               seed = seed,
+                               invisible = pca_sig_labs_invisible)
+                }
+              }
+            }
+            if(length(res) == 0) {
+              return(NULL)
+            } else {
+              return(res)
+            }
+          }
         }
       )
       names(results[[cluster_col]][["Signatures"]][[layer]]) <- signatures

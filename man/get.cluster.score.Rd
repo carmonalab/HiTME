@@ -8,6 +8,7 @@ get.cluster.score(
   object = NULL,
   metadata = NULL,
   cluster.by = c("condition", "batch"),
+  batching = NULL,
   scores = c("Silhouette", "Modularity"),
   dist.method = "euclidean",
   hclust.method = "complete",
