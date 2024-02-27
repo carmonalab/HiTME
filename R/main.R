@@ -1269,6 +1269,7 @@ merge.HiTObjects <- function(object = NULL,
 #' @param object A Hit class object obtained with \link{get.HiTObject} or pseudobulk raw count matrix (\code{HitObject@aggregated_profile$Pseudobulk$layer1})
 #' @param metadata Metadata data frame corresponding for each sample in the pseudobulk matrix. Row names in this dataframe should be identical as the colnames of the count matrix. If not provided (\code{NULL}) metadata will be extracted from HiT object provided.
 #' @param cluster.by Vector indicating the variable for clustering, default is celltype (for the annotation) and sample
+#' @param batching Vector indicating the variable for batching to allow calculating scores per batch, to account for batch effect
 #' @param score Score to compute clustering of samples based on cell type prediction, either Silhoutte or modularity.
 #' @param dist.method Method to compute distance between celltypes, default is euclidean.
 #' @param hclust.method Hierarchical clustering method for hclust. Options are: "single", "complete", "average" (= UPGMA), "mcquitty" (= WPGMA), "median" (= WPGMC) or "centroid" (= UPGMC). (See hclust package for details)
@@ -1578,72 +1579,74 @@ get.cluster.score <- function(object = NULL,
     message("Processing Signatures")
     comp_layers <- names(object@aggregated_profile[["Signatures"]])
 
-    for (layer in comp_layers) {
-      cols <- colnames(object@aggregated_profile[["Signatures"]][[layer]])
-      signatures <- cols[2:(length(cols) - 1)]
+    if (!is.null(comp_layers)) {
+      for (layer in comp_layers) {
+        cols <- colnames(object@aggregated_profile[["Signatures"]][[layer]])
+        signatures <- cols[2:(length(cols) - 1)]
 
-      results[[cluster_col]][["Signatures"]][[layer]] <- BiocParallel::bplapply(
-        X = signatures,
-        BPPARAM = param,
-        function(i){
-          mat <- object@aggregated_profile[["Signatures"]][[layer]][, c("celltype", i, "sample"), with = F]
-          mat <- mat %>%
-            tidyr::pivot_wider(names_from = sample, values_from = i) %>%
-            column_to_rownames(var = "celltype")
+        results[[cluster_col]][["Signatures"]][[layer]] <- BiocParallel::bplapply(
+          X = signatures,
+          BPPARAM = param,
+          function(i){
+            mat <- object@aggregated_profile[["Signatures"]][[layer]][, c("celltype", i, "sample"), with = F]
+            mat <- mat %>%
+              tidyr::pivot_wider(names_from = sample, values_from = i) %>%
+              column_to_rownames(var = "celltype")
 
-          if (all.concatenated.na.handling == "drop") {
-            mat <- na.omit(mat)
-          }
-          if (all.concatenated.na.handling == "impute") {
-            mat[is.na(mat)] <- 0
-          }
+            if (all.concatenated.na.handling == "drop") {
+              mat <- na.omit(mat)
+            }
+            if (all.concatenated.na.handling == "impute") {
+              mat[is.na(mat)] <- 0
+            }
 
-          mat <- scale(mat, center = T, scale = F)
+            mat <- scale(mat, center = T, scale = F)
 
-          if (is.null(batching)) {
-            cluster_labels <- metadata %>%
-              filter(sample %in% colnames(mat)) %>%
-              .[[cluster_col]]
+            if (is.null(batching)) {
+              cluster_labels <- metadata %>%
+                filter(sample %in% colnames(mat)) %>%
+                .[[cluster_col]]
 
-            res <- get.scores(matrix = mat,
-                              cluster_labels = cluster_labels,
-                              scores = scores,
-                              ntests = ntests,
-                              invisible = pca_sig_labs_invisible,
-                              seed = seed)
-            return(res)
-          } else {
-            res <- list()
-            for (b_var in batching) {
-              if (b_var != cluster_col) {
-                for (b in unique(metadata[[b_var]])) {
-                  meta <- metadata %>%
-                    filter(get(b_var) == b) %>%
-                    filter(sample %in% colnames(mat))
+              res <- get.scores(matrix = mat,
+                                cluster_labels = cluster_labels,
+                                scores = scores,
+                                ntests = ntests,
+                                invisible = pca_sig_labs_invisible,
+                                seed = seed)
+              return(res)
+            } else {
+              res <- list()
+              for (b_var in batching) {
+                if (b_var != cluster_col) {
+                  for (b in unique(metadata[[b_var]])) {
+                    meta <- metadata %>%
+                      filter(get(b_var) == b) %>%
+                      filter(sample %in% colnames(mat))
 
-                  cluster_labels <- meta[[cluster_col]]
+                    cluster_labels <- meta[[cluster_col]]
 
-                  m <- mat[ , colnames(mat) %in% meta$sample] %>% scale(center = T, scale = F)
+                    m <- mat[ , colnames(mat) %in% meta$sample] %>% scale(center = T, scale = F)
 
-                  res[[b_var]][[b]] <-
-                    get.scores(matrix = m,
-                               cluster_labels = cluster_labels,
-                               scores = scores,
-                               ntests = ntests,
-                               seed = seed,
-                               invisible = pca_sig_labs_invisible)
+                    res[[b_var]][[b]] <-
+                      get.scores(matrix = m,
+                                 cluster_labels = cluster_labels,
+                                 scores = scores,
+                                 ntests = ntests,
+                                 seed = seed,
+                                 invisible = pca_sig_labs_invisible)
+                  }
                 }
               }
-            }
-            if(length(res) == 0) {
-              return(NULL)
-            } else {
-              return(res)
+              if(length(res) == 0) {
+                return(NULL)
+              } else {
+                return(res)
+              }
             }
           }
-        }
-      )
-      names(results[[cluster_col]][["Signatures"]][[layer]]) <- signatures
+        )
+        names(results[[cluster_col]][["Signatures"]][[layer]]) <- signatures
+      }
     }
   }
 
