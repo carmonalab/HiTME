@@ -1152,7 +1152,6 @@ merge.HiTObjects <- function(object = NULL,
 
     layer_present <- rownames(present)[present[,gb]]
 
-  browser()
     # Composition
     message("Merging compositions of " , gb, "...")
 
