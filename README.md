@@ -16,7 +16,7 @@ remotes::install_github("carmonalab/HiTME")
 
 # Cell type annotation
 
-**HiTME's is an R package that combines [scGate](https://github.com/carmonalab/scGate) and [ProjecTILs](https://github.com/carmonalab/ProjecTILs) to classify cell types in single-cell RNA-seq data at high resolution and with great flexibility and transparency.**
+**HiTME is an R package that combines [scGate](https://github.com/carmonalab/scGate) and [ProjecTILs](https://github.com/carmonalab/ProjecTILs) to classify cell types in single-cell RNA-seq data at high resolution and with large flexibility (e.g. easy to include new cell types).**
 
 The function takes as input `Seurat` objects (or list of them). These should be split by sample to avoid batch effects, or split internally in `Run.HitME` by indicating the parameter `split.by`.
 
@@ -126,7 +126,7 @@ The Hit object summarize the cell type annotation and contain the following slot
 
     3.2. frequency
 
-    3.3. CLR (Central log ratio)-transformed frequency
+    3.3. CLR (Centred log ratio)-transformed counts (useful for downstream analyses such as PCA/[Logratio analysis](https://doi.org/10.1146/annurev-statistics-042720-124436) )
 
 4.  Aggregated profile of predicted cell types: `aggregated_profile`. Including:
 
