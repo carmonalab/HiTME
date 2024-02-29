@@ -288,7 +288,7 @@ get.scores <- function(matrix,
     for (s in scores) {
 
       ## Silhouette (TODO add plot and 95% CI) ###############################################
-      if (s == "Silhouette") {
+      if (s == "Silhouette_isolated") {
         results[[s]] <- silhouette_onelabel(labels = cluster_labels,
                                             dist = dist(t(matrix)),
                                             ntests = ntests,
@@ -301,6 +301,64 @@ get.scores <- function(matrix,
                 axis.ticks.x=element_blank()) +
           ggtitle(paste("Average silhouette width = ", round(mean(results[[s]]$summary$avg_sil_width), 3)))
       }
+
+      if(s == "Silhouette"){
+        silh <- cluster::silhouette(x= as.numeric(factor(metadata[[gr.by]])),
+                                    dist = dist(t(matrix)))
+
+        silh<- as.data.frame(silh) %>%
+          mutate(celltype = metadata[[gr.by]])
+
+        whole.mean <- mean(silh$sil_width)
+
+        summary <- silh %>%
+          dplyr::group_by(celltype) %>%
+          summarize(avg_sil_score = mean(sil_width))
+
+        results[[s]] <- list(cell = silh,
+                             summary = summary,
+                             average = whole.mean)
+      }
+
+      if(s == "Modularity"){
+        # transform to network the distance
+        # set number of neighbors (k)
+        if(unique(metadata[[gr.by]])>=10){
+          g <- scran::buildKNNGraph(matrix,
+                                    transposed = T,
+                                    k = 10)
+
+          mship <- as.numeric(factor(metadata[[gr.by]]))
+          whole.mean <- igraph::modularity(g,
+                                           membership = mship)
+
+          # Loop through each unique group membership
+          for (i in unique(mship)) {
+            # Extract the subset of group memberships for the current group
+            subset_memberships <- which(mship == i)
+
+            # Calculate modularity for the subset of nodes
+            subset_modularity <- igraph::modularity(subgraph(g, subset_memberships),
+                                                    membership = mship[subset_memberships])
+
+            # Store the modularity score for the current group
+            sample_modularity_scores[i] <- subset_modularity
+          }
+
+          results[[s]] <- list(cell = NA,
+                               summary = data.farme(celltype = unique(metadata[[gr.by]]),
+                                                    modularity_score = sample_modularity_scores
+                                                    )
+                               )
+
+          summary <- NA
+        } else {
+          warning("too few samples to run modularity score\n")
+          results[[s]] <- NULL
+        }
+      }
+
+
 
       # Plot  and add 95% CI ###############################################
       # plot of bootstraping
