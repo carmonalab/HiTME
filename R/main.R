@@ -11,6 +11,7 @@
 #' @param group.by If return.Seurat = F, variables to be used to summarize HiTME classification data in HiT object. See \link{get.HiTObject} for more information.
 #' @param useNA Whether to include not annotated cells or not (labelled as "NA" in the group.by.composition) when summarizing into HiT object. Can be "no", "ifany", or "always". See \code{?table} and \link{get.celltype.composition} for more information. Default is "ifany".
 #' @param remerge When setting split.by, if remerge = TRUE one object will be returned. If remerge = FALSE a list of objects will be returned.
+#' @param species Define species used for to get correct gene signature list with SignatuR
 #' @param ncores The number of cores to use, by default all available cores minus 2 are used.
 #' @param bparam A \code{BiocParallel::bpparam()} object that tells Run.HiTME how to parallelize. If provided, it overrides the `ncores` parameter.
 #' @param progressbar Whether to show a progressbar or not
@@ -35,7 +36,7 @@
 #' path_data <- file.path("~", "Dropbox", "CSI", "Standardized_SingleCell_Datasets", "ZhangY_2022_34653365", "output", "test")
 #'
 #' # Define scGate model
-#' scGate_models_DB <- scGate::get_scGateDB(branch = "master", verbose = T, force_update = TRUE)
+#' scGate_models_DB <- scGate::get_scGateDB(branch = "master", verbose = TRUE, force_update = TRUE)
 #' models.TME <- scGate_models_DB$human$TME_HiRes
 #'
 #' # Load ProjecTILs reference maps
@@ -520,12 +521,12 @@ get.HiTObject <- function(object,
 #' @param split.by A Seurat object metadata column to split by (e.g. sample names)
 #' @param min.cells.composition Set a minimum threshold for number of cells to calculate relative abundance (e.g. less than 10 cells -> no relative abundance will be calculated)
 #' @param useNA Whether to include not annotated cells or not (labelled as "NA" in the group.by.composition). Can be defined separately for each group.by.composition (provide single boolean or vector of booleans)
-#' @param layers_link Named vector indicating the relation of multiple layer classification, default is \code{c("scGate_multi", "functional.cluster")}. Name of the vector element ought to be layer1 and element layer2. This parameter is used to compute relative compositional data of layer2 within layer1 classes.
+#' @param layers_links Named vector indicating the relation of multiple layer classification, default is \code{c("scGate_multi", "functional.cluster")}. Name of the vector element ought to be layer1 and element layer2. This parameter is used to compute relative compositional data of layer2 within layer1 classes.
 #' @param clr_zero_impute_perc To calculate the clr-transformed relative abundance ("clr_freq"), zero values are not allowed and need to be imputed (e.g. by adding a pseudo cell count). Instead of adding a pseudo cell count of flat +1, here a pseudo cell count of +1% of the total cell count will be added to all cell types, to better take into consideration the relative abundance ratios (e.g. adding +1 cell to a total cell count of 10 cells would have a different, i.e. much larger effect, than adding +1 to 1000 cells).
 #' @param layer1_link Column of metadata linking layer1 prediction (e.g. scGate ~ CellOntology_ID) in order to perform subsetting for second layer classification.
 
 #' @importFrom Hotelling clr
-#' @importFrom dplyr group_by summarize filter ungroup mutate select left_join n coalesce bind_rows
+#' @importFrom dplyr group_by summarize filter ungroup mutate select left_join n coalesce bind_rows across all_of
 #' @importFrom tidyr pivot_wider
 #' @importFrom tibble column_to_rownames rownames_to_column
 #' @importFrom rrapply rrapply
@@ -1271,10 +1272,15 @@ merge.HiTObjects <- function(object = NULL,
 #' @param metadata Metadata data frame corresponding for each sample in the pseudobulk matrix. Row names in this dataframe should be identical as the colnames of the count matrix. If not provided (\code{NULL}) metadata will be extracted from HiT object provided.
 #' @param cluster.by Vector indicating the variable for clustering, default is celltype (for the annotation) and sample
 #' @param batching Vector indicating the variable for batching to allow calculating scores per batch, to account for batch effect
-#' @param score Score to compute clustering of samples based on cell type prediction, either Silhoutte or modularity.
+#' @param scores Scores to compute clustering of samples based on cell type prediction.
 #' @param dist.method Method to compute distance between celltypes, default is euclidean.
 #' @param hclust.method Hierarchical clustering method for hclust. Options are: "single", "complete", "average" (= UPGMA), "mcquitty" (= WPGMA), "median" (= WPGMC) or "centroid" (= UPGMC). (See hclust package for details)
 #' @param all.concatenated.na.handling How to handle missing values in the "all cell types concatenated vector". Options are "drop" (drop rows, conservative method) or "zero_impute" (replaces missing values with zeros, use with caution as it might change your sample clustering based on number of missing values per sample/group)
+#' @param ntests Number of shuffling events to calculate p-value for silhouette score
+#' @param seed Set seed for random shuffling events to calculate p-value for silhouette score
+#' @param pca_comps_labs_invisible Parameter to pass to fviz_pca defining which labels to plot for composition PCA, see documentation of fviz_pca for details.
+#' @param pca_pb_labs_invisible Parameter to pass to fviz_pca defining which labels to plot for pseudobulk PCA, see documentation of fviz_pca for details.
+#' @param pca_sig_labs_invisible Parameter to pass to fviz_pca defining which labels to plot for signatures PCA, see documentation of fviz_pca for details.
 #' @param ndim Number of dimensions to be use for PCA clustering metrics. Default is 10.
 #' @param nVarGenes Number of variable genes to assess samples. Default is 500.
 #' @param gene.filter Named list of genes to subset their aggregated expression. Default is \code{"HVG"} or \code{NULL} would indicate "Highly variable genes", number of genes can be set at \code{nVarGenes}. If "default_filter" is indicated transcription factor (GO:0003700), cytokines (GO:0005125), cytokine receptors (GO:0004896), chemokines (GO:0008009), and chemokines receptors (GO:0004950) are subsetted out of the total genes and accounted for. For additional GO accession gene list you may use the function \link{getGOList} to fetch them from biomaRt.
@@ -1299,9 +1305,11 @@ merge.HiTObjects <- function(object = NULL,
 #' @importFrom BiocGenerics counts
 #' @importFrom ggdendro ggdendrogram
 #' @importFrom stringr str_to_title
-#' @importFrom stats prcomp
+#' @importFrom stats prcomp na.omit formula
 #' @importFrom factoextra fviz_pca
 #' @importFrom tidyr pivot_wider
+#' @importFrom scran buildKNNGraph
+#' @importFrom igraph modularity
 
 #' @return Metrics of cell types pseudobulk clustering
 #' @export get.cluster.score
@@ -1312,7 +1320,7 @@ get.cluster.score <- function(object = NULL,
                               metadata = NULL,
                               cluster.by = c("condition", "batch"),
                               batching = NULL,
-                              scores = c("Silhouette", "Modularity"),
+                              scores = c("Silhouette_isolated", "Silhouette", "Modularity"),
                               dist.method = "euclidean",
                               hclust.method = "complete",
                               all.concatenated.na.handling = "impute",
@@ -1375,23 +1383,23 @@ get.cluster.score <- function(object = NULL,
         mat <- object@composition[[layer]][, c("celltype", "clr", "sample"), with = F]
         mat <- mat %>%
           tidyr::pivot_wider(names_from = sample, values_from = clr) %>%
-          na.omit() %>%
+          stats::na.omit() %>%
           column_to_rownames(var = "celltype") %>%
           scale(center = T, scale = F)
 
-        if (is.null(batching)) {
-          cluster_labels <- metadata %>%
-            filter(sample %in% colnames(mat)) %>%
-            .[[cluster_col]]
+        cluster_labels <- metadata %>%
+          filter(sample %in% colnames(mat)) %>%
+          .[[cluster_col]]
 
-          results[[cluster_col]][["composition"]][[layer]] <-
-            get.scores(matrix = mat,
-                       cluster_labels = cluster_labels,
-                       scores = scores,
-                       ntests = ntests,
-                       seed = seed,
-                       invisible = pca_comps_labs_invisible)
-        } else {
+        results[[cluster_col]][["composition"]][[layer]] <-
+          get.scores(matrix = mat,
+                     cluster_labels = cluster_labels,
+                     scores = scores,
+                     ntests = ntests,
+                     seed = seed,
+                     invisible = pca_comps_labs_invisible)
+
+        if (!is.null(batching))  {
           for (b_var in batching) {
             if (b_var != cluster_col) {
               for (b in unique(metadata[[b_var]])) {
@@ -1427,7 +1435,7 @@ get.cluster.score <- function(object = NULL,
                 column_to_rownames(var = "celltype")
 
               if (all.concatenated.na.handling == "drop") {
-                mat <- na.omit(mat)
+                mat <- stats::na.omit(mat)
               }
               if (all.concatenated.na.handling == "impute") {
                 if (any(is.na(mat))) {
@@ -1439,24 +1447,23 @@ get.cluster.score <- function(object = NULL,
 
               mat <- scale(mat, center = T, scale = F)
 
-              if (is.null(batching)) {
-                cluster_labels <- metadata %>%
-                  filter(sample %in% colnames(mat)) %>%
-                  .[[cluster_col]]
+              cluster_labels <- metadata %>%
+                filter(sample %in% colnames(mat)) %>%
+                .[[cluster_col]]
 
-                if (nrow(mat) > 1) {
-                  res <- get.scores(matrix = mat,
-                                    cluster_labels = cluster_labels,
-                                    scores = scores,
-                                    ntests = ntests,
-                                    seed = seed,
-                                    invisible = pca_comps_labs_invisible)
-                  return(res)
-                } else {
-                  return(NULL)
-                }
-
+              if (nrow(mat) > 1) {
+                res <- get.scores(matrix = mat,
+                                  cluster_labels = cluster_labels,
+                                  scores = scores,
+                                  ntests = ntests,
+                                  seed = seed,
+                                  invisible = pca_comps_labs_invisible)
+                return(res)
               } else {
+                return(NULL)
+              }
+
+              if (!is.null(batching)) {
                 res <- list()
                 for (b_var in batching) {
                   if (b_var != cluster_col) {
@@ -1510,26 +1517,26 @@ get.cluster.score <- function(object = NULL,
             filter(sample %in% colnames(mat))
           cluster_labels <- meta[[cluster_col]]
 
-          if (is.null(batching)) {
-            if (length(unique(cluster_labels)) > 1) {
-              mat <- preproc_pseudobulk(matrix = mat,
-                                        metadata = meta,
-                                        cluster.by = cluster_col,
-                                        nVarGenes = 500,
-                                        gene.filter = "HVG",
-                                        black.list = NULL)
+          if (length(unique(cluster_labels)) > 1) {
+            mat <- preproc_pseudobulk(matrix = mat,
+                                      metadata = meta,
+                                      cluster.by = cluster_col,
+                                      nVarGenes = 500,
+                                      gene.filter = "HVG",
+                                      black.list = NULL)
 
-              res <- get.scores(matrix = mat,
-                                cluster_labels = cluster_labels,
-                                scores = scores,
-                                ntests = ntests,
-                                seed = seed,
-                                invisible = pca_pb_labs_invisible)
-              return(res)
-            } else {
-              return(NULL)
-            }
+            res <- get.scores(matrix = mat,
+                              cluster_labels = cluster_labels,
+                              scores = scores,
+                              ntests = ntests,
+                              seed = seed,
+                              invisible = pca_pb_labs_invisible)
+            return(res)
           } else {
+            return(NULL)
+          }
+
+          if (!is.null(batching)) {
             res <- list()
             for (b_var in batching) {
               if (b_var != cluster_col) {
@@ -1595,7 +1602,7 @@ get.cluster.score <- function(object = NULL,
               column_to_rownames(var = "celltype")
 
             if (all.concatenated.na.handling == "drop") {
-              mat <- na.omit(mat)
+              mat <- stats::na.omit(mat)
             }
             if (all.concatenated.na.handling == "impute") {
               mat[is.na(mat)] <- 0
@@ -1603,19 +1610,19 @@ get.cluster.score <- function(object = NULL,
 
             mat <- scale(mat, center = T, scale = F)
 
-            if (is.null(batching)) {
-              cluster_labels <- metadata %>%
-                filter(sample %in% colnames(mat)) %>%
-                .[[cluster_col]]
+            cluster_labels <- metadata %>%
+              filter(sample %in% colnames(mat)) %>%
+              .[[cluster_col]]
 
-              res <- get.scores(matrix = mat,
-                                cluster_labels = cluster_labels,
-                                scores = scores,
-                                ntests = ntests,
-                                invisible = pca_sig_labs_invisible,
-                                seed = seed)
-              return(res)
-            } else {
+            res <- get.scores(matrix = mat,
+                              cluster_labels = cluster_labels,
+                              scores = scores,
+                              ntests = ntests,
+                              invisible = pca_sig_labs_invisible,
+                              seed = seed)
+            return(res)
+
+            if (!is.null(batching)) {
               res <- list()
               for (b_var in batching) {
                 if (b_var != cluster_col) {

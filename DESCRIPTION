@@ -25,7 +25,7 @@ RoxygenNote: 7.3.1
 VignetteBuilder: knitr
 URL: https://github.com/carmonalab/HiTME
 BugReports: https://github.com/carmonalab/HiTME/issues
-License: 
+License: GPL-3
 LazyData: true
 biocViews:
 Depends: R (>= 4.3.1)
@@ -51,7 +51,13 @@ Imports:
   ggdendro (>= 0.1.23),
   methods (>= 4.3.1),
   tibble (>= 3.2.1),
-  rrapply (>= 1.2.6)
+  rrapply (>= 1.2.6),
+  scran(>= 1.30.2),
+  igraph(>= 2.0.2),
+  BiocGenerics(>= 0.48.1),
+  factoextra(>= 1.0.7),
+  ggpubr(>= 0.6.0),
+  tidyr(>= 1.3.1)
 Suggests: 
     knitr,
     rmarkdown,

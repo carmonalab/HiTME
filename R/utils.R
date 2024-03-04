@@ -212,7 +212,7 @@ compositional_data <- function(data,
 
   ctable <- data %>%
     # drop = F keeps all levels of the factor
-    dplyr::group_by(across(all_of(gr_vars)), .drop = F) %>%
+    dplyr::group_by(dplyr::across(dplyr::all_of(gr_vars)), .drop = F) %>%
     dplyr::summarize(cell_counts = dplyr::n()) %>%
     dplyr::ungroup()
 
@@ -480,13 +480,13 @@ DESeq2.normalize <- function(matrix,
 
   # Get black list
   if (is.null(black.list)) {
-    data("default_black_list")
+    utils::data("default_black_list")
   }
   black.list <- unlist(black.list)
 
   # Normalize pseudobulk data using DESeq2
   # do formula for design with the cluster.by elements in order
-  dformula <- formula(paste("~", cluster.by))
+  dformula <-  stats::formula(paste("~", cluster.by))
   dds <- DESeq2::DESeqDataSetFromMatrix(countData = matrix,
                                         colData = metadata,
                                         design = dformula)
