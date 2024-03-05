@@ -280,84 +280,119 @@ get.scores <- function(matrix,
                        bparam = NULL,
                        progressbar = TRUE) {
 
+  matrix <- t(matrix)
 
+  plot_list <- list()
   results <- list()
 
   # Check if there are at least 2 or more clusters and that there are more than 2 samples
   if (length(unique(cluster_labels)) > 1 & length(cluster_labels) > 2) {
+
     for (s in scores) {
+
+      # Plot PCA ###############################################
+      p <- plot_PCA(matrix,
+                    color.cluster.by = cluster_labels,
+                    invisible = invisible)
+      plot_list[["PCA"]] <- p
+      results[["PCA"]] <- p
 
       ## Silhouette (TODO add plot and 95% CI) ###############################################
       if (s == "Silhouette_isolated") {
         results[[s]] <- silhouette_onelabel(labels = cluster_labels,
-                                            dist = dist(t(matrix)),
+                                            dist = dist(matrix),
                                             ntests = ntests,
                                             seed = seed)
 
-        score_plot <- ggplot(results[[s]]$cell, aes(fill = cluster, y = sil_width, x = rowid)) +
-          geom_bar(position="dodge", stat="identity")+
-          theme(axis.title.x=element_blank(),
-                axis.text.x=element_blank(),
-                axis.ticks.x=element_blank()) +
-          ggtitle(paste("Average silhouette width = ", round(mean(results[[s]]$summary$avg_sil_width), 3)))
+        p <- ggplot(results[[s]][["samples"]],
+                    aes(x = rowid,
+                        y = sil_width,
+                        fill = group)) +
+          geom_bar(position = "dodge", stat = "identity") +
+          theme(axis.title.x = element_blank(),
+                axis.text.x = element_blank(),
+                axis.ticks.x = element_blank()) +
+          ggtitle(paste("Silhouette (isolated) plot
+                        \nAverage silhouette width (average samples) = ",
+                        round(mean(results[[s]][["samples"]][["sil_width"]]), 3),
+                        "\nAverage silhouette width (average groups) = ",
+                        round(mean(results[[s]][["avg_per_group"]][["avg_sil_width"]]), 3)))
+
+        plot_list[[s]] <- p
+        results[[s]][["plot"]] <- p
       }
 
-      if(s == "Silhouette"){
-        silh <- cluster::silhouette(x= as.numeric(factor(metadata[[gr.by]])),
-                                    dist = dist(t(matrix)))
+      if (s == "Silhouette") {
+        silh <- cluster::silhouette(x = as.numeric(factor(cluster_labels)),
+                                    dist = dist(matrix))
 
-        silh<- as.data.frame(silh) %>%
-          mutate(celltype = metadata[[gr.by]])
+        silh <- as.data.frame(silh) %>%
+          dplyr::rename(group = cluster) %>%
+          dplyr::mutate(group = cluster_labels) %>%
+          dplyr::group_by(group) %>%
+          dplyr::arrange(dplyr::desc(sil_width), .by_group = TRUE) %>%
+          dplyr::ungroup()
 
-        whole.mean <- mean(silh$sil_width)
+        # order silhouette width per cell type
+        silh <- silh %>%
+          dplyr::mutate(rowid = dplyr::row_number())
 
-        summary <- silh %>%
-          dplyr::group_by(celltype) %>%
-          summarize(avg_sil_score = mean(sil_width))
+        avg_per_group <- silh %>%
+          dplyr::group_by(group) %>%
+          summarize(avg_sil_width = mean(sil_width))
 
-        results[[s]] <- list(cell = silh,
-                             summary = summary,
-                             average = whole.mean)
+        p <- ggplot(silh,
+                    aes(x = rowid,
+                        y = sil_width,
+                        fill = group)) +
+          geom_bar(position = "dodge", stat = "identity") +
+          theme(axis.title.x = element_blank(),
+                axis.text.x = element_blank(),
+                axis.ticks.x = element_blank()) +
+          ggtitle(paste("Silhouette plot
+                        \nAverage silhouette width (average samples) = ",
+                        round(mean(silh[["sil_width"]]), 3),
+                        "\nAverage silhouette width (average groups) = ",
+                        round(mean(avg_per_group[["avg_sil_width"]]), 3)))
+
+        plot_list[[s]] <- p
+        results[[s]] <- list("samples" = silh,
+                             "avg_per_group" = avg_per_group,
+                             "summary" = list("avg_samples" = mean(silh[["sil_width"]]),
+                                              "avg_group" = mean(avg_per_group[["avg_sil_width"]])))
       }
 
-      if(s == "Modularity"){
+      if (s == "Modularity") {
         # transform to network the distance
-        # set number of neighbors (k)
-        if(unique(metadata[[gr.by]])>=10){
+        if (length(cluster_labels) >= 5) {
+
+          # Set number of neighbors (k)
+          n <- nrow(matrix)
+          n_sqrt <- floor(sqrt(n))
+          k <- ifelse(n_sqrt < 3, 3, n_sqrt)
+
           g <- scran::buildKNNGraph(matrix,
                                     transposed = T,
-                                    k = 10)
+                                    k = k)
 
-          mship <- as.numeric(factor(metadata[[gr.by]]))
-          whole.mean <- igraph::modularity(g,
-                                           membership = mship)
+          # Calculate modularity score
+          modularity_score <- igraph::modularity(g, membership = as.numeric(cluster_labels))
 
-          # Loop through each unique group membership
-          for (i in unique(mship)) {
-            # Extract the subset of group memberships for the current group
-            subset_memberships <- which(mship == i)
+          # Plotting the graph
+          g <- igraph::set_vertex_attr(g, "name", value = cluster_labels)
+          g <- igraph::set_vertex_attr(g, "cluster_labels", value = cluster_labels)
 
-            # Calculate modularity for the subset of nodes
-            subset_modularity <- igraph::modularity(subgraph(g, subset_memberships),
-                                                    membership = mship[subset_memberships])
+          plist <- plot_modularity(g, title = paste("KNN plot with k = ", k, "\nModularity score = ", round(modularity_score, 3)))
 
-            # Store the modularity score for the current group
-            sample_modularity_scores[i] <- subset_modularity
-          }
-
-          results[[s]] <- list(cell = NA,
-                               summary = data.farme(celltype = unique(metadata[[gr.by]]),
-                                                    modularity_score = sample_modularity_scores
-                                                    )
-                               )
-
-          summary <- NA
+          plot_list[[s]] <- plist[[2]]
+          results[[s]] <- list("igraph" = g,
+                               "plot" = plist[[1]],
+                               "summary" = modularity_score)
         } else {
           warning("too few samples to run modularity score\n")
           results[[s]] <- NULL
         }
       }
-
 
 
       # Plot  and add 95% CI ###############################################
@@ -378,47 +413,7 @@ get.scores <- function(matrix,
       #                                 lty = 2, show.legend = T)
       #             ggplot2::geom_vline(xintercept = quantile(cof_before[,2], c(0.05,0.95))[1],
       #                            color = "Bootstrap"), lty = 2, show.legend = T)
-
-
-      ## Modularity (TODO NEEDS REWORK) ###############################################
-      # if (s == "Modularity") {
-      #   message("Computing Modularity score")
-      #   # transform to network the distance
-      #   graph <- graph.adjacency(
-      #     as.matrix(as.dist(cor(matrix,
-      #                           method = "pearson"))),
-      #     mode = "undirected",
-      #     weighted = TRUE,
-      #     diag = FALSE
-      #   )
-      #   # simplify graph
-      #   graph <- simplify(graph, remove.multiple = TRUE, remove.loops = TRUE)
-      #
-      #   # Colour negative correlation edges as blue
-      #   E(graph)[which(E(graph)$weight<0)]$color <- "darkblue"
-      #   # Colour positive correlation edges as red
-      #   E(graph)[which(E(graph)$weight>0)]$color <- "darkred"
-      #   # Convert edge weights to absolute values
-      #   E(graph)$weight <- abs(E(graph)$weight)
-      #
-      #   # set grouping variable
-      #   V(graph)$group <- as.numeric(as.factor(metadata[[paste0(gr.by,"N")]]))
-      #   # calculate modularity
-      #   mod_score <- igraph::modularity(graph, V(graph)$group)
-      #
-      #   V(graph)$label <- NA
-      #
-      #   mod.pl <- plot(graph,
-      #                  vertex.color = V(graph)$group,
-      #                  main = "Network with Group Assignments")
-      # }
     }
-
-
-    # Plot PCA ###############################################
-    results[["PCA"]][["plot"]] <- plot_PCA(matrix,
-                                           color.cluster.by = cluster_labels,
-                                           invisible = invisible)
 
     # Plot dendrogram  (TODO NEEDS REWORK) ###############################################
     # pc2 <- pc$x[,1:ndim] %>%
@@ -440,6 +435,8 @@ get.scores <- function(matrix,
 
 
     # Combine plots  (TODO NEEDS REWORK) ###############################################
+    results[["Summary_plot"]] <- cowplot::plot_grid(plotlist = plot_list, labels = 'AUTO')
+
 
 
     return(results)
@@ -510,7 +507,7 @@ DESeq2.normalize <- function(matrix,
 
   } else if (gene.filter == "default_filter") {
     # get predetermined list of genes
-    data("GO_accession_default")
+    utils::data("GO_accession_default")
     select <- GO_default
   }
 
@@ -518,6 +515,8 @@ DESeq2.normalize <- function(matrix,
 
   return(vsd)
 }
+
+
 
 
 ## Calculate silhouette score helpers ##############################################################################
@@ -558,12 +557,12 @@ silhouette_onelabel <- function(labels = NULL, # vector of labels
       sil_clus1 <- as.data.frame(sil) %>%
         dplyr::filter(cluster == 1) %>%
         dplyr::mutate(cluster = a) %>%
-        arrange(desc(sil_width))
+        dplyr::arrange(dplyr::desc(sil_width))
 
 
       size <- nrow(sil_clus1)
 
-      sil.sumA <- data.frame(cluster = a,
+      sil.sumA <- data.frame(group = a,
                              iteration = "NO",
                              size = size,
                              avg_sil_width = mean(sil_clus1$sil_width))
@@ -592,7 +591,7 @@ silhouette_onelabel <- function(labels = NULL, # vector of labels
           sil.res <- as.data.frame(sil) %>%
             dplyr::filter(cluster == 1)
 
-          sil.sumB <- data.frame(cluster = a,
+          sil.sumB <- data.frame(group = a,
                                  iteration = u,
                                  size = size,
                                  avg_sil_width = mean(sil.res$sil_width))
@@ -618,26 +617,27 @@ silhouette_onelabel <- function(labels = NULL, # vector of labels
 
       }
 
-      return(list("cell" = sil_clus1, # silhouette score for each sample
-                  "summary" = sil.sumA))
+      return(list("samples" = sil_clus1, # silhouette score for each sample
+                  "avg_per_group" = sil.sumA))
     }
   )
 
   # join results
-  sil.all <- lapply(sils, function(x) {x[["cell"]]}) %>%
-    data.table::rbindlist()
-
-  sil.sum <- lapply(sils, function(x) {x[["summary"]]}) %>%
-    data.table::rbindlist()
-
-
-  # order silhoute width per cell type
-  sil.all <- sil.all %>%
+  sil.all <- lapply(sils, function(x) {x[["samples"]]}) %>%
+    data.table::rbindlist() %>%
+    dplyr::rename(group = cluster) %>%
+    dplyr::group_by(group) %>%
+    dplyr::arrange(dplyr::desc(sil_width), .by_group = TRUE) %>%
+    dplyr::ungroup() %>%
     dplyr::mutate(rowid = dplyr::row_number())
 
+  sil.sum <- lapply(sils, function(x) {x[["avg_per_group"]]}) %>%
+    data.table::rbindlist()
 
-  ret.list <- list("clusters" = sil.all,
-                   "summary" = sil.sum)
+  ret.list <- list("samples" = sil.all,
+                   "avg_per_group" = sil.sum,
+                   "summary" = list("avg_samples" = mean(sil.all[["sil_width"]]),
+                                    "avg_group" = mean(sil.sum[["avg_sil_width"]])))
 
   return(ret.list)
 }
@@ -716,12 +716,12 @@ p.val_zscore <- function(obs = NULL,
 
 
 
-## Plot PCA helper ##############################################################################
+## Plot helpers for get.scores ##############################################################################
 
 plot_PCA <- function(matrix,
                      invisible = c("var", "quali"),
                      color.cluster.by = "none") {
-  res.pca <- stats::prcomp(t(matrix))
+  res.pca <- stats::prcomp(matrix)
   p <- factoextra::fviz_pca(res.pca,
                             habillage = color.cluster.by,
                             label = "var",
@@ -729,3 +729,34 @@ plot_PCA <- function(matrix,
                             invisible = invisible)
   return(p)
 }
+
+
+plot_modularity <- function(igraph,
+                            title) {
+  plist <- list()
+  plot(igraph,
+       layout = igraph::layout_nicely(igraph),
+       main = title,
+       vertex.size = 5,
+       edge.color = "grey",
+       edge.width = 1,
+       vertex.label.dist = 2,
+       vertex.color = as.factor(igraph::V(igraph)$cluster_labels),
+       vertex.label.cex = 0.8)
+  plist[[1]] <- recordPlot()
+
+  plist[[2]] <- ggplotify::base2grob(
+    ~plot(igraph,
+          layout = igraph::layout_nicely(igraph),
+          main = title,
+          vertex.size = 5,
+          edge.color = "grey",
+          edge.width = 1,
+          vertex.label.dist = 2,
+          vertex.color = as.factor(igraph::V(igraph)$cluster_labels),
+          vertex.label.cex = 0.8)
+  )
+
+  return(plist)
+}
+
