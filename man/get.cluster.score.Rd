@@ -9,7 +9,7 @@ get.cluster.score(
   metadata = NULL,
   cluster.by = c("condition", "batch"),
   batching = NULL,
-  scores = c("Silhouette", "Modularity"),
+  scores = c("Silhouette_isolated", "Silhouette", "Modularity"),
   dist.method = "euclidean",
   hclust.method = "complete",
   all.concatenated.na.handling = "impute",
@@ -34,11 +34,25 @@ get.cluster.score(
 
 \item{cluster.by}{Vector indicating the variable for clustering, default is celltype (for the annotation) and sample}
 
+\item{batching}{Vector indicating the variable for batching to allow calculating scores per batch, to account for batch effect}
+
+\item{scores}{Scores to compute clustering of samples based on cell type prediction.}
+
 \item{dist.method}{Method to compute distance between celltypes, default is euclidean.}
 
 \item{hclust.method}{Hierarchical clustering method for hclust. Options are: "single", "complete", "average" (= UPGMA), "mcquitty" (= WPGMA), "median" (= WPGMC) or "centroid" (= UPGMC). (See hclust package for details)}
 
 \item{all.concatenated.na.handling}{How to handle missing values in the "all cell types concatenated vector". Options are "drop" (drop rows, conservative method) or "zero_impute" (replaces missing values with zeros, use with caution as it might change your sample clustering based on number of missing values per sample/group)}
+
+\item{ntests}{Number of shuffling events to calculate p-value for silhouette score}
+
+\item{seed}{Set seed for random shuffling events to calculate p-value for silhouette score}
+
+\item{pca_comps_labs_invisible}{Parameter to pass to fviz_pca defining which labels to plot for composition PCA, see documentation of fviz_pca for details.}
+
+\item{pca_pb_labs_invisible}{Parameter to pass to fviz_pca defining which labels to plot for pseudobulk PCA, see documentation of fviz_pca for details.}
+
+\item{pca_sig_labs_invisible}{Parameter to pass to fviz_pca defining which labels to plot for signatures PCA, see documentation of fviz_pca for details.}
 
 \item{ndim}{Number of dimensions to be use for PCA clustering metrics. Default is 10.}
 
@@ -53,8 +67,6 @@ get.cluster.score(
 \item{bparam}{A \code{BiocParallel::bpparam()} object that tells how to parallelize. If provided, it overrides the \code{ncores} parameter.}
 
 \item{progressbar}{Whether to show a progressbar or not}
-
-\item{score}{Score to compute clustering of samples based on cell type prediction, either Silhoutte or modularity.}
 }
 \value{
 Metrics of cell types pseudobulk clustering
