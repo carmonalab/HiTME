@@ -1309,7 +1309,9 @@ merge.HiTObjects <- function(object = NULL,
 #' @importFrom factoextra fviz_pca
 #' @importFrom tidyr pivot_wider
 #' @importFrom scran buildKNNGraph
-#' @importFrom igraph modularity
+#' @importFrom igraph modularity set_vertex_attr layout_nicely V
+#' @importFrom cowplot plot_grid
+#' @importFrom ggplotify base2grob
 
 #' @return Metrics of cell types pseudobulk clustering
 #' @export get.cluster.score
