@@ -25,7 +25,7 @@ RoxygenNote: 7.3.1
 VignetteBuilder: knitr
 URL: https://github.com/carmonalab/HiTME
 BugReports: https://github.com/carmonalab/HiTME/issues
-License: GPL-3
+License: 
 LazyData: true
 biocViews:
 Depends: R (>= 4.3.1)
