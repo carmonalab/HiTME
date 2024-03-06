@@ -304,19 +304,20 @@ get.scores <- function(matrix,
                                             ntests = ntests,
                                             seed = seed)
 
-        p <- ggplot(results[[s]][["samples"]],
-                    aes(x = rowid,
-                        y = sil_width,
-                        fill = group)) +
-          geom_bar(position = "dodge", stat = "identity") +
-          theme(axis.title.x = element_blank(),
-                axis.text.x = element_blank(),
-                axis.ticks.x = element_blank()) +
-          ggtitle(paste("Silhouette (isolated) plot
+        p <- ggplot2::ggplot(results[[s]][["samples"]],
+                             ggplot2::aes(x = rowid,
+                                          y = sil_width,
+                                          fill = group)) +
+          ggplot2::geom_bar(position = "dodge", stat = "identity") +
+          ggplot2::theme(axis.title.x = ggplot2::element_blank(),
+                axis.text.x = ggplot2::element_blank(),
+                axis.ticks.x = ggplot2::element_blank()) +
+          ggplot2::ggtitle(paste("Silhouette (isolated) plot
                         \nAverage silhouette width (average samples) = ",
                         round(mean(results[[s]][["samples"]][["sil_width"]]), 3),
                         "\nAverage silhouette width (average groups) = ",
-                        round(mean(results[[s]][["avg_per_group"]][["avg_sil_width"]]), 3)))
+                        round(mean(results[[s]][["avg_per_group"]][["avg_sil_width"]]), 3))) +
+          ggplot2::labs(fill = "Groups")
 
         plot_list[[s]] <- p
         results[[s]][["plot"]] <- p
@@ -341,39 +342,38 @@ get.scores <- function(matrix,
           dplyr::group_by(group) %>%
           summarize(avg_sil_width = mean(sil_width))
 
-        p <- ggplot(silh,
-                    aes(x = rowid,
-                        y = sil_width,
-                        fill = group)) +
-          geom_bar(position = "dodge", stat = "identity") +
-          theme(axis.title.x = element_blank(),
-                axis.text.x = element_blank(),
-                axis.ticks.x = element_blank()) +
-          ggtitle(paste("Silhouette plot
+        p <- ggplot2::ggplot(silh,
+                             ggplot2::aes(x = rowid,
+                                          y = sil_width,
+                                          fill = group)) +
+          ggplot2::geom_bar(position = "dodge", stat = "identity") +
+          ggplot2::theme(axis.title.x = ggplot2::element_blank(),
+                axis.text.x = ggplot2::element_blank(),
+                axis.ticks.x = ggplot2::element_blank()) +
+          ggplot2::ggtitle(paste("Silhouette plot
                         \nAverage silhouette width (average samples) = ",
                         round(mean(silh[["sil_width"]]), 3),
                         "\nAverage silhouette width (average groups) = ",
-                        round(mean(avg_per_group[["avg_sil_width"]]), 3)))
+                        round(mean(avg_per_group[["avg_sil_width"]]), 3))) +
+          ggplot2::labs(fill = "Groups")
 
         plot_list[[s]] <- p
         results[[s]] <- list("samples" = silh,
                              "avg_per_group" = avg_per_group,
                              "summary" = list("avg_samples" = mean(silh[["sil_width"]]),
-                                              "avg_group" = mean(avg_per_group[["avg_sil_width"]])))
+                                              "avg_group" = mean(avg_per_group[["avg_sil_width"]])),
+                             "plot" = p)
       }
 
       if (s == "Modularity") {
         # transform to network the distance
         if (length(cluster_labels) >= 5) {
 
-          # Set number of neighbors (k)
-          n <- nrow(matrix)
-          n_sqrt <- floor(sqrt(n))
-          k <- ifelse(n_sqrt < 3, 3, n_sqrt)
-
+          # A low number of k = 3 neighbors was chosen to better account for the case if
+          # one group's number of samples << other group(s)'s number of samples
           g <- scran::buildKNNGraph(matrix,
                                     transposed = T,
-                                    k = k)
+                                    k = 3)
 
           # Calculate modularity score
           modularity_score <- igraph::modularity(g, membership = as.numeric(cluster_labels))
@@ -382,18 +382,24 @@ get.scores <- function(matrix,
           g <- igraph::set_vertex_attr(g, "name", value = cluster_labels)
           g <- igraph::set_vertex_attr(g, "cluster_labels", value = cluster_labels)
 
-          plist <- plot_modularity(g, title = paste("KNN plot with k = ", k, "\nModularity score = ", round(modularity_score, 3)))
+          p <- ggraph::ggraph(g, layout = 'stress') +
+            ggraph::geom_edge_link(color = "grey", edge_width = 0.2) +
+            ggraph::geom_node_point(ggplot2::aes(fill = as.factor(names(igraph::V(g)))),
+                                    shape = 21, color = "black", size = 5) +
+            ggplot2::ggtitle(paste("KNN plot with k = ", k,
+                                   "\nModularity score = ", round(modularity_score, 3))) +
+            ggplot2::labs(fill = "Groups") +
+            ggplot2::theme(panel.background = element_rect(fill = "white"))
 
-          plot_list[[s]] <- plist[[2]]
+          plot_list[[s]] <- p
           results[[s]] <- list("igraph" = g,
-                               "plot" = plist[[1]],
-                               "summary" = modularity_score)
+                               "summary" = modularity_score,
+                               "plot" = p)
         } else {
           warning("too few samples to run modularity score\n")
           results[[s]] <- NULL
         }
       }
-
 
       # Plot  and add 95% CI ###############################################
       # plot of bootstraping
@@ -435,7 +441,7 @@ get.scores <- function(matrix,
 
 
     # Combine plots  (TODO NEEDS REWORK) ###############################################
-    results[["Summary_plot"]] <- cowplot::plot_grid(plotlist = plot_list, labels = 'AUTO')
+    results[["Summary_plot"]] <- cowplot::plot_grid(plotlist = plot_list)
 
 
 
@@ -729,34 +735,3 @@ plot_PCA <- function(matrix,
                             invisible = invisible)
   return(p)
 }
-
-
-plot_modularity <- function(igraph,
-                            title) {
-  plist <- list()
-  plot(igraph,
-       layout = igraph::layout_nicely(igraph),
-       main = title,
-       vertex.size = 5,
-       edge.color = "grey",
-       edge.width = 1,
-       vertex.label.dist = 2,
-       vertex.color = as.factor(igraph::V(igraph)$cluster_labels),
-       vertex.label.cex = 0.8)
-  plist[[1]] <- recordPlot()
-
-  plist[[2]] <- ggplotify::base2grob(
-    ~plot(igraph,
-          layout = igraph::layout_nicely(igraph),
-          main = title,
-          vertex.size = 5,
-          edge.color = "grey",
-          edge.width = 1,
-          vertex.label.dist = 2,
-          vertex.color = as.factor(igraph::V(igraph)$cluster_labels),
-          vertex.label.cex = 0.8)
-  )
-
-  return(plist)
-}
-

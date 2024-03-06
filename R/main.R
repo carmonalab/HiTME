@@ -1311,7 +1311,7 @@ merge.HiTObjects <- function(object = NULL,
 #' @importFrom scran buildKNNGraph
 #' @importFrom igraph modularity set_vertex_attr layout_nicely V
 #' @importFrom cowplot plot_grid
-#' @importFrom ggplotify base2grob
+#' @importFrom ggraph ggraph geom_edge_link geom_node_point
 
 #' @return Metrics of cell types pseudobulk clustering
 #' @export get.cluster.score
@@ -1389,17 +1389,19 @@ get.cluster.score <- function(object = NULL,
           column_to_rownames(var = "celltype") %>%
           scale(center = T, scale = F)
 
-        cluster_labels <- metadata %>%
-          filter(sample %in% colnames(mat)) %>%
-          .[[cluster_col]]
+        if (is.null(batching))  {
+          cluster_labels <- metadata %>%
+            filter(sample %in% colnames(mat)) %>%
+            .[[cluster_col]]
 
-        results[[cluster_col]][["composition"]][[layer]] <-
-          get.scores(matrix = mat,
-                     cluster_labels = cluster_labels,
-                     scores = scores,
-                     ntests = ntests,
-                     seed = seed,
-                     invisible = pca_comps_labs_invisible)
+          results[[cluster_col]][["composition"]][[layer]] <-
+            get.scores(matrix = mat,
+                       cluster_labels = cluster_labels,
+                       scores = scores,
+                       ntests = ntests,
+                       seed = seed,
+                       invisible = pca_comps_labs_invisible)
+        }
 
         if (!is.null(batching))  {
           for (b_var in batching) {
@@ -1449,20 +1451,22 @@ get.cluster.score <- function(object = NULL,
 
               mat <- scale(mat, center = T, scale = F)
 
-              cluster_labels <- metadata %>%
-                filter(sample %in% colnames(mat)) %>%
-                .[[cluster_col]]
+              if (is.null(batching))  {
+                cluster_labels <- metadata %>%
+                  filter(sample %in% colnames(mat)) %>%
+                  .[[cluster_col]]
 
-              if (nrow(mat) > 1) {
-                res <- get.scores(matrix = mat,
-                                  cluster_labels = cluster_labels,
-                                  scores = scores,
-                                  ntests = ntests,
-                                  seed = seed,
-                                  invisible = pca_comps_labs_invisible)
-                return(res)
-              } else {
-                return(NULL)
+                if (nrow(mat) > 1) {
+                  res <- get.scores(matrix = mat,
+                                    cluster_labels = cluster_labels,
+                                    scores = scores,
+                                    ntests = ntests,
+                                    seed = seed,
+                                    invisible = pca_comps_labs_invisible)
+                  return(res)
+                } else {
+                  return(NULL)
+                }
               }
 
               if (!is.null(batching)) {
@@ -1519,23 +1523,25 @@ get.cluster.score <- function(object = NULL,
             filter(sample %in% colnames(mat))
           cluster_labels <- meta[[cluster_col]]
 
-          if (length(unique(cluster_labels)) > 1) {
-            mat <- preproc_pseudobulk(matrix = mat,
-                                      metadata = meta,
-                                      cluster.by = cluster_col,
-                                      nVarGenes = 500,
-                                      gene.filter = "HVG",
-                                      black.list = NULL)
+          if (is.null(batching))  {
+            if (length(unique(cluster_labels)) > 1) {
+              mat <- preproc_pseudobulk(matrix = mat,
+                                        metadata = meta,
+                                        cluster.by = cluster_col,
+                                        nVarGenes = 500,
+                                        gene.filter = "HVG",
+                                        black.list = NULL)
 
-            res <- get.scores(matrix = mat,
-                              cluster_labels = cluster_labels,
-                              scores = scores,
-                              ntests = ntests,
-                              seed = seed,
-                              invisible = pca_pb_labs_invisible)
-            return(res)
-          } else {
-            return(NULL)
+              res <- get.scores(matrix = mat,
+                                cluster_labels = cluster_labels,
+                                scores = scores,
+                                ntests = ntests,
+                                seed = seed,
+                                invisible = pca_pb_labs_invisible)
+              return(res)
+            } else {
+              return(NULL)
+            }
           }
 
           if (!is.null(batching)) {
@@ -1612,17 +1618,19 @@ get.cluster.score <- function(object = NULL,
 
             mat <- scale(mat, center = T, scale = F)
 
-            cluster_labels <- metadata %>%
-              filter(sample %in% colnames(mat)) %>%
-              .[[cluster_col]]
+            if (is.null(batching))  {
+              cluster_labels <- metadata %>%
+                filter(sample %in% colnames(mat)) %>%
+                .[[cluster_col]]
 
-            res <- get.scores(matrix = mat,
-                              cluster_labels = cluster_labels,
-                              scores = scores,
-                              ntests = ntests,
-                              invisible = pca_sig_labs_invisible,
-                              seed = seed)
-            return(res)
+              res <- get.scores(matrix = mat,
+                                cluster_labels = cluster_labels,
+                                scores = scores,
+                                ntests = ntests,
+                                invisible = pca_sig_labs_invisible,
+                                seed = seed)
+              return(res)
+            }
 
             if (!is.null(batching)) {
               res <- list()
@@ -1662,6 +1670,55 @@ get.cluster.score <- function(object = NULL,
 
 
   return(results)
+}
+
+
+
+
+#' Get average silhouette scores per grouping variable and plot heat map
+#'
+#' @param scores A scores object from get.cluster.scores
+#' @param plot_show Boolean whether to show a plot or not
+
+#' @return Average silhouette widths per grouping variable. Optionally, a heatmap plot for visualization
+#' @export scores.get.avgsils
+#'
+
+
+scores.get.avgsils <- function(scores = NULL,
+                               plot_show = TRUE) {
+
+  if (is.null(scores)) {
+    message("Please provide scores")
+  }
+
+  s <- unlist(scores)
+
+  sils <- s[grep("\\.sil_width", names(s))]
+
+  res <- data.frame()
+  elems <- unique(gsub("\\.clusters.*", "", names(sils)))
+  for (e in elems) {
+    res[e, "Silhouette"] <- mean(unlist(sils[grepl(e, names(sils))]))
+    res[e, "Number_of_samples"] <- length((unlist(sils[grepl(e, names(sils))])))
+  }
+
+  plot_row_labels <- gsub("\\.Silhouette", "", rownames(res))
+  plot_row_labels <- paste0(plot_row_labels, " (n = ", res[["Number_of_samples"]], ")")
+  res_plot <- res %>% select(Silhouette)
+  rownames(res_plot) <- plot_row_labels
+  p <- pheatmap::pheatmap(res_plot,
+                          angle_col = 45,
+                          scale = "column",
+                          display_numbers = round(res_plot, 2), number_color = "black",
+                          legend_breaks = 0, legend_labels = "",
+                          cluster_cols = F, cluster_rows = F)
+
+  if (plot_show) {
+    print(p)
+  }
+
+  return(res)
 }
 
 
