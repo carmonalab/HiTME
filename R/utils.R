@@ -371,9 +371,10 @@ get.scores <- function(matrix,
 
           # A low number of k = 3 neighbors was chosen to better account for the case if
           # one group's number of samples << other group(s)'s number of samples
+          k <- 3
           g <- scran::buildKNNGraph(matrix,
                                     transposed = T,
-                                    k = 3)
+                                    k = k)
 
           # Calculate modularity score
           modularity_score <- igraph::modularity(g, membership = as.numeric(cluster_labels))
