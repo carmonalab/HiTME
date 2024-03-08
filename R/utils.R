@@ -282,7 +282,6 @@ get.scores <- function(matrix,
 
   matrix <- t(matrix)
 
-  plot_list <- list()
   results <- list()
 
   # Check if there are at least 2 or more clusters and that there are more than 2 samples
@@ -291,20 +290,21 @@ get.scores <- function(matrix,
     for (s in scores) {
 
       # Plot PCA ###############################################
-      p <- plot_PCA(matrix,
-                    color.cluster.by = cluster_labels,
-                    invisible = invisible)
-      plot_list[["PCA"]] <- p
-      results[["PCA"]] <- p
+      results[["Plots"]][["PCA"]] <- plot_PCA(matrix,
+                                              color.cluster.by = cluster_labels,
+                                              invisible = invisible)
+
 
       ## Silhouette (TODO add plot and 95% CI) ###############################################
       if (s == "Silhouette_isolated") {
-        results[[s]] <- silhouette_onelabel(labels = cluster_labels,
-                                            dist = dist(matrix),
-                                            ntests = ntests,
-                                            seed = seed)
+        results[["Scores"]][[s]] <- silhouette_onelabel(
+          labels = cluster_labels,
+          dist = dist(matrix),
+          ntests = ntests,
+          seed = seed
+          )
 
-        p <- ggplot2::ggplot(results[[s]][["samples"]],
+        p <- ggplot2::ggplot(results[["Scores"]][[s]][["samples"]],
                              ggplot2::aes(x = rowid,
                                           y = sil_width,
                                           fill = group)) +
@@ -313,14 +313,11 @@ get.scores <- function(matrix,
                 axis.text.x = ggplot2::element_blank(),
                 axis.ticks.x = ggplot2::element_blank()) +
           ggplot2::ggtitle(paste("Silhouette (isolated) plot
-                        \nAverage silhouette width (average samples) = ",
-                        round(mean(results[[s]][["samples"]][["sil_width"]]), 3),
-                        "\nAverage silhouette width (average groups) = ",
-                        round(mean(results[[s]][["avg_per_group"]][["avg_sil_width"]]), 3))) +
+                        \nAverage silhouette width = ",
+                        round(results[["Scores"]][[s]][["summary"]], 3))) +
           ggplot2::labs(fill = "Groups")
 
-        plot_list[[s]] <- p
-        results[[s]][["plot"]] <- p
+        results[["Plots"]][[s]] <- p
       }
 
       if (s == "Silhouette") {
@@ -342,6 +339,12 @@ get.scores <- function(matrix,
           dplyr::group_by(group) %>%
           summarize(avg_sil_width = mean(sil_width))
 
+        results[["Scores"]][[s]] <- list(
+          "samples" = silh,
+          "avg_per_group" = avg_per_group,
+          "summary" = mean(silh[["sil_width"]])
+        )
+
         p <- ggplot2::ggplot(silh,
                              ggplot2::aes(x = rowid,
                                           y = sil_width,
@@ -352,17 +355,10 @@ get.scores <- function(matrix,
                 axis.ticks.x = ggplot2::element_blank()) +
           ggplot2::ggtitle(paste("Silhouette plot
                         \nAverage silhouette width (average samples) = ",
-                        round(mean(silh[["sil_width"]]), 3),
-                        "\nAverage silhouette width (average groups) = ",
-                        round(mean(avg_per_group[["avg_sil_width"]]), 3))) +
+                        round(results[["Scores"]][[s]][["summary"]], 3))) +
           ggplot2::labs(fill = "Groups")
 
-        plot_list[[s]] <- p
-        results[[s]] <- list("samples" = silh,
-                             "avg_per_group" = avg_per_group,
-                             "summary" = list("avg_samples" = mean(silh[["sil_width"]]),
-                                              "avg_group" = mean(avg_per_group[["avg_sil_width"]])),
-                             "plot" = p)
+        results[["Plots"]][[s]] <- p
       }
 
       if (s == "Modularity") {
@@ -381,9 +377,13 @@ get.scores <- function(matrix,
 
           # Plotting the graph
           g <- igraph::set_vertex_attr(g, "name", value = cluster_labels)
-          g <- igraph::set_vertex_attr(g, "cluster_labels", value = cluster_labels)
 
-          p <- ggraph::ggraph(g, layout = 'stress') +
+          results[["Scores"]][[s]] <- list("igraph" = g,
+                                           "summary" = modularity_score)
+
+          # Using ggraph layout = "kk" instead of default "stress",
+          # as "kk" handles disconnected communities much better (showing them separately, instead of fur balling them like "stress")
+          p <- ggraph::ggraph(g, layout = 'kk') +
             ggraph::geom_edge_link(color = "grey", edge_width = 0.2) +
             ggraph::geom_node_point(ggplot2::aes(fill = as.factor(names(igraph::V(g)))),
                                     shape = 21, color = "black", size = 5) +
@@ -392,10 +392,7 @@ get.scores <- function(matrix,
             ggplot2::labs(fill = "Groups") +
             ggplot2::theme(panel.background = element_rect(fill = "white"))
 
-          plot_list[[s]] <- p
-          results[[s]] <- list("igraph" = g,
-                               "summary" = modularity_score,
-                               "plot" = p)
+          results[["Plots"]][[s]] <- p
         } else {
           warning("too few samples to run modularity score\n")
           results[[s]] <- NULL
@@ -441,8 +438,8 @@ get.scores <- function(matrix,
     #                  hclust.method))
 
 
-    # Combine plots  (TODO NEEDS REWORK) ###############################################
-    results[["Summary_plot"]] <- cowplot::plot_grid(plotlist = plot_list)
+    # Combine plots ###############################################
+    results[["Plots"]][["Summary_plot"]] <- cowplot::plot_grid(plotlist = results[["Plots"]])
 
 
 
@@ -643,8 +640,7 @@ silhouette_onelabel <- function(labels = NULL, # vector of labels
 
   ret.list <- list("samples" = sil.all,
                    "avg_per_group" = sil.sum,
-                   "summary" = list("avg_samples" = mean(sil.all[["sil_width"]]),
-                                    "avg_group" = mean(sil.sum[["avg_sil_width"]])))
+                   "summary" = mean(sil.all[["sil_width"]]))
 
   return(ret.list)
 }

@@ -1406,6 +1406,7 @@ get.cluster.score <- function(object = NULL,
         if (!is.null(batching))  {
           for (b_var in batching) {
             if (b_var != cluster_col) {
+              b_var_res_summary <- list()
               for (b in unique(metadata[[b_var]])) {
                 meta <- metadata %>%
                   filter(get(b_var) == b) %>%
@@ -1422,7 +1423,18 @@ get.cluster.score <- function(object = NULL,
                              ntests = ntests,
                              seed = seed,
                              invisible = pca_comps_labs_invisible)
+                for (score in scores) {
+                  b_var_res_summary[[score]] <- c(
+                    b_var_res_summary[[score]],
+                    results[[cluster_col]][["composition"]][[layer]][[b_var]][[b]][["Scores"]][[score]][["summary"]])
+                }
               }
+
+              for (score in scores) {
+                b_var_res_summary[[score]] <-
+                  mean(b_var_res_summary[[score]])
+              }
+              results[[cluster_col]][["composition"]][[layer]][[b_var]][["all"]][["Scores"]] <- b_var_res_summary
             }
           }
         }
@@ -1473,6 +1485,7 @@ get.cluster.score <- function(object = NULL,
                 res <- list()
                 for (b_var in batching) {
                   if (b_var != cluster_col) {
+                    b_var_res_summary <- list()
                     for (b in unique(metadata[[b_var]])) {
                       meta <- metadata %>%
                         filter(get(b_var) == b) %>%
@@ -1481,7 +1494,7 @@ get.cluster.score <- function(object = NULL,
                       cluster_labels <- meta[[cluster_col]]
 
                       m <- mat[ , colnames(mat) %in% meta$sample] %>%
-                        scale(center = T, scale = F)
+                        scale(center = TRUE, scale = FALSE)
 
                       if (nrow(m) > 1) {
                         res[[b_var]][[b]] <-
@@ -1492,7 +1505,19 @@ get.cluster.score <- function(object = NULL,
                                      seed = seed,
                                      invisible = pca_comps_labs_invisible)
                       }
+
+                      for (score in scores) {
+                        b_var_res_summary[[score]] <- c(
+                          b_var_res_summary[[score]],
+                          res[[b_var]][[b]][["Scores"]][[score]][["summary"]])
+                      }
                     }
+
+                    for (score in scores) {
+                      b_var_res_summary[[score]] <-
+                        mean(b_var_res_summary[[score]])
+                    }
+                    res[[b_var]][["all"]][["Scores"]] <- b_var_res_summary
                   }
                 }
                 if(length(res) == 0) {
@@ -1548,6 +1573,7 @@ get.cluster.score <- function(object = NULL,
             res <- list()
             for (b_var in batching) {
               if (b_var != cluster_col) {
+                b_var_res_summary <- list()
                 for (b in unique(metadata[[b_var]])) {
                   met <- metadata %>%
                     filter(get(b_var) == b) %>%
@@ -1572,10 +1598,21 @@ get.cluster.score <- function(object = NULL,
                                    scores = scores,
                                    ntests = ntests,
                                    seed = seed,
-                                   invisible = pca_comps_labs_invisible)
+                                   invisible = pca_pb_labs_invisible)
                     }
                   }
+                  for (score in scores) {
+                    b_var_res_summary[[score]] <- c(
+                      b_var_res_summary[[score]],
+                      res[[b_var]][[b]][["Scores"]][[score]][["summary"]])
+                  }
                 }
+
+                for (score in scores) {
+                  b_var_res_summary[[score]] <-
+                    mean(b_var_res_summary[[score]])
+                }
+                res[[b_var]][["all"]][["Scores"]] <- b_var_res_summary
               }
             }
             if(length(res) == 0) {
@@ -1616,7 +1653,7 @@ get.cluster.score <- function(object = NULL,
               mat[is.na(mat)] <- 0
             }
 
-            mat <- scale(mat, center = T, scale = F)
+            mat <- scale(mat, center = TRUE, scale = TRUE)
 
             if (is.null(batching))  {
               cluster_labels <- metadata %>%
@@ -1636,6 +1673,7 @@ get.cluster.score <- function(object = NULL,
               res <- list()
               for (b_var in batching) {
                 if (b_var != cluster_col) {
+                  b_var_res_summary <- list()
                   for (b in unique(metadata[[b_var]])) {
                     meta <- metadata %>%
                       filter(get(b_var) == b) %>%
@@ -1643,7 +1681,7 @@ get.cluster.score <- function(object = NULL,
 
                     cluster_labels <- meta[[cluster_col]]
 
-                    m <- mat[ , colnames(mat) %in% meta$sample] %>% scale(center = T, scale = F)
+                    m <- mat[ , colnames(mat) %in% meta$sample] %>% scale(center = TRUE, scale = TRUE)
 
                     res[[b_var]][[b]] <-
                       get.scores(matrix = m,
@@ -1652,7 +1690,18 @@ get.cluster.score <- function(object = NULL,
                                  ntests = ntests,
                                  seed = seed,
                                  invisible = pca_sig_labs_invisible)
+                    for (score in scores) {
+                      b_var_res_summary[[score]] <- c(
+                        b_var_res_summary[[score]],
+                        res[[b_var]][[b]][["Scores"]][[score]][["summary"]])
+                    }
                   }
+
+                  for (score in scores) {
+                    b_var_res_summary[[score]] <-
+                      mean(b_var_res_summary[[score]])
+                  }
+                  res[[b_var]][["all"]][["Scores"]] <- b_var_res_summary
                 }
               }
               if(length(res) == 0) {
