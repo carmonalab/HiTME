@@ -284,8 +284,12 @@ get.scores <- function(matrix,
 
   results <- list()
 
-  # Check if there are at least 2 or more clusters and that there are more than 2 samples
-  if (length(unique(cluster_labels)) > 1 & length(cluster_labels) > 2) {
+  # Check if there are at least 2 clusters,
+  # that there are more than 2 samples and
+  # that there are more samples than clusters (not each sample is one separate cluster)
+  if (length(unique(cluster_labels)) > 1 &
+      length(cluster_labels) > 2 &
+      nrow(matrix) > length(unique(cluster_labels))) {
 
     for (s in scores) {
 
@@ -394,8 +398,7 @@ get.scores <- function(matrix,
 
           results[["Plots"]][[s]] <- p
         } else {
-          warning("too few samples to run modularity score\n")
-          results[[s]] <- NULL
+          message("too few samples to run modularity score\n")
         }
       }
 
