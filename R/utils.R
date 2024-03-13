@@ -725,10 +725,15 @@ plot_PCA <- function(matrix,
                      invisible = c("var", "quali"),
                      color.cluster.by = "none") {
   res.pca <- stats::prcomp(matrix)
-  p <- factoextra::fviz_pca(res.pca,
-                            habillage = color.cluster.by,
-                            label = "var",
-                            pointsize = 3,
-                            invisible = invisible)
+  suppressMessages(
+    p <- factoextra::fviz_pca(res.pca,
+                              habillage = color.cluster.by,
+                              label = "var",
+                              pointsize = 3,
+                              invisible = invisible) +
+      # Remove shapes added by fviz_pca
+      scale_shape_manual(values=c(rep(19,length(unique(color.cluster.by)))))
+  )
+
   return(p)
 }
