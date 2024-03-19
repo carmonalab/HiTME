@@ -901,6 +901,17 @@ get.aggregated.signature <- function(object,
     add.sig.cols <- grep(paste(name.additional.signatures, collapse = "|"),
                          names(meta.data), value = T)
 
+    if (length(add.sig.cols) > name.additional.signatures) {
+      for (i in name.additional.signatures) {
+        if (sum(grep(i, names(meta.data))) > 1) {
+          meta_cols <- names(meta.data)[grep(i, names(meta.data))]
+          message(paste("Signatue", i, "was found in multiple metadata columns:", meta_cols))
+        }
+      }
+      stop("The name of at least one signature provided was found in multiple metadata columns.
+           Please give them a more unique name, e.g. by appending '_signature' to the name")
+    }
+
     aggr.sig <- list()
 
     for (e in names(group.by.aggregated)) {
