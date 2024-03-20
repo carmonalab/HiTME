@@ -13,7 +13,7 @@ get.cluster.score(
   dist.method = "euclidean",
   hclust.method = "complete",
   all.concatenated.na.handling = "impute",
-  ntests = 0,
+  ntests = 100,
   seed = 22,
   pca_comps_labs_invisible = c("quali"),
   pca_pb_labs_invisible = c("var", "quali"),
@@ -28,7 +28,7 @@ get.cluster.score(
 )
 }
 \arguments{
-\item{object}{A Hit class object obtained with \link{get.HiTObject} or pseudobulk raw count matrix (\code{HitObject@aggregated_profile$Pseudobulk$layer1})}
+\item{object}{A Hit class object obtained with \link{get.HiTObject} or pseudobulk raw count matrix (\code{HitObject@aggregated_profile$pseudobulk$layer1})}
 
 \item{metadata}{Metadata data frame corresponding for each sample in the pseudobulk matrix. Row names in this dataframe should be identical as the colnames of the count matrix. If not provided (\code{NULL}) metadata will be extracted from HiT object provided.}
 

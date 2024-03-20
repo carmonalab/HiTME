@@ -506,8 +506,8 @@ get.HiTObject <- function(object,
   hit <- methods::new("HiT",
                       metadata = object@meta.data,
                       predictions = pred.list,
-                      aggregated_profile = list("Pseudobulk" = avg.expr,
-                                                "Signatures" = aggr.signature),
+                      aggregated_profile = list("pseudobulk" = avg.expr,
+                                                "signatures" = aggr.signature),
                       composition = comp.prop
   )
   return(hit)
@@ -1079,8 +1079,8 @@ merge.HiTObjects <- function(object = NULL,
   # fetch which layers are included in all HiT objects
   layers_in_hit <- lapply(object, function(x) {
     a <- names(x@composition)
-    b <- names(x@aggregated_profile$Pseudobulk)
-    c <- names(x@aggregated_profile$Signatures)
+    b <- names(x@aggregated_profile$pseudobulk)
+    c <- names(x@aggregated_profile$signatures)
     u <- unique(c(a,b,c))
     return(u)
   })
@@ -1167,14 +1167,16 @@ merge.HiTObjects <- function(object = NULL,
     # Composition
     message("Merging compositions of " , gb, "...")
 
+    type <- "composition"
+
     # assess that all HiT objects in the list contain the composition data for that layer
     is_df_check <- object[layer_present] %>%
-      lapply(slot, name = "composition") %>%
+      lapply(slot, name = type) %>%
       lapply("[[", gb) %>%
       lapply(is.data.frame) %>%
       unlist()
     is_list_check <- object[layer_present] %>%
-      lapply(slot, name = "composition") %>%
+      lapply(slot, name = type) %>%
       lapply("[[", gb) %>%
       lapply(function(x) {is.list(x) & !is.data.frame(x)}) %>%
       unlist()
@@ -1190,7 +1192,7 @@ merge.HiTObjects <- function(object = NULL,
 
     } else if (all(is_list_check)) {
       gb_sublevel_unique_names <- object[layer_present] %>%
-        lapply(slot, name = "composition") %>%
+        lapply(slot, name = type) %>%
         lapply("[[", gb) %>%
         lapply(names) %>%
         unlist() %>%
@@ -1212,20 +1214,22 @@ merge.HiTObjects <- function(object = NULL,
     # Aggregated_profile
     message("Merging aggregated profiles of " , gb, "...")
 
+    type <- "pseudobulk"
+
     # Aggregated_profile Pseudobulk
     celltypes <- lapply(names(object),
                         function(x) {
-                          colnames(object[[x]]@aggregated_profile[["Pseudobulk"]][[gb]])
+                          colnames(object[[x]]@aggregated_profile[[type]][[gb]])
                         }) %>%
       unlist() %>% unique()
 
     for (ct in celltypes) {
-      ct_present <- lapply(names(object), function(x) { ct %in% colnames(object[[x]]@aggregated_profile[["Pseudobulk"]][[gb]]) }) %>% unlist()
+      ct_present <- lapply(names(object), function(x) { ct %in% colnames(object[[x]]@aggregated_profile[[type]][[gb]]) }) %>% unlist()
       layer_ct_present <- names(object)[(names(object) %in% layer_present) & ct_present]
       df <- BiocParallel::bplapply(X = layer_ct_present,
                                    BPPARAM = param,
                                    function(x) {
-                                     object[[x]]@aggregated_profile[["Pseudobulk"]][[gb]][, ct]
+                                     object[[x]]@aggregated_profile[[type]][[gb]][, ct]
                                    })
       df <- do.call(cbind, df)
       df <- Matrix::Matrix(df, sparse = T)
@@ -1252,11 +1256,14 @@ merge.HiTObjects <- function(object = NULL,
 
 
     # Aggregated_profile Signatures
+
+    type <- "signatures"
+
     df <- BiocParallel::bplapply(X = layer_present,
                                  BPPARAM = param,
                                  function(x) {
-                                   if (!is.null(object[[x]]@aggregated_profile[["Signatures"]][[gb]])) {
-                                     object[[x]]@aggregated_profile[["Signatures"]][[gb]] %>% mutate(sample = x)
+                                   if (!is.null(object[[x]]@aggregated_profile[[type]][[gb]])) {
+                                     object[[x]]@aggregated_profile[[type]][[gb]] %>% mutate(sample = x)
                                    }
                                  })
     df <- data.table::rbindlist(df, use.names=TRUE, fill=TRUE)
@@ -1270,8 +1277,8 @@ merge.HiTObjects <- function(object = NULL,
   hit <- methods::new("HiT",
                       metadata = metadata,
                       composition = comp.prop,
-                      aggregated_profile = list("Pseudobulk" = avg.expr,
-                                                "Signatures" = aggr.signature)
+                      aggregated_profile = list("pseudobulk" = avg.expr,
+                                                "signatures" = aggr.signature)
   )
   return(hit)
 }
@@ -1279,7 +1286,7 @@ merge.HiTObjects <- function(object = NULL,
 
 #' Get metrics of cell types pseudobulk clustering
 #'
-#' @param object A Hit class object obtained with \link{get.HiTObject} or pseudobulk raw count matrix (\code{HitObject@aggregated_profile$Pseudobulk$layer1})
+#' @param object A Hit class object obtained with \link{get.HiTObject} or pseudobulk raw count matrix (\code{HitObject@aggregated_profile$pseudobulk$layer1})
 #' @param metadata Metadata data frame corresponding for each sample in the pseudobulk matrix. Row names in this dataframe should be identical as the colnames of the count matrix. If not provided (\code{NULL}) metadata will be extracted from HiT object provided.
 #' @param cluster.by Vector indicating the variable for clustering, default is celltype (for the annotation) and sample
 #' @param batching Vector indicating the variable for batching to allow calculating scores per batch, to account for batch effect
@@ -1309,7 +1316,7 @@ merge.HiTObjects <- function(object = NULL,
 #' @importFrom parallelly availableCores
 #' @importFrom tibble rownames_to_column column_to_rownames remove_rownames
 #' @importFrom caret nearZeroVar
-#' @importFrom ggplot2 aes geom_point guides theme geom_col labs geom_hline guide_legend geom_vline theme_bw ggtitle
+#' @importFrom ggplot2 aes geom_point guides theme geom_col labs guide_legend annotate theme_bw ggtitle geom_ribbon
 #' @importFrom DESeq2 DESeqDataSetFromMatrix vst estimateSizeFactors
 #' @importFrom MatrixGenerics rowVars rowMins
 #' @importFrom SummarizedExperiment assay
@@ -1321,7 +1328,7 @@ merge.HiTObjects <- function(object = NULL,
 #' @importFrom tidyr pivot_wider
 #' @importFrom scran buildKNNGraph
 #' @importFrom igraph modularity set_vertex_attr layout_nicely V
-#' @importFrom cowplot plot_grid
+#' @importFrom cowplot plot_grid ggdraw
 #' @importFrom ggraph ggraph geom_edge_link geom_node_point
 
 #' @return Metrics of cell types pseudobulk clustering
@@ -1339,7 +1346,7 @@ get.cluster.score <- function(object = NULL,
                               all.concatenated.na.handling = "impute",
 
                               # For silhouette scores
-                              ntests = 0, # number of shuffling events
+                              ntests = 100, # number of shuffling events
                               seed = 22, # seed for random shuffling
 
                               # For PCA
@@ -1389,6 +1396,9 @@ get.cluster.score <- function(object = NULL,
 
     ## Process celltype composition ###############################################
     message("Processing cell type composition")
+
+    type <- "composition"
+
     comp_layers <- names(object@composition)
 
     for (layer in comp_layers) {
@@ -1405,10 +1415,11 @@ get.cluster.score <- function(object = NULL,
             filter(sample %in% colnames(mat)) %>%
             .[[cluster_col]]
 
-          results[[cluster_col]][["composition"]][[layer]] <-
+          results[[cluster_col]][[type]][[layer]] <-
             get.scores(matrix = mat,
                        cluster_labels = cluster_labels,
                        scores = scores,
+                       title = paste(cluster_col, stringr::str_to_title(type), layer),
                        ntests = ntests,
                        seed = seed,
                        invisible = pca_comps_labs_invisible)
@@ -1427,17 +1438,18 @@ get.cluster.score <- function(object = NULL,
 
                 m <- mat[ , colnames(mat) %in% meta$sample] %>% scale(center = T, scale = F)
 
-                results[[cluster_col]][["composition"]][[layer]][[b_var]][[b]] <-
+                results[[cluster_col]][[type]][[layer]][[b_var]][[b]] <-
                   get.scores(matrix = m,
                              cluster_labels = cluster_labels,
                              scores = scores,
+                             title = paste(cluster_col, stringr::str_to_title(type), layer),
                              ntests = ntests,
                              seed = seed,
                              invisible = pca_comps_labs_invisible)
                 for (score in scores) {
                   b_var_res_summary[[score]] <- c(
                     b_var_res_summary[[score]],
-                    results[[cluster_col]][["composition"]][[layer]][[b_var]][[b]][["Scores"]][[score]][["summary"]])
+                    results[[cluster_col]][[type]][[layer]][[b_var]][[b]][["Scores"]][[score]][["summary"]])
                 }
               }
 
@@ -1445,13 +1457,13 @@ get.cluster.score <- function(object = NULL,
                 b_var_res_summary[[score]] <-
                   mean(b_var_res_summary[[score]])
               }
-              results[[cluster_col]][["composition"]][[layer]][[b_var]][["all"]][["Scores"]] <- b_var_res_summary
+              results[[cluster_col]][[type]][[layer]][[b_var]][["all"]][["Scores"]] <- b_var_res_summary
             }
           }
         }
 
       } else if (is.list(object@composition[[layer]])) {
-        results[[cluster_col]][["composition"]][[layer]] <-
+        results[[cluster_col]][[type]][[layer]] <-
           BiocParallel::bplapply(
             X = names(object@composition[[layer]]),
             BPPARAM = param,
@@ -1483,6 +1495,7 @@ get.cluster.score <- function(object = NULL,
                   res <- get.scores(matrix = mat,
                                     cluster_labels = cluster_labels,
                                     scores = scores,
+                                    title = paste(cluster_col, stringr::str_to_title(type), layer, i),
                                     ntests = ntests,
                                     seed = seed,
                                     invisible = pca_comps_labs_invisible)
@@ -1512,6 +1525,7 @@ get.cluster.score <- function(object = NULL,
                           get.scores(matrix = m,
                                      cluster_labels = cluster_labels,
                                      scores = scores,
+                                     title = paste(cluster_col, stringr::str_to_title(type), layer, i),
                                      ntests = ntests,
                                      seed = seed,
                                      invisible = pca_comps_labs_invisible)
@@ -1539,7 +1553,7 @@ get.cluster.score <- function(object = NULL,
               }
             }
           )
-        names(results[[cluster_col]][["composition"]][[layer]]) <-
+        names(results[[cluster_col]][[type]][[layer]]) <-
           names(object@composition[[layer]])
       }
     }
@@ -1547,14 +1561,17 @@ get.cluster.score <- function(object = NULL,
 
     ## Process pseudobulk ###############################################
     message("Processing Pseudobulks")
-    pb_layers <- names(object@aggregated_profile[["Pseudobulk"]])
+
+    type <- "pseudobulk"
+
+    pb_layers <- names(object@aggregated_profile[[type]])
 
     for (layer in pb_layers) {
-      results[[cluster_col]][["Pseudobulk"]][[layer]] <- BiocParallel::bplapply(
-        X = names(object@aggregated_profile[["Pseudobulk"]][[layer]]),
+      results[[cluster_col]][[type]][[layer]] <- BiocParallel::bplapply(
+        X = names(object@aggregated_profile[[type]][[layer]]),
         BPPARAM = param,
         function(i){
-          mat <- object@aggregated_profile[["Pseudobulk"]][[layer]][[i]]
+          mat <- object@aggregated_profile[[type]][[layer]][[i]]
           meta <- metadata %>%
             filter(sample %in% colnames(mat))
           cluster_labels <- meta[[cluster_col]]
@@ -1571,6 +1588,7 @@ get.cluster.score <- function(object = NULL,
               res <- get.scores(matrix = mat,
                                 cluster_labels = cluster_labels,
                                 scores = scores,
+                                title = paste(cluster_col, stringr::str_to_title(type), layer, i),
                                 ntests = ntests,
                                 seed = seed,
                                 invisible = pca_pb_labs_invisible)
@@ -1607,6 +1625,7 @@ get.cluster.score <- function(object = NULL,
                         get.scores(matrix = m,
                                    cluster_labels = cluster_labels,
                                    scores = scores,
+                                   title = paste(cluster_col, stringr::str_to_title(type), layer, i),
                                    ntests = ntests,
                                    seed = seed,
                                    invisible = pca_pb_labs_invisible)
@@ -1634,25 +1653,28 @@ get.cluster.score <- function(object = NULL,
           }
         }
       )
-      names(results[[cluster_col]][["Pseudobulk"]][[layer]]) <-
-        names(object@aggregated_profile[["Pseudobulk"]][[layer]])
+      names(results[[cluster_col]][[type]][[layer]]) <-
+        names(object@aggregated_profile[[type]][[layer]])
     }
 
 
     ## Process signatures ###############################################
     message("Processing Signatures")
-    comp_layers <- names(object@aggregated_profile[["Signatures"]])
+
+    type <- "signatures"
+
+    comp_layers <- names(object@aggregated_profile[[type]])
 
     if (!is.null(comp_layers)) {
       for (layer in comp_layers) {
-        cols <- colnames(object@aggregated_profile[["Signatures"]][[layer]])
+        cols <- colnames(object@aggregated_profile[[type]][[layer]])
         signatures <- cols[2:(length(cols) - 1)]
 
-        results[[cluster_col]][["Signatures"]][[layer]] <- BiocParallel::bplapply(
+        results[[cluster_col]][[type]][[layer]] <- BiocParallel::bplapply(
           X = signatures,
           BPPARAM = param,
           function(i){
-            mat <- object@aggregated_profile[["Signatures"]][[layer]][, c("celltype", i, "sample"), with = F]
+            mat <- object@aggregated_profile[[type]][[layer]][, c("celltype", i, "sample"), with = F]
             mat <- mat %>%
               tidyr::pivot_wider(names_from = sample, values_from = i) %>%
               column_to_rownames(var = "celltype")
@@ -1674,6 +1696,7 @@ get.cluster.score <- function(object = NULL,
               res <- get.scores(matrix = mat,
                                 cluster_labels = cluster_labels,
                                 scores = scores,
+                                title = paste(cluster_col, stringr::str_to_title(type), layer, i),
                                 ntests = ntests,
                                 invisible = pca_sig_labs_invisible,
                                 seed = seed)
@@ -1698,6 +1721,7 @@ get.cluster.score <- function(object = NULL,
                       get.scores(matrix = m,
                                  cluster_labels = cluster_labels,
                                  scores = scores,
+                                 title = paste(cluster_col, stringr::str_to_title(type), layer, i),
                                  ntests = ntests,
                                  seed = seed,
                                  invisible = pca_sig_labs_invisible)
@@ -1723,7 +1747,7 @@ get.cluster.score <- function(object = NULL,
             }
           }
         )
-        names(results[[cluster_col]][["Signatures"]][[layer]]) <- signatures
+        names(results[[cluster_col]][[type]][[layer]]) <- signatures
       }
     }
   }
@@ -1735,21 +1759,21 @@ get.cluster.score <- function(object = NULL,
 
 
 
-#' Get average silhouette scores per grouping variable and plot heat map
+#' Summarize scores and plot heat map
 #'
 #' @param scores A scores object from get.cluster.scores
 #' @param plot_show Boolean whether to show a plot or not
 
 #' @return Average silhouette widths per grouping variable. Optionally, a heatmap plot for visualization
-#' @export scores.get.avgsils
+#' @export summarize.cluster.scores
 #'
 
 
-scores.get.avgsils <- function(scores = NULL,
-                               plot_show = TRUE) {
+summarize.cluster.scores <- function(scores = NULL,
+                                     plot_show = TRUE) {
 
   if (is.null(scores)) {
-    message("Please provide scores")
+    message("Please provide scores object (output from get.cluster.scores)")
   }
 
   s <- unlist(scores)
