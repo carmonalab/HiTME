@@ -258,204 +258,7 @@ compositional_data <- function(data,
 }
 
 
-
-# get.cluster.score helper functions ##############################################################################
-
-# Main helper function for get.cluster.scores ##############################################################################
-
-## Calculate scores (silhouette, ...) and plot ###############################################
-
-get.scores <- function(matrix,
-                       cluster_labels,
-                       scores,
-
-                       # For silhouette scores
-                       ntests = 0, # number of shuffling events
-                       seed = 22, # seed for random shuffling
-
-                       # For PCA
-                       invisible = c("var", "quali"),
-
-                       ncores = parallelly::availableCores() - 2,
-                       bparam = NULL,
-                       progressbar = TRUE) {
-
-  matrix <- t(matrix)
-
-  results <- list()
-
-  # Check if there are at least 2 clusters,
-  # that there are more than 2 samples and
-  # that there are more samples than clusters (not each sample is one separate cluster)
-  if (length(unique(cluster_labels)) > 1 &
-      length(cluster_labels) > 2 &
-      nrow(matrix) > length(unique(cluster_labels))) {
-
-    for (s in scores) {
-
-      # Plot PCA ###############################################
-      results[["Plots"]][["PCA"]] <- plot_PCA(matrix,
-                                              color.cluster.by = cluster_labels,
-                                              invisible = invisible)
-
-
-      ## Silhouette (TODO add plot and 95% CI) ###############################################
-      if (s == "Silhouette_isolated") {
-        results[["Scores"]][[s]] <- silhouette_onelabel(
-          labels = cluster_labels,
-          dist = dist(matrix),
-          ntests = ntests,
-          seed = seed
-          )
-
-        p <- ggplot2::ggplot(results[["Scores"]][[s]][["samples"]],
-                             ggplot2::aes(x = rowid,
-                                          y = sil_width,
-                                          fill = group)) +
-          ggplot2::geom_bar(position = "dodge", stat = "identity") +
-          ggplot2::theme(axis.title.x = ggplot2::element_blank(),
-                axis.text.x = ggplot2::element_blank(),
-                axis.ticks.x = ggplot2::element_blank()) +
-          ggplot2::ggtitle(paste("Silhouette (isolated) plot
-                        \nAverage silhouette width = ",
-                        round(results[["Scores"]][[s]][["summary"]], 3))) +
-          ggplot2::labs(fill = "Groups")
-
-        results[["Plots"]][[s]] <- p
-      }
-
-      if (s == "Silhouette") {
-        silh <- cluster::silhouette(x = as.numeric(factor(cluster_labels)),
-                                    dist = dist(matrix))
-
-        silh <- as.data.frame(silh) %>%
-          dplyr::rename(group = cluster) %>%
-          dplyr::mutate(group = cluster_labels) %>%
-          dplyr::group_by(group) %>%
-          dplyr::arrange(dplyr::desc(sil_width), .by_group = TRUE) %>%
-          dplyr::ungroup()
-
-        # order silhouette width per cell type
-        silh <- silh %>%
-          dplyr::mutate(rowid = dplyr::row_number())
-
-        avg_per_group <- silh %>%
-          dplyr::group_by(group) %>%
-          summarize(avg_sil_width = mean(sil_width))
-
-        results[["Scores"]][[s]] <- list(
-          "samples" = silh,
-          "avg_per_group" = avg_per_group,
-          "summary" = mean(silh[["sil_width"]])
-        )
-
-        p <- ggplot2::ggplot(silh,
-                             ggplot2::aes(x = rowid,
-                                          y = sil_width,
-                                          fill = group)) +
-          ggplot2::geom_bar(position = "dodge", stat = "identity") +
-          ggplot2::theme(axis.title.x = ggplot2::element_blank(),
-                axis.text.x = ggplot2::element_blank(),
-                axis.ticks.x = ggplot2::element_blank()) +
-          ggplot2::ggtitle(paste("Silhouette plot
-                        \nAverage silhouette width (average samples) = ",
-                        round(results[["Scores"]][[s]][["summary"]], 3))) +
-          ggplot2::labs(fill = "Groups")
-
-        results[["Plots"]][[s]] <- p
-      }
-
-      if (s == "Modularity") {
-        # transform to network the distance
-        if (length(cluster_labels) >= 5) {
-
-          # A low number of k = 3 neighbors was chosen to better account for the case if
-          # one group's number of samples << other group(s)'s number of samples
-          k <- 3
-          g <- scran::buildKNNGraph(matrix,
-                                    transposed = T,
-                                    k = k)
-
-          # Calculate modularity score
-          modularity_score <- igraph::modularity(g, membership = as.numeric(cluster_labels))
-
-          # Plotting the graph
-          g <- igraph::set_vertex_attr(g, "name", value = cluster_labels)
-
-          results[["Scores"]][[s]] <- list("igraph" = g,
-                                           "summary" = modularity_score)
-
-          # Using ggraph layout = "kk" instead of default "stress",
-          # as "kk" handles disconnected communities much better (showing them separately, instead of fur balling them like "stress")
-          p <- ggraph::ggraph(g, layout = 'kk') +
-            ggraph::geom_edge_link(color = "grey", edge_width = 0.2) +
-            ggraph::geom_node_point(ggplot2::aes(fill = as.factor(names(igraph::V(g)))),
-                                    shape = 21, color = "black", size = 5) +
-            ggplot2::ggtitle(paste("KNN plot with k = ", k,
-                                   "\nModularity score = ", round(modularity_score, 3))) +
-            ggplot2::labs(fill = "Groups") +
-            ggplot2::theme(panel.background = element_rect(fill = "white"))
-
-          results[["Plots"]][[s]] <- p
-        } else {
-          message("too few samples to run modularity score\n")
-        }
-      }
-
-      # Plot  and add 95% CI ###############################################
-      # plot of bootstraping
-      # conf.pl <- silh$summary %>%
-      #             dplyr::filter(iteration != "NO") %>%
-      #             ggplot2::ggplot(ggplot2::aes(x = avg_sil_width,
-      #                                          y = ..density..,
-      #                                          fill = cluster)) +
-      #             ggplot2::geom_density(alpha = 0.6, show.legend = F) +
-      #             ggplot2::geom_ribbon(aes(ymin = 0, ymax = ..density..), alpha = 0.05)
-      #             ggplot2::facet_wrap(~cluster, ncol = 2) +
-      #             ggplot2::theme_bw()
-      #
-      #             ggplot2::geom_vline(aes(xintercept = ifelse(iteration == "NO",
-      #                                                     avg_sil_width, NA)),
-      #                                 color = "Avg silhouette width"),
-      #                                 lty = 2, show.legend = T)
-      #             ggplot2::geom_vline(xintercept = quantile(cof_before[,2], c(0.05,0.95))[1],
-      #                            color = "Bootstrap"), lty = 2, show.legend = T)
-    }
-
-    # Plot dendrogram  (TODO NEEDS REWORK) ###############################################
-    # pc2 <- pc$x[,1:ndim] %>%
-    #   as.data.frame() %>%
-    #   mutate(celltype = metadata[[df.score[x, 1]]])
-    #
-    # # Calculate the row-wise average grouping by row names
-    # pc2 <- aggregate(. ~ celltype, data = pc2, FUN = mean) %>%
-    #   tibble::column_to_rownames("celltype") %>%
-    #   as.matrix()
-    #
-    # dist_group <- stats::dist(pc2,
-    #                           method = df.score[x, 2])
-    # hclust <- stats::hclust(dist_group,
-    #                         method = hclust.method)
-    # dendo <- ggdendro::ggdendrogram(as.dendrogram(hclust)) +
-    #   ggtitle(paste0("Hierarchical clustering dendrogram - ",
-    #                  hclust.method))
-
-
-    # Combine plots ###############################################
-    results[["Plots"]][["Summary_plot"]] <- cowplot::plot_grid(plotlist = results[["Plots"]])
-
-
-
-    return(results)
-
-  } else {
-
-    return(NULL)
-
-  }
-}
-
-## Pre-process pseudobulk data helpers ##############################################################################
+# Pre-process pseudobulk data helpers ##############################################################################
 
 preproc_pseudobulk <- function (matrix,
                                 metadata,
@@ -525,31 +328,197 @@ DESeq2.normalize <- function(matrix,
 
 
 
+# get.cluster.score helper functions ##############################################################################
 
-## Calculate silhouette score helpers ##############################################################################
+get.scores <- function(matrix,
+                       cluster_labels,
+                       scores,
 
-silhouette_onelabel <- function(labels = NULL, # vector of labels
-                                dist = NULL, # distance object
-                                ntests = 0, # number of shuffling events
-                                seed = 22 # seed for random shuffling
-                                ) {
+                       # For silhouette scores
+                       ntests = 0, # number of shuffling events
+                       seed = 22, # seed for random shuffling
 
-  if (is.null(labels) || !is.factor(labels)) {
-    stop("Please provide a factor vector of the labels")
+                       # For PCA
+                       invisible = c("var", "quali"),
+
+                       ncores = parallelly::availableCores() - 2,
+                       bparam = NULL,
+                       progressbar = TRUE) {
+
+  matrix <- t(matrix)
+
+  results <- list()
+
+  # Check if there are at least 2 clusters,
+  # that there are more than 2 samples and
+  # that there are more samples than clusters (not each sample is one separate cluster)
+  if (length(unique(cluster_labels)) > 1 &
+      length(cluster_labels) > 2 &
+      nrow(matrix) > length(unique(cluster_labels))) {
+
+    for (s in scores) {
+
+      # Plot PCA ###############################################
+      results[["Plots"]][["PCA"]] <- plot_PCA(matrix,
+                                              color.cluster.by = cluster_labels,
+                                              invisible = invisible)
+
+
+      # Calculate scores + plots ###############################################
+      if (s == "Silhouette_isolated") {
+        dist <- dist(matrix)
+        sils <- calc_sil_onelabel(labels = cluster_labels,
+                                  dist = dist,
+                                  return_mean_for_permtest = FALSE)
+
+        avg_per_group <- sils %>%
+          dplyr::group_by(group) %>%
+          dplyr::summarize(avg_sil_width = mean(sil_width))
+
+        avg_sil <- mean(sils[["sil_width"]])
+
+        p_val <- perm_test(fun = calc_sil_onelabel,
+                           data = dist,
+                           labels = cluster_labels,
+                           obs = avg_sil,
+                           ntests = ntests,
+                           seed = seed)
+
+
+        results[["Scores"]][[s]] <- list("samples" = sils,
+                                         "avg_per_group" = avg_per_group,
+                                         "summary" = avg_sil,
+                                         "p_value" = p_val)
+
+        p <- plot_silhouette(sil_scores = results[["Scores"]][[s]],
+                             title = "Silhouette (isolated) plot",
+                             p_val = p_val)
+
+        results[["Plots"]][[s]] <- p
+      }
+
+      if (s == "Silhouette") {
+        dist <- dist(matrix)
+
+        sils <- calc_sil(labels = cluster_labels,
+                         dist = dist,
+                         return_mean_for_permtest = FALSE)
+
+        avg_per_group <- sils %>%
+          dplyr::group_by(group) %>%
+          dplyr::summarize(avg_sil_width = mean(sil_width))
+
+        avg_sil <- mean(sils[["sil_width"]])
+
+        p_val <- perm_test(fun = calc_sil,
+                           data = dist,
+                           labels = cluster_labels,
+                           obs = avg_sil,
+                           ntests = ntests,
+                           seed = seed)
+
+        results[["Scores"]][[s]] <- list("samples" = sils,
+                                         "avg_per_group" = avg_per_group,
+                                         "summary" = avg_sil,
+                                         "p_value" = p_val)
+
+        p <- plot_silhouette(sil_scores = results[["Scores"]][[s]],
+                             title = "Silhouette plot",
+                             p_val = p_val)
+
+        results[["Plots"]][[s]] <- p
+      }
+
+      if (s == "Modularity") {
+
+        # A low number of k = 3 neighbors was chosen to better account for the case if
+        # one group's number of samples << other group(s)'s number of samples
+        k <- 3
+
+        if (length(cluster_labels) >= (k+1)) {
+          g <- scran::buildKNNGraph(matrix,
+                                    transposed = TRUE,
+                                    k = k)
+
+          # Calculate modularity score
+          modularity_score <- igraph::modularity(g, membership = as.numeric(cluster_labels))
+
+          # Plotting the graph
+          g <- igraph::set_vertex_attr(g, "name", value = cluster_labels)
+
+          p_val <- perm_test(fun = calc_modularity,
+                             data = matrix,
+                             labels = cluster_labels,
+                             obs = modularity_score,
+                             ntests = ntests,
+                             seed = seed)
+
+          results[["Scores"]][[s]] <- list("igraph" = g,
+                                           "summary" = modularity_score,
+                                           "p_value" = p_val)
+
+          # Using ggraph layout = "kk" instead of default "stress",
+          # as "kk" handles disconnected communities much better (showing them separately, instead of fur balling them like "stress")
+          p <- ggraph::ggraph(g, layout = 'kk') +
+            ggraph::geom_edge_link(color = "grey", edge_width = 0.2) +
+            ggraph::geom_node_point(ggplot2::aes(fill = as.factor(names(igraph::V(g)))),
+                                    shape = 21, color = "black", size = 5) +
+            ggplot2::ggtitle(paste("KNN plot with k = ", k,
+                                   "\nModularity score = ", round(modularity_score, 3),
+                                   ifelse(!is.null(p_val), paste("\nAdjusted p-value:", format.pval(p_val, digits = 3)), NULL))) +
+            ggplot2::labs(fill = "Groups") +
+            ggplot2::theme(panel.background = element_rect(fill = "white"))
+
+          results[["Plots"]][[s]] <- p
+        } else {
+          message("too few samples to run modularity score\n")
+        }
+      }
+    }
+
+    # Plot dendrogram  (TODO NEEDS REWORK) ###############################################
+    # pc2 <- pc$x[,1:ndim] %>%
+    #   as.data.frame() %>%
+    #   mutate(celltype = metadata[[df.score[x, 1]]])
+    #
+    # # Calculate the row-wise average grouping by row names
+    # pc2 <- aggregate(. ~ celltype, data = pc2, FUN = mean) %>%
+    #   tibble::column_to_rownames("celltype") %>%
+    #   as.matrix()
+    #
+    # dist_group <- stats::dist(pc2,
+    #                           method = df.score[x, 2])
+    # hclust <- stats::hclust(dist_group,
+    #                         method = hclust.method)
+    # dendo <- ggdendro::ggdendrogram(as.dendrogram(hclust)) +
+    #   ggtitle(paste0("Hierarchical clustering dendrogram - ",
+    #                  hclust.method))
+
+
+    # Combine plots ###############################################
+    results[["Plots"]][["Summary_plot"]] <- cowplot::plot_grid(plotlist = results[["Plots"]])
+
+
+
+    return(results)
+
+  } else {
+
+    return(NULL)
   }
+}
 
-  if (is.null(dist) || !class(dist) == "dist") {
-    stop("Please provide a a dissimilarity object inheriting from class dist or coercible to one")
-  }
 
-  if (!is.numeric(ntests)) {
-    stop("Please provide a number of shuffling test for the random assignation of the label")
-  }
 
-  if (!is.numeric(seed)) {
-    stop("Please provide a number for setting seed")
-  }
 
+
+## Silhouette score helpers ##############################################################################
+
+### Calculate silhouette score of group vs all others (instead of nearest other group)  ##############################################################################
+
+calc_sil_onelabel <- function(labels,
+                              dist,
+                              return_mean_for_permtest = TRUE) {
 
   sils <- lapply(
     unique(labels),
@@ -570,59 +539,8 @@ silhouette_onelabel <- function(labels = NULL, # vector of labels
       size <- nrow(sil_clus1)
 
       sil.sumA <- data.frame(group = a,
-                             iteration = "NO",
                              size = size,
                              avg_sil_width = mean(sil_clus1$sil_width))
-
-      # dataframe for results of each iteration of shuffling
-      bots.df <- data.frame(matrix(nrow = 0, ncol = 4))
-      names(bots.df) <- names(sil.sumA)
-
-      if (ntests > 0) {
-
-        # perform the shuffling
-
-        for (u in 1:ntests) {
-
-          # random vector
-          vec <- rep(2, length(labels))
-
-          # seeding for reproducibility
-          set.seed(seed + u)
-          random_sample <- sample(1:length(labels), size)
-          vec[random_sample] <- 1
-          vec <- vec %>% as.factor() %>% as.numeric()
-
-          # run silhouette
-          sil <- cluster::silhouette(vec, dist)
-          sil.res <- as.data.frame(sil) %>%
-            dplyr::filter(cluster == 1)
-
-          sil.sumB <- data.frame(group = a,
-                                 iteration = u,
-                                 size = size,
-                                 avg_sil_width = mean(sil.res$sil_width))
-
-          bots.df <- rbind(bots.df, sil.sumB)
-
-        }
-
-        # compute p-value
-        sil.sumA$p_val <- p.val_zscore(obs = sil.sumA$avg_sil_width,
-                                       random.values = bots.df$avg_sil_width)
-        sil.sumA$p_val_adj <- p.adjust(sil.sumA$p_val,
-                                       method = "fdr",
-                                       n = length(unique(labels)))
-        sil.sumA$conf.int.95 <- NA
-        # Compute confidence interval
-        bots.df <- bots.df %>%
-          mutate(conf.int.95 = I(list(quantile(avg_sil_width, c(0.025,0.975)))))
-        bots.df$p_val <- NA
-        bots.df$p_val_adj <- NA
-
-        sil.sumA <- rbind(sil.sumA, bots.df)
-
-      }
 
       return(list("samples" = sil_clus1, # silhouette score for each sample
                   "avg_per_group" = sil.sumA))
@@ -630,7 +548,7 @@ silhouette_onelabel <- function(labels = NULL, # vector of labels
   )
 
   # join results
-  sil.all <- lapply(sils, function(x) {x[["samples"]]}) %>%
+  sils <- lapply(sils, function(x) {x[["samples"]]}) %>%
     data.table::rbindlist() %>%
     dplyr::rename(group = cluster) %>%
     dplyr::group_by(group) %>%
@@ -638,34 +556,189 @@ silhouette_onelabel <- function(labels = NULL, # vector of labels
     dplyr::ungroup() %>%
     dplyr::mutate(rowid = dplyr::row_number())
 
-  sil.sum <- lapply(sils, function(x) {x[["avg_per_group"]]}) %>%
-    data.table::rbindlist()
+  if (return_mean_for_permtest) {
+    return(mean(sils[["sil_width"]]))
+  } else {
+    return(sils)
+  }
+}
 
-  ret.list <- list("samples" = sil.all,
-                   "avg_per_group" = sil.sum,
-                   "summary" = mean(sil.all[["sil_width"]]))
 
-  return(ret.list)
+### Calculate silhouette score ##############################################################################
+
+calc_sil <- function(labels,
+                     dist,
+                     return_mean_for_permtest = TRUE) {
+
+  sils <- cluster::silhouette(x = as.numeric(factor(labels)),
+                              dist = dist) %>%
+    as.data.frame() %>%
+    dplyr::rename(group = cluster) %>%
+    dplyr::mutate(group = labels) %>%
+    dplyr::group_by(group) %>%
+    dplyr::arrange(dplyr::desc(sil_width), .by_group = TRUE) %>%
+    dplyr::ungroup() %>%
+    dplyr::mutate(rowid = dplyr::row_number())
+
+  if (return_mean_for_permtest) {
+    return(mean(sils[["sil_width"]]))
+  } else {
+    return(sils)
+  }
 }
 
 
 
-### Compute p-value based on z score
+### Calculate modularity score ##############################################################################
 
-p.val_zscore <- function(obs = NULL,
-                         random.values = NULL) {
+calc_modularity <- function(labels,
+                            matrix,
+                            k = 3) {
 
-  mean <- mean(random.values)
-  sd <- sd(random.values)
+  g <- scran::buildKNNGraph(matrix,
+                            transposed = TRUE,
+                            k = k)
+
+  # Calculate modularity score
+  modularity_score <- igraph::modularity(g, membership = as.numeric(labels))
+
+  return(modularity_score)
+}
+
+
+### Permutation test to calculate p-value ###############################################
+# Permutation testing allows for calculating the p-value, e.g. for the silhouette score
+# to calculate how likely it is to observe a specific labelling
+# For permutation testing labels are randomly shuffled to calculate the random distribution of labels as the null hypothesis
+
+perm_test <- function (fun,
+                       data,
+                       labels,
+                       obs,
+                       ntests,
+                       seed) {
+
+  if (!(length(ntests) == 1 && is.numeric(ntests) && ntests >= 0)) {
+    stop("Please provide a number for ntests permutation testing")
+  }
+
+  if (!(length(ntests) == 1 && is.numeric(seed))) {
+    stop("Please provide a number for setting seed")
+  }
+
+  # perform the shuffling
+  if (ntests > 0) {
+
+    random_values <- c()
+
+    for (u in 1:ntests) {
+
+      # seeding for reproducibility
+      set.seed(seed + u)
+      random_labels <- sample(labels) %>%
+        as.factor() %>%
+        as.numeric()
+
+      rand_val <- fun(random_labels, data) %>%
+          mean()
+
+      random_values <- c(random_values, rand_val)
+    }
+
+    # compute p-value
+    p_val <- p.val_zscore(obs = obs,
+                          random_values = random_values)
+
+    p_val_adj <- stats::p.adjust(p_val,
+                                 method = "fdr",
+                                 n = length(unique(labels)))
+
+    return(p_val_adj)
+
+  } else if (ntests == 0) {
+    return(NULL)
+  }
+}
+
+#### Compute p-value based on z score ###############################################
+p.val_zscore <- function(obs,
+                         random_values) {
+
+  mean <- mean(random_values)
+  sd <- sd(random_values)
   z_score <- (obs - mean) / sd
-  p_value <- 1-pnorm(z_score)
-  return(p_value)
+  p_val <- 1 - pnorm(z_score)
+  return(p_val)
 }
 
 
 
-### Plot shuffling interval confidence (TODO NEEDS implementation) ###############################################
-#
+### Bootstrapping to calculate confidence intervals ###############################################
+# To calculate the confidence intervals of the silhouette scores, bootstrapping can be performed
+# Bootstrapping uses random sampling with replacement and mimicks the sampling process
+
+
+
+## get.scores plot helpers ##############################################################################
+
+plot_PCA <- function(matrix,
+                     invisible = c("var", "quali"),
+                     color.cluster.by = "none") {
+  res.pca <- stats::prcomp(matrix)
+  suppressMessages(
+    p <- factoextra::fviz_pca(res.pca,
+                              habillage = color.cluster.by,
+                              label = "var",
+                              pointsize = 3,
+                              invisible = invisible) +
+      # Remove shapes added by fviz_pca
+      scale_shape_manual(values=c(rep(19,length(unique(color.cluster.by)))))
+  )
+
+  return(p)
+}
+
+
+plot_silhouette <- function(sil_scores,
+                            title = "title",
+                            p_val) {
+
+  p <- ggplot2::ggplot(sil_scores[["samples"]],
+                       ggplot2::aes(x = rowid,
+                                    y = sil_width,
+                                    fill = group)) +
+    ggplot2::geom_bar(position = "dodge", stat = "identity") +
+    ggplot2::theme(axis.title.x = ggplot2::element_blank(),
+                   axis.text.x = ggplot2::element_blank(),
+                   axis.ticks.x = ggplot2::element_blank()) +
+    ggplot2::ggtitle(paste(title,
+                           "\nAverage silhouette width = ", round(sil_scores[["summary"]], 3),
+                           ifelse(!is.null(p_val), paste("\nAdjusted p-value:", format.pval(p_val, digits = 3)), NULL))) +
+    ggplot2::labs(fill = "Groups")
+
+  # Plot  and add 95% CI ###############################################
+  # plot of bootstraping
+  # conf.pl <- silh$summary %>%
+  #             dplyr::filter(iteration != "NO") %>%
+  #             ggplot2::ggplot(ggplot2::aes(x = avg_sil_width,
+  #                                          y = ..density..,
+  #                                          fill = cluster)) +
+  #             ggplot2::geom_density(alpha = 0.6, show.legend = F) +
+  #             ggplot2::geom_ribbon(aes(ymin = 0, ymax = ..density..), alpha = 0.05)
+  #             ggplot2::facet_wrap(~cluster, ncol = 2) +
+  #             ggplot2::theme_bw()
+  #
+  #             ggplot2::geom_vline(aes(xintercept = ifelse(iteration == "NO",
+  #                                                     avg_sil_width, NA)),
+  #                                 color = "Avg silhouette width"),
+  #                                 lty = 2, show.legend = T)
+  #             ggplot2::geom_vline(xintercept = quantile(cof_before[,2], c(0.05,0.95))[1],
+  #                            color = "Bootstrap"), lty = 2, show.legend = T)
+
+  return(p)
+}
+
+
 # plot.score <- function(df = NULL,
 #                        type = "density") {
 #
@@ -719,24 +792,3 @@ p.val_zscore <- function(obs = NULL,
 #   }
 #   return(pl)
 # }
-
-
-
-## Plot helpers for get.scores ##############################################################################
-
-plot_PCA <- function(matrix,
-                     invisible = c("var", "quali"),
-                     color.cluster.by = "none") {
-  res.pca <- stats::prcomp(matrix)
-  suppressMessages(
-    p <- factoextra::fviz_pca(res.pca,
-                              habillage = color.cluster.by,
-                              label = "var",
-                              pointsize = 3,
-                              invisible = invisible) +
-      # Remove shapes added by fviz_pca
-      scale_shape_manual(values=c(rep(19,length(unique(color.cluster.by)))))
-  )
-
-  return(p)
-}
