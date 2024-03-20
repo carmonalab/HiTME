@@ -901,7 +901,7 @@ get.aggregated.signature <- function(object,
     add.sig.cols <- grep(paste(name.additional.signatures, collapse = "|"),
                          names(meta.data), value = T)
 
-    if (length(add.sig.cols) > name.additional.signatures) {
+    if (length(add.sig.cols) > length(name.additional.signatures)) {
       for (i in name.additional.signatures) {
         if (sum(grep(i, names(meta.data))) > 1) {
           meta_cols <- names(meta.data)[grep(i, names(meta.data))]
