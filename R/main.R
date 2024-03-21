@@ -1419,9 +1419,9 @@ get.cluster.score <- function(object = NULL,
             get.scores(matrix = mat,
                        cluster_labels = cluster_labels,
                        scores = scores,
-                       title = paste(cluster_col, stringr::str_to_title(type), layer),
                        ntests = ntests,
                        seed = seed,
+                       title = paste(cluster_col, stringr::str_to_title(type), layer),
                        invisible = pca_comps_labs_invisible)
         }
 
@@ -1442,9 +1442,9 @@ get.cluster.score <- function(object = NULL,
                   get.scores(matrix = m,
                              cluster_labels = cluster_labels,
                              scores = scores,
-                             title = paste(cluster_col, stringr::str_to_title(type), layer),
                              ntests = ntests,
                              seed = seed,
+                             title = paste(cluster_col, stringr::str_to_title(type), layer),
                              invisible = pca_comps_labs_invisible)
                 for (score in scores) {
                   b_var_res_summary[[score]] <- c(
@@ -1495,9 +1495,9 @@ get.cluster.score <- function(object = NULL,
                   res <- get.scores(matrix = mat,
                                     cluster_labels = cluster_labels,
                                     scores = scores,
-                                    title = paste(cluster_col, stringr::str_to_title(type), layer, i),
                                     ntests = ntests,
                                     seed = seed,
+                                    title = paste(cluster_col, stringr::str_to_title(type), layer, i),
                                     invisible = pca_comps_labs_invisible)
                   return(res)
                 } else {
@@ -1525,9 +1525,9 @@ get.cluster.score <- function(object = NULL,
                           get.scores(matrix = m,
                                      cluster_labels = cluster_labels,
                                      scores = scores,
-                                     title = paste(cluster_col, stringr::str_to_title(type), layer, i),
                                      ntests = ntests,
                                      seed = seed,
+                                     title = paste(cluster_col, stringr::str_to_title(type), layer, i),
                                      invisible = pca_comps_labs_invisible)
                       }
 
@@ -1588,9 +1588,9 @@ get.cluster.score <- function(object = NULL,
               res <- get.scores(matrix = mat,
                                 cluster_labels = cluster_labels,
                                 scores = scores,
-                                title = paste(cluster_col, stringr::str_to_title(type), layer, i),
                                 ntests = ntests,
                                 seed = seed,
+                                title = paste(cluster_col, stringr::str_to_title(type), layer, i),
                                 invisible = pca_pb_labs_invisible)
               return(res)
             } else {
@@ -1625,9 +1625,9 @@ get.cluster.score <- function(object = NULL,
                         get.scores(matrix = m,
                                    cluster_labels = cluster_labels,
                                    scores = scores,
-                                   title = paste(cluster_col, stringr::str_to_title(type), layer, i),
                                    ntests = ntests,
                                    seed = seed,
+                                   title = paste(cluster_col, stringr::str_to_title(type), layer, i),
                                    invisible = pca_pb_labs_invisible)
                     }
                   }
@@ -1696,10 +1696,10 @@ get.cluster.score <- function(object = NULL,
               res <- get.scores(matrix = mat,
                                 cluster_labels = cluster_labels,
                                 scores = scores,
-                                title = paste(cluster_col, stringr::str_to_title(type), layer, i),
                                 ntests = ntests,
-                                invisible = pca_sig_labs_invisible,
-                                seed = seed)
+                                seed = seed,
+                                title = paste(cluster_col, stringr::str_to_title(type), layer, i),
+                                invisible = pca_sig_labs_invisible)
               return(res)
             }
 
@@ -1721,9 +1721,9 @@ get.cluster.score <- function(object = NULL,
                       get.scores(matrix = m,
                                  cluster_labels = cluster_labels,
                                  scores = scores,
-                                 title = paste(cluster_col, stringr::str_to_title(type), layer, i),
                                  ntests = ntests,
                                  seed = seed,
+                                 title = paste(cluster_col, stringr::str_to_title(type), layer, i),
                                  invisible = pca_sig_labs_invisible)
                     for (score in scores) {
                       b_var_res_summary[[score]] <- c(

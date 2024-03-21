@@ -330,18 +330,11 @@ DESeq2.normalize <- function(matrix,
 get.scores <- function(matrix,
                        cluster_labels,
                        scores,
-                       title = "",
-
-                       # For silhouette scores
                        ntests = 100, # number of shuffling events
                        seed = 22, # seed for random shuffling
-
+                       title = "", # Title for summary plot
                        # For PCA
-                       invisible = c("var", "quali"),
-
-                       ncores = parallelly::availableCores() - 2,
-                       bparam = NULL,
-                       progressbar = TRUE) {
+                       invisible = c("var", "quali")) {
 
   matrix <- t(matrix)
 
