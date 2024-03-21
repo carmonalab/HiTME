@@ -460,9 +460,10 @@ get.scores <- function(matrix,
                                     shape = 21, color = "black", size = 5) +
             ggplot2::ggtitle(paste("KNN plot with k = ", k,
                                    "\nModularity score = ", round(modularity_score, 3),
-                                   ifelse(!is.null(p_val),
-                                          paste("\nAdjusted p-value:", format.pval(p_val, digits = 3)),
-                                          NULL))) +
+                                   if (!is.null(p_val))
+                                   {paste("\nAdjusted p-value:", format.pval(p_val, digits = 3))}
+                                   else
+                                   {NULL})) +
             ggplot2::labs(fill = "Groups") +
             ggplot2::theme(panel.background = element_rect(fill = "white"))
 
@@ -732,9 +733,10 @@ plot_silhouette <- function(sil_scores,
     ggplot2::ggtitle(paste0(title,
                             "\nAverage silhouette width = ", round(m, 3),
                             "   95% CI: [", round(ci[1], 3), ", ", round(ci[2], 3), "]",
-                            ifelse(!is.null(sil_scores[["p_value"]]),
-                                   paste("\np-value: ", format.pval(sil_scores[["p_value"]], digits = 3)),
-                                   NULL))) +
+                            if (!is.null(sil_scores[["p_value"]]))
+                            {paste("\np-value: ", format.pval(sil_scores[["p_value"]], digits = 3))}
+                            else
+                            {NULL})) +
     ggplot2::labs(fill = "Groups") +
     ggplot2::geom_ribbon(aes(x = 1:xend, ymin = ci[1], ymax = ci[2]), alpha = 0.15, inherit.aes = FALSE) +
     ggplot2::annotate("segment", x = 1, xend = xend, y = ci[1], lty = 1, alpha = 0.15) +
