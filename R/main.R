@@ -2070,8 +2070,8 @@ plot.confusion.matrix <- function(object = NULL,
                                    high = "#7D0025") +
       ggplot2::labs(x = var.1,
                     y = var.2) +
-      ggplot2::geom_label(ggplot2::aes(label = ifelse(Freq>0,
-                                                      round(Freq,1),
+      ggplot2::geom_label(ggplot2::aes(label = ifelse(Freq > 0,
+                                                      round(Freq, 1),
                                                       NA)),
                           color = "white",
                           alpha = 0.6,
@@ -2178,7 +2178,7 @@ plot_gene_gating <- function(object = NULL,
       pl.list <- list()
 
       for (a in names(model)) {
-        m <- model[[a]] %>% unlist(recursive = F)
+        m <- model[[a]] %>% unlist(recursive = FALSE)
         pl.sublist <- list()
         for (e in names(m)) {
           # remove - sign on negative markers
@@ -2188,7 +2188,7 @@ plot_gene_gating <- function(object = NULL,
 
           if (length(feat)>0) {
             # do not stack if only one gene is present
-            stack <- ifelse(length(feat)>1, T, F)
+            stack <- ifelse(length(feat) > 1, TRUE, FALSE)
 
             pl.sublist[[e]] <-
               Seurat::VlnPlot(object[[ob]],
