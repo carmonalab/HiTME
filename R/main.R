@@ -189,7 +189,7 @@ Run.HiTME <- function(object = NULL,
     object <- lapply(
       X = object,
       function(x) {
-        if (class(x) != "Seurat") {
+        if (!is(x, "Seurat")) {
           stop("Not Seurat object included, cannot be processed.\n")
         }
         x <- scGate::scGate(x,
@@ -212,7 +212,7 @@ Run.HiTME <- function(object = NULL,
     object <- lapply(
       X = object,
       function(x) {
-        if (class(x) != "Seurat") {
+        if (!is(x, "Seurat")) {
           stop("Not Seurat object included, cannot be processed.\n")
         }
         x <- UCell::AddModuleScore_UCell(x,
@@ -240,7 +240,7 @@ Run.HiTME <- function(object = NULL,
     }
 
     # check that all ref maps are Seurat objects
-    if (suppressWarnings(!all(lapply(ref.maps, function(x) {class(x) == "Seurat"})))) {
+    if (suppressWarnings(!all(lapply(ref.maps, function(x) {is(x, "Seurat")})))) {
       message("Some or all reference maps are not a Seurat object, please provide reference maps as Seurat objects.\nNot running Projectils.")
     } else {
 
@@ -249,7 +249,7 @@ Run.HiTME <- function(object = NULL,
       object <- lapply(
         X = object,
         function(x) {
-          if (class(x) != "Seurat") {
+          if (!is(x, "Seurat")) {
             stop("Not Seurat object included, cannot be processed.\n")
           }
           x <- ProjecTILs.classifier.multi(x,
@@ -397,7 +397,7 @@ get.HiTObject <- function(object,
 
   if (is.null(object)) {
     stop("Please provide a Seurat object")
-  } else if (class(object) != "Seurat") {
+  } else if (!is(object, "Seurat")) {
     stop("Not Seurat object included, cannot be processed.\n")
   }
 
@@ -563,7 +563,7 @@ get.celltype.composition <- function(object = NULL,
 
   # input can be a Seurat object or a dataframe containing its meta.data
   # convert object to metadata if seurat object is provided
-  if (class(object) == "Seurat") {
+  if (is(object, "Seurat")) {
     meta.data <- object@meta.data
     if (is.null(meta.data)) {
       stop("No metadata found in this Seurat object")
@@ -736,7 +736,7 @@ get.aggregated.profile <- function(object,
 
   if (is.null(object)) {
     stop("Please provide a Seurat object")
-    if (class(object) != "Seurat") {
+    if (!is(object, "Seurat")) {
       stop("Please provide a Seurat object")
     }
   }
@@ -794,9 +794,9 @@ get.aggregated.profile <- function(object,
 
       # Calculate total (sample) pseudobulk
       avg.exp[[i]] <- obj_tmp@assays[["RNA"]]["counts"]
-      row_names <- rownames(avg.exp[[i]])
+      row_names <- row.names(avg.exp[[i]])
       avg.exp[[i]] <- Matrix::Matrix(rowSums(avg.exp[[i]]))
-      rownames(avg.exp[[i]]) <- row_names
+      row.names(avg.exp[[i]]) <- row_names
       colnames(avg.exp[[i]]) <- "all"
 
       if (length(unique(obj_tmp@meta.data[[group.by.aggregated[[i]]]])) >= 2) {
@@ -849,12 +849,12 @@ get.aggregated.signature <- function(object,
 
   # input can be a Seurat object or a dataframe containing its meta.data
   # convert object to metadata if seurat object is provided
-  if (class(object) == "Seurat") {
+  if (is(object, "Seurat")) {
     meta.data <- object@meta.data
     if (is.null(meta.data)) {
       stop("No metadata found in this Seurat object")
     }
-  } else if (class(object) == "data.frame") {
+  } else if (is(object, "data.frame")) {
     meta.data <- object
   } else {
     stop("Not Seurat object or dataframe included, cannot be processed.\n")
@@ -1064,7 +1064,7 @@ merge.HiTObjects <- function(object = NULL,
 
   if (is.null(object) || !is.list(object)) {
     stop("Please provide a list of HiT object containing more than one sample")
-    if (suppressWarnings(!all(lapply(object, function(x) {class(x) == "HiT"})))) {
+    if (suppressWarnings(!all(lapply(object, function(x) {is(x, "HiT")})))) {
       stop("Not all components of the list are HiT objects.")
     }
   }
@@ -1162,7 +1162,7 @@ merge.HiTObjects <- function(object = NULL,
 
   for (gb in group.by) {
 
-    layer_present <- rownames(present)[present[,gb]]
+    layer_present <- row.names(present)[present[,gb]]
 
     # Composition
     message("Merging compositions of " , gb, "...")
@@ -1178,7 +1178,7 @@ merge.HiTObjects <- function(object = NULL,
     is_list_check <- object[layer_present] %>%
       lapply(slot, name = type) %>%
       lapply("[[", gb) %>%
-      lapply(function(x) {is.list(x) & !is.data.frame(x)}) %>%
+      lapply(function(x) {is.list(x) & !is(x, "data.frame")}) %>%
       unlist()
 
     if (all(is_df_check)) {
@@ -1364,11 +1364,11 @@ get.cluster.score <- function(object = NULL,
                               bparam = NULL,
                               progressbar = TRUE) {
 
-  if (is.null(object) || (!class(object) == "HiT")) {
+  if (is.null(object) || !is(object, "HiT")) {
     stop("Please provide a Hit class object or a count matrix.\n")
   }
 
-  if (is.null(metadata) || !is.data.frame(metadata)) {
+  if (is.null(metadata) || !is(metadata, "data.frame")) {
     stop("Please provide a metadata object as dataframe for this HiTObject\n")
   }
 
@@ -1402,12 +1402,12 @@ get.cluster.score <- function(object = NULL,
     comp_layers <- names(object@composition)
 
     for (layer in comp_layers) {
-      if (is.data.frame(object@composition[[layer]])) {
+      if (is(object@composition[[layer]], "data.frame")) {
         mat <- object@composition[[layer]][, c("celltype", "clr", "sample"), with = F]
         mat <- mat %>%
           tidyr::pivot_wider(names_from = sample, values_from = clr) %>%
           stats::na.omit() %>%
-          column_to_rownames(var = "celltype") %>%
+          tibble::column_to_rownames(var = "celltype") %>%
           scale(center = T, scale = F)
 
         if (is.null(batching))  {
@@ -1471,7 +1471,7 @@ get.cluster.score <- function(object = NULL,
               mat <- object@composition[[layer]][[i]][, c("celltype", "clr", "sample"), with = F]
               mat <- mat %>%
                 tidyr::pivot_wider(names_from = sample, values_from = clr) %>%
-                column_to_rownames(var = "celltype")
+                tibble::column_to_rownames(var = "celltype")
 
               if (all.concatenated.na.handling == "drop") {
                 mat <- stats::na.omit(mat)
@@ -1677,7 +1677,7 @@ get.cluster.score <- function(object = NULL,
             mat <- object@aggregated_profile[[type]][[layer]][, c("celltype", i, "sample"), with = F]
             mat <- mat %>%
               tidyr::pivot_wider(names_from = sample, values_from = i) %>%
-              column_to_rownames(var = "celltype")
+              tibble::column_to_rownames(var = "celltype")
 
             if (all.concatenated.na.handling == "drop") {
               mat <- stats::na.omit(mat)
@@ -1839,7 +1839,7 @@ plot.celltype.freq <- function(object = NULL,
     object <- list(object)
   }
 
-  if (suppressWarnings(!all(lapply(object, function(x) {class(x) == "HiT"})))) {
+  if (suppressWarnings(!all(lapply(object, function(x) {is(x, "HiT")})))) {
     stop("Not all components of the list are HiT objects.")
   }
 
@@ -2015,7 +2015,7 @@ plot.confusion.matrix <- function(object = NULL,
     object <- list(object)
   }
 
-  if (suppressWarnings(!all(lapply(object, function(x) {class(x) == "HiT"})))) {
+  if (suppressWarnings(!all(lapply(object, function(x) {is(x, "HiT")})))) {
     stop("Not all components of the list are HiT objects.")
   }
 
@@ -2168,12 +2168,12 @@ plot_gene_gating <- function(object = NULL,
 
   suppressWarnings({
     for (ob in names(object)) {
-      if (class(object[[ob]]) != "Seurat") {
+      if (!is(object[[ob]], "Seurat")) {
         stop("Not Seurat object included, cannot be processed.\n")
       }
 
       # keep only genes expressed
-      sc_names <- rownames(object[[ob]])[rowSums(object[[ob]]) > 0]
+      sc_names <- row.names(object[[ob]])[rowSums(object[[ob]]) > 0]
       # make plot list for each level
       pl.list <- list()
 

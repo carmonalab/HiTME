@@ -46,7 +46,7 @@ ProjecTILs.classifier.multi <- function(object,
     }
 
   } else {
-    filter.cells <- T
+    filter.cells <- TRUE
 
     message("Not scGate classification found in this object\n",
             "Running default scGate (or layer1 classification) filtering within Projectils)")
@@ -92,7 +92,7 @@ ProjecTILs.classifier.multi <- function(object,
       functional.clusters <- data.table::rbindlist(lapply(functional.clusters,
                                                           data.table::setDT,
                                                           keep.rownames = TRUE)) %>%
-        #remove duplicated rownames (classified by different ref.maps)
+        #remove duplicated row.names (classified by different ref.maps)
         dplyr::filter(!duplicated(rn)) %>%
         tibble::column_to_rownames("rn")
 
@@ -303,14 +303,14 @@ DESeq2.normalize <- function(matrix,
   vsd <- SummarizedExperiment::assay(vsd)
 
   # Remove black listed genes from the matrix
-  vsd <- vsd[!rownames(vsd) %in% black.list,]
+  vsd <- vsd[!row.names(vsd) %in% black.list,]
 
   # filter genes accordingly
   if (gene.filter == "HVG") {
     # get top variable genes
     rv <- MatrixGenerics::rowVars(vsd)
     select <- order(rv, decreasing=TRUE)[seq_len(min(nVarGenes, length(rv)))]
-    select <- rownames(vsd)[select]
+    select <- row.names(vsd)[select]
 
   } else if (gene.filter == "default_filter") {
     # get predetermined list of genes
@@ -318,7 +318,7 @@ DESeq2.normalize <- function(matrix,
     select <- GO_default
   }
 
-  vsd <- vsd[select[select %in% rownames(vsd)],]
+  vsd <- vsd[select[select %in% row.names(vsd)],]
 
   return(vsd)
 }
@@ -332,7 +332,7 @@ get.scores <- function(matrix,
                        scores,
                        ntests = 100, # number of shuffling events
                        seed = 22, # seed for random shuffling
-                       title = "", # Title for summary plot
+                       title = "", # Title for summary
                        # For PCA
                        invisible = c("var", "quali")) {
 
@@ -460,10 +460,9 @@ get.scores <- function(matrix,
                                     shape = 21, color = "black", size = 5) +
             ggplot2::ggtitle(paste("KNN plot with k = ", k,
                                    "\nModularity score = ", round(modularity_score, 3),
-                                   if (!is.null(p_val))
-                                   {paste("\nAdjusted p-value:", format.pval(p_val, digits = 3))}
-                                   else
-                                   {NULL})) +
+                                   ifelse(!is.null(p_val),
+                                          paste("\nAdjusted p-value:", format.pval(p_val, digits = 3)),
+                                          ""))) +
             ggplot2::labs(fill = "Groups") +
             ggplot2::theme(panel.background = element_rect(fill = "white"))
 
@@ -492,10 +491,6 @@ get.scores <- function(matrix,
     #   ggtitle(paste0("Hierarchical clustering dendrogram - ",
     #                  hclust.method))
 
-    # Adjust p-value for number of tests performed (TODO NEEDS REWORK) ###############################################
-    #     p_val <- stats::p.adjust(p_val,
-    #                                  method = "fdr",
-    #                                  n = length(unique(labels)))
 
     # Combine plots ###############################################
     title_row <- cowplot::ggdraw() +
@@ -733,10 +728,9 @@ plot_silhouette <- function(sil_scores,
     ggplot2::ggtitle(paste0(title,
                             "\nAverage silhouette width = ", round(m, 3),
                             "   95% CI: [", round(ci[1], 3), ", ", round(ci[2], 3), "]",
-                            if (!is.null(sil_scores[["p_value"]]))
-                            {paste("\np-value: ", format.pval(sil_scores[["p_value"]], digits = 3))}
-                            else
-                            {NULL})) +
+                            ifelse(!is.null(sil_scores[["p_value"]]),
+                                   paste("\np-value: ", format.pval(sil_scores[["p_value"]], digits = 3)),
+                                   ""))) +
     ggplot2::labs(fill = "Groups") +
     ggplot2::geom_ribbon(aes(x = 1:xend, ymin = ci[1], ymax = ci[2]), alpha = 0.15, inherit.aes = FALSE) +
     ggplot2::annotate("segment", x = 1, xend = xend, y = ci[1], lty = 1, alpha = 0.15) +

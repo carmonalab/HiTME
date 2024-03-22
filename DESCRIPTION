@@ -57,7 +57,11 @@ Imports:
   BiocGenerics(>= 0.48.1),
   factoextra(>= 1.0.7),
   ggpubr(>= 0.6.0),
-  tidyr(>= 1.3.1)
+  tidyr(>= 1.3.1),
+  ggraph (>= 2.1.0),
+  RColorBrewer (>= 1.1-3),
+  gridExtra (>= 2.3),
+  pheatmap (>= 1.0.12)
 Suggests: 
     knitr,
     rmarkdown,
