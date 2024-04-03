@@ -2498,13 +2498,12 @@ save_objs <- function(obj.list,
                       progressbar = TRUE) {
 
   BiocParallel::bplapply(
-    X = obj.list,
+    X = names(obj.list),
     BPPARAM =  BiocParallel::MulticoreParam(workers = ncores,
                                             progressbar = progressbar),
     function(x) {
-      sample_name <- unique(x$Sample)
-      file_name <- file.path(dir, sprintf("%s.rds", sample_name))
-      saveRDS(x, file_name)
+      file_name <- file.path(dir, sprintf("%s.rds", x))
+      saveRDS(obj.list[[x]], file_name)
     })
 }
 
