@@ -8,7 +8,7 @@ save_objs(
   obj.list,
   dir,
   ncores = parallelly::availableCores() - 2,
-  progressbar = T
+  progressbar = TRUE
 )
 }
 \arguments{

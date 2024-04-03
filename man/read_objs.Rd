@@ -8,7 +8,7 @@ read_objs(
   dir = NULL,
   file.list = NULL,
   ncores = parallelly::availableCores() - 2,
-  progressbar = T
+  progressbar = TRUE
 )
 }
 \arguments{

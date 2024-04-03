@@ -33,14 +33,17 @@ ProjecTILs.classifier.multi <- function(object,
     no.present <- names(ref.maps)[!names(ref.maps) %in% present]
 
     if (length(present) == 0) {
-      message(paste("No cells linked to reference maps found by", layer1_link, ".\nNot running Projectils"))
+      message(paste("No cells linked to reference maps found by", layer1_link,
+                    ".\nNot running Projectils"))
       run <- FALSE
     } else {
       run <- TRUE
-      message("Performing Projectils classification for ", paste(present, collapse = ", "))
+      message("Performing Projectils classification for ",
+              paste(present, collapse = ", "))
 
       if (length(ref.maps) != length(present)) {
-        message("Not doing mapping for ", paste(no.present, collapse = ", ") )
+        message("Not doing mapping for ",
+                paste(no.present, collapse = ", ") )
         ref.maps <- ref.maps[present]
       }
     }
@@ -97,11 +100,15 @@ ProjecTILs.classifier.multi <- function(object,
         tibble::column_to_rownames("rn")
 
       # remove already present functional.cluster columns
-      rm <- grep("^functional.cluster", names(object@meta.data))
+      rm <- grep("^functional.cluster",
+                 names(object@meta.data))
       if (length(rm) > 0) {
         object@meta.data <- object@meta.data[, -rm, drop = F]
       }
-      object@meta.data <- merge(object@meta.data, functional.clusters, by = 0, all.x = T) %>%
+      object@meta.data <- merge(object@meta.data,
+                                functional.clusters,
+                                by = 0,
+                                all.x = T) %>%
         tibble::column_to_rownames("Row.names")
 
       # save names of reference maps run (will be lost if objects remerged)
@@ -245,9 +252,13 @@ compositional_data <- function(data,
 
       # add extra cols (if any)
       clr <- cbind(clr.df[,chr_cols],clr)  %>%
-        tidyr::pivot_longer(-chr_cols, names_to = "celltype", values_to = "clr")
+        tidyr::pivot_longer(-chr_cols,
+                            names_to = "celltype",
+                            values_to = "clr")
       # join clr df to main dataframe
-      ctable <- dplyr::left_join(ctable, clr, by = c(chr_cols, "celltype"))
+      ctable <- dplyr::left_join(ctable,
+                                 clr,
+                                 by = c(chr_cols, "celltype"))
     }
   }
 
@@ -368,7 +379,7 @@ get.scores <- function(matrix,
 
         avg_sil <- mean(sils[["sil_width"]])
 
-        CI_intervals <- t.test(sils[["sil_width"]])$conf.int
+        CI_intervals <- stats::t.test(sils[["sil_width"]])$conf.int
 
         p_val <- perm_test(fun = calc_sil_onelabel,
                            data = dist,
@@ -457,12 +468,14 @@ get.scores <- function(matrix,
           p <- ggraph::ggraph(g, layout = 'kk') +
             ggraph::geom_edge_link(color = "grey", edge_width = 0.2) +
             ggraph::geom_node_point(ggplot2::aes(fill = as.factor(names(igraph::V(g)))),
-                                    shape = 21, color = "black", size = 5) +
+                                    shape = 21,
+                                    color = "black",
+                                    size = 5) +
             ggplot2::ggtitle(paste("KNN plot with k = ", k,
                                    "\nModularity score = ", round(modularity_score, 3),
                                    ifelse(!is.null(p_val),
-                                          paste("\nAdjusted p-value:", format.pval(p_val, digits = 3)),
-                                          ""))) +
+                                          paste("\nAdjusted p-value:",
+                                                format.pval(p_val, digits = 3)), ""))) +
             ggplot2::labs(fill = "Groups") +
             ggplot2::theme(panel.background = element_rect(fill = "white"))
 
@@ -683,7 +696,7 @@ p.val_zscore <- function(obs,
   mean <- mean(random_values)
   sd <- sd(random_values)
   z_score <- (obs - mean) / sd
-  p_val <- 1 - pnorm(z_score)
+  p_val <- 1 - stats::pnorm(z_score)
   return(p_val)
 }
 
@@ -703,7 +716,7 @@ plot_PCA <- function(matrix,
                               pointsize = 3,
                               invisible = invisible) +
       # Remove shapes added by fviz_pca
-      scale_shape_manual(values=c(rep(19,length(unique(color.cluster.by)))))
+      scale_shape_manual(values = c(rep(19, length(unique(color.cluster.by)))))
   )
 
   return(p)
@@ -729,13 +742,32 @@ plot_silhouette <- function(sil_scores,
                             "\nAverage silhouette width = ", round(m, 3),
                             "   95% CI: [", round(ci[1], 3), ", ", round(ci[2], 3), "]",
                             ifelse(!is.null(sil_scores[["p_value"]]),
-                                   paste("\np-value: ", format.pval(sil_scores[["p_value"]], digits = 3)),
-                                   ""))) +
+                                   paste("\np-value: ",
+                                         format.pval(sil_scores[["p_value"]],
+                                                     digits = 3)), ""))) +
     ggplot2::labs(fill = "Groups") +
-    ggplot2::geom_ribbon(aes(x = 1:xend, ymin = ci[1], ymax = ci[2]), alpha = 0.15, inherit.aes = FALSE) +
-    ggplot2::annotate("segment", x = 1, xend = xend, y = ci[1], lty = 1, alpha = 0.15) +
-    ggplot2::annotate("segment", x = 1, xend = xend, y = ci[2], lty = 1, alpha = 0.15) +
-    ggplot2::annotate("segment", x = 1, xend = xend, y = m, lty = 2) +
+    ggplot2::geom_ribbon(aes(x = 1:xend,
+                             ymin = ci[1],
+                             ymax = ci[2]),
+                         alpha = 0.15,
+                         inherit.aes = FALSE) +
+    ggplot2::annotate("segment",
+                      x = 1,
+                      xend = xend,
+                      y = ci[1],
+                      lty = 1,
+                      alpha = 0.15) +
+    ggplot2::annotate("segment",
+                      x = 1,
+                      xend = xend,
+                      y = ci[2],
+                      lty = 1,
+                      alpha = 0.15) +
+    ggplot2::annotate("segment",
+                      x = 1,
+                      xend = xend,
+                      y = m,
+                      lty = 2) +
     ggplot2::theme_bw()
 
   return(p)
