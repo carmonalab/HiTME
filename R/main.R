@@ -1818,6 +1818,10 @@ get.cluster.score <- function(object = NULL,
     }
   }
 
+  # Save user set parameters for summarize.cluster.scores
+  results[["params"]][["cluster.by"]] <- cluster.by
+  results[["params"]][["batching"]] <- batching
+  results[["params"]][["scores"]] <- scores
 
   return(results)
 }
@@ -1827,48 +1831,190 @@ get.cluster.score <- function(object = NULL,
 
 #' Summarize scores and plot heat map
 #'
-#' @param scores A scores object from get.cluster.scores
-#' @param plot_show Boolean whether to show a plot or not
-
+#' @param data Output from get.cluster.scores
+#' @param topN Integer indicating number of topN highest scoring (most discriminating) features ranked for each score
+#' @param create_plots Boolean indicating whether to create and show plots or not
+#' @param p.adjustment Whether to adjust p-value columns or not
+#' @param p.adjust_method Method for adjusting p-values (see stats::p.adjust for methods)
+#' @param p.value_cutoff p-value (mean of all p-value columns) cutoff to filter out non-significant results
+#'
+#' @importFrom dplyr mutate filter
+#' @importFrom tidyr pivot_wider
+#' @importFrom tibble column_to_rownames
+#' @importFrom stats p.adjust na.omit quantile
+#' @importFrom grDevices colorRampPalette
+#' @importFrom RColorBrewer brewer.pal
+#' @importFrom pheatmap pheatmap
+#' @importFrom gridExtra grid.arrange arrangeGrob
+#'
 #' @return Average silhouette widths per grouping variable. Optionally, a heatmap plot for visualization
 #' @export summarize.cluster.scores
 #'
 
 
-summarize.cluster.scores <- function(scores = NULL,
-                                     plot_show = TRUE) {
+summarize.cluster.scores <- function(data = NULL,
+                                     topN = NULL,
+                                     create_plots = TRUE,
+                                     p.adjustment = TRUE,
+                                     p.adjust_method = "fdr",
+                                     p.value_cutoff = 0.05) {
 
-  if (is.null(scores)) {
+  if (is.null(data)) {
     message("Please provide scores object (output from get.cluster.scores)")
   }
 
-  s <- unlist(scores)
+  cluster.by <- data[["params"]][["cluster.by"]]
+  batching <- data[["params"]][["batching"]]
+  scores <- data[["params"]][["scores"]]
 
-  sils <- s[grep("\\.sil_width", names(s))]
+  data[["params"]] <- NULL # Remove params
 
-  res <- data.frame()
-  elems <- unique(gsub("\\.clusters.*", "", names(sils)))
-  for (e in elems) {
-    res[e, "Silhouette"] <- mean(unlist(sils[grepl(e, names(sils))]))
-    res[e, "Number_of_samples"] <- length((unlist(sils[grepl(e, names(sils))])))
+  data_conts <- unlist(data)
+  df_pars <- list()
+  p_value_was_calculated <- TRUE
+  for (par in c(".p_value", ".summary")) {
+    data_conts_temp <- data_conts[endsWith(names(data_conts), par)]
+
+    if (!length(data_conts_temp) == 0) {
+      target_string <- paste0(scores, collapse = "|")
+      target_string <- paste0("(", target_string, "+)")
+      data_conts_names_split <- strsplit(gsub(target_string,"~\\1",
+                                              names(data_conts_temp)), "~")
+
+      df <- data.frame(t(do.call(cbind, data_conts_names_split))) %>%
+        dplyr::mutate(X3 = sapply(data_conts_temp, "[[", 1)) %>%
+        tidyr::pivot_wider(names_from = "X1",
+                           values_from = "X3") %>%
+        tibble::column_to_rownames(var = "X2") %>%
+        t() %>%
+        as.data.frame()
+
+      # colnames(df) <- gsub(par, "", colnames(df))
+      row.names(df) <- gsub(".Scores.",
+                            "",
+                            row.names(df))
+
+      df_pars[[par]] <- df
+    } else {
+      p_value_was_calculated <- FALSE
+    }
   }
 
-  plot_row_labels <- gsub("\\.Silhouette", "", rownames(res))
-  plot_row_labels <- paste0(plot_row_labels, " (n = ", res[["Number_of_samples"]], ")")
-  res_plot <- res %>% select(Silhouette)
-  rownames(res_plot) <- plot_row_labels
-  p <- pheatmap::pheatmap(res_plot,
-                          angle_col = 45,
-                          scale = "column",
-                          display_numbers = round(res_plot, 2), number_color = "black",
-                          legend_breaks = 0, legend_labels = "",
-                          cluster_cols = F, cluster_rows = F)
-
-  if (plot_show) {
-    print(p)
+  if (p_value_was_calculated) {
+    df <- merge(df_pars[[1]],
+                df_pars[[2]],
+                by = "row.names",
+                all = TRUE)
+    row.names(df) <- df$Row.names
+    df$Row.names <- NULL
+  } else {
+    df <- df_pars[[1]]
   }
 
-  return(res)
+  df_cluster.by_list <- list()
+  for (c in cluster.by) {
+    df_cluster.by_list[[c]] <- df %>%
+      dplyr::filter(row.names(.) %>%
+               startsWith(c))
+    row.names(df_cluster.by_list[[c]]) <- gsub(paste0(c, "."),
+                                               "",
+                                               row.names(df_cluster.by_list[[c]]))
+    if (p_value_was_calculated) {
+      # Adjust p-values and filter
+      if (p.adjustment) {
+        p_val_cols <- which(grepl(".p_value",
+                                  colnames(df_cluster.by_list[[c]])))
+        for (i in p_val_cols){
+          df_cluster.by_list[[c]][, i] <-
+            stats::p.adjust(df_cluster.by_list[[c]][, i],
+                            method = p.adjust_method)
+        }
+
+        df_cluster.by_list[[c]] <-
+          df_cluster.by_list[[c]][rowMeans(df_cluster.by_list[[c]][, p_val_cols]) <= p.value_cutoff, ]
+
+        df_cluster.by_list[[c]] <- stats::na.omit(df_cluster.by_list[[c]])
+
+        if (nrow(df_cluster.by_list[[c]]) == 0) {
+          df_cluster.by_list[[c]] <- NULL
+          message(paste("For ", c, " no separation was found after p-value cutoff. You can try to set it higher."))
+
+          next
+        }
+      }
+    }
+
+    # Get topN scored results
+    if (!is.null(topN) &&
+        is.numeric(topN) &&
+        length(topN) == 1) {
+      summary_score_cols <- which(grepl(".summary",
+                                        colnames(df_cluster.by_list[[c]])))
+      topN_rownames <- c()
+      for (i in summary_score_cols) {
+        topN_rownames_i <- row.names(df_cluster.by_list[[c]])[
+          order(df_cluster.by_list[[c]][, i], decreasing = TRUE)][1:topN]
+        topN_rownames <- c(topN_rownames,
+                           topN_rownames_i)
+      }
+      df_cluster.by_list[[c]] <- df_cluster.by_list[[c]][unique(topN_rownames), ]
+    }
+  }
+
+  # Remove NULL elements
+  df_cluster.by_list <- Filter(Negate(is.null), df_cluster.by_list)
+
+  # Check if all df_cluster.by_list were NULL
+  if (length(df_cluster.by_list) == 0) {
+
+    message("No significant separation found for cluster.by provided")
+
+  } else {
+
+    if (create_plots) {
+      df_list <- list()
+      plot_list <- list()
+      for (n in names(df_cluster.by_list)) {
+        df <- stats::na.omit(df_cluster.by_list[[n]])
+
+        n_breaks <- min(100, dim(df)[1] * dim(df)[2])
+        quantiles <- seq(0, 1, 1/n_breaks)
+
+        # Check that variance is not zero
+        nonzero_var_cols <- unlist(lapply(df, function(x) !length(unique(x))==1))
+        breaks <- df[, nonzero_var_cols] %>%
+          scale() %>%
+          stats::quantile(., quantiles) %>%
+          unique()
+
+        color_breaks <- length(breaks)
+
+        plot_list[[n]] <- pheatmap::pheatmap(df,
+                                             main = n,
+                                             angle_col = 45,
+                                             scale = "column",
+                                             display_numbers = round(df, 3), number_color = "black",
+                                             color = grDevices::colorRampPalette(
+                                               rev(RColorBrewer::brewer.pal(n = 7,
+                                                                            name = "RdYlBu")))(color_breaks),
+                                             breaks = breaks,
+                                             legend_breaks = 0,
+                                             legend_labels = "",
+                                             cluster_cols = FALSE,
+                                             cluster_rows = FALSE,
+                                             silent = TRUE)[[4]]
+      }
+      df_cluster.by_list[["plots"]][["plot_list"]] <- plot_list
+
+      g <- gridExtra::grid.arrange(
+        gridExtra::arrangeGrob(grobs = plot_list,
+                               ncol=length(plot_list))
+      )
+      df_cluster.by_list[["plots"]][["summary_plot"]] <- g
+    }
+
+    return(df_cluster.by_list)
+  }
 }
 
 
