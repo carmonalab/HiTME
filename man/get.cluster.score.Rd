@@ -7,7 +7,7 @@
 get.cluster.score(
   object = NULL,
   metadata = NULL,
-  cluster.by = c("condition", "batch"),
+  cluster.by = NULL,
   batching = NULL,
   scores = c("Silhouette_isolated", "Silhouette", "Modularity"),
   dist.method = "euclidean",

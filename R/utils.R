@@ -648,11 +648,14 @@ perm_test <- function (fun,
                        ntests,
                        seed) {
 
-  if (!(length(ntests) == 1 && is.numeric(ntests) && ntests >= 0)) {
+  if (!(length(ntests) == 1 &&
+        is.numeric(ntests) &&
+        ntests >= 0)) {
     stop("Please provide a number for ntests permutation testing")
   }
 
-  if (!(length(ntests) == 1 && is.numeric(seed))) {
+  if (!(length(ntests) == 1 &&
+        is.numeric(seed))) {
     stop("Please provide a number for setting seed")
   }
 
