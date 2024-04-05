@@ -1974,6 +1974,7 @@ summarize.cluster.scores <- function(data = NULL,
     if (create_plots) {
       df_list <- list()
       plot_list <- list()
+
       for (n in names(df_cluster.by_list)) {
         df <- stats::na.omit(df_cluster.by_list[[n]])
 
@@ -1992,7 +1993,7 @@ summarize.cluster.scores <- function(data = NULL,
         plot_list[[n]] <- pheatmap::pheatmap(df,
                                              main = n,
                                              angle_col = 45,
-                                             scale = "column",
+                                             scale = ifelse(nrow(df) == 1, "column", "none"),
                                              display_numbers = round(df, 3), number_color = "black",
                                              color = grDevices::colorRampPalette(
                                                rev(RColorBrewer::brewer.pal(n = 7,
