@@ -447,7 +447,7 @@ get.scores <- function(matrix,
                                     k = k)
 
           # Calculate modularity score
-          modularity_score <- igraph::modularity(g, membership = as.numeric(cluster_labels))
+          modularity_score <- igraph::modularity(g, membership = as.numeric(factor(cluster_labels)))
 
           # Plotting the graph
           g <- igraph::set_vertex_attr(g, "name", value = cluster_labels)
@@ -630,7 +630,7 @@ calc_modularity <- function(labels,
                             k = k)
 
   # Calculate modularity score
-  modularity_score <- igraph::modularity(g, membership = as.numeric(labels))
+  modularity_score <- igraph::modularity(g, membership = as.numeric(factor(labels)))
 
   return(modularity_score)
 }
