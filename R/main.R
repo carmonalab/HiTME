@@ -1990,14 +1990,23 @@ summarize.cluster.scores <- function(data = NULL,
 
         color_breaks <- length(breaks)
 
+        color <- grDevices::colorRampPalette(
+          rev(RColorBrewer::brewer.pal(n = 7,
+                                       name = "RdYlBu")))(color_breaks)
+
+        if (nrow(df) > 1) {
+          scale <- "column"
+        } else {
+          scale <- "none"
+        }
+
         plot_list[[n]] <- pheatmap::pheatmap(df,
                                              main = n,
                                              angle_col = 45,
-                                             scale = ifelse(nrow(df) == 1, "column", "none"),
-                                             display_numbers = round(df, 3), number_color = "black",
-                                             color = grDevices::colorRampPalette(
-                                               rev(RColorBrewer::brewer.pal(n = 7,
-                                                                            name = "RdYlBu")))(color_breaks),
+                                             scale = scale,
+                                             display_numbers = round(df, 3),
+                                             number_color = "black",
+                                             color = color,
                                              breaks = breaks,
                                              legend_breaks = 0,
                                              legend_labels = "",
