@@ -474,7 +474,7 @@ get.scores <- function(matrix,
             ggplot2::ggtitle(paste("KNN plot with k = ", k,
                                    "\nModularity score = ", round(modularity_score, 3),
                                    ifelse(!is.null(p_val),
-                                          paste("\nAdjusted p-value:",
+                                          paste("\np-value:",
                                                 format.pval(p_val, digits = 3)), ""))) +
             ggplot2::labs(fill = "Groups") +
             ggplot2::theme(panel.background = element_rect(fill = "white"))
