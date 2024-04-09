@@ -1354,6 +1354,7 @@ merge.HiTObjects <- function(object = NULL,
 #' @importFrom igraph modularity set_vertex_attr layout_nicely V
 #' @importFrom cowplot plot_grid ggdraw
 #' @importFrom ggraph ggraph geom_edge_link geom_node_point
+#' @importFrom poolr fisher
 
 #' @return Metrics of cell types pseudobulk clustering
 #' @export get.cluster.score
@@ -1487,15 +1488,29 @@ get.cluster.score <- function(object = NULL,
                                            layer),
                              invisible = pca_comps_labs_invisible)
                 for (score in scores) {
-                  b_var_res_summary[[score]] <- c(
-                    b_var_res_summary[[score]],
+                  b_var_res_summary[[score]][["summary"]] <- c(
+                    b_var_res_summary[[score]][["summary"]],
                     results[[cluster_col]][[type]][[layer]][[b_var]][[b]][["Scores"]][[score]][["summary"]])
+                  b_var_res_summary[[score]][["p_value"]] <- c(
+                    b_var_res_summary[[score]][["p_value"]],
+                    results[[cluster_col]][[type]][[layer]][[b_var]][[b]][["Scores"]][[score]][["p_value"]])
                 }
               }
 
               for (score in scores) {
-                b_var_res_summary[[score]] <-
-                  mean(b_var_res_summary[[score]])
+                b_var_res_summary[[score]][["summary"]] <-
+                  mean(b_var_res_summary[[score]][["summary"]])
+                p_values_not_na <- stats::na.omit(b_var_res_summary[[score]][["p_value"]])
+                p_values_not_na_len <- length(p_values_not_na)
+                if (p_values_not_na_len > 1){
+                  b_var_res_summary[[score]][["p_value"]] <-
+                    poolr::fisher(b_var_res_summary[[score]][["p_value"]])[["p"]]
+                } else if (p_values_not_na_len == 1) {
+                  b_var_res_summary[[score]][["p_value"]] <- p_values_not_na
+                } else {
+                  b_var_res_summary[[score]][["p_value"]] <- NULL
+                  b_var_res_summary[[score]][["summary"]] <- NULL
+                }
               }
               results[[cluster_col]][[type]][[layer]][[b_var]][["all"]][["Scores"]] <- b_var_res_summary
             }
@@ -1582,15 +1597,29 @@ get.cluster.score <- function(object = NULL,
                       }
 
                       for (score in scores) {
-                        b_var_res_summary[[score]] <- c(
-                          b_var_res_summary[[score]],
+                        b_var_res_summary[[score]][["summary"]] <- c(
+                          b_var_res_summary[[score]][["summary"]],
                           res[[b_var]][[b]][["Scores"]][[score]][["summary"]])
+                        b_var_res_summary[[score]][["p_value"]] <- c(
+                          b_var_res_summary[[score]][["p_value"]],
+                          res[[b_var]][[b]][["Scores"]][[score]][["p_value"]])
                       }
                     }
 
                     for (score in scores) {
-                      b_var_res_summary[[score]] <-
-                        mean(b_var_res_summary[[score]])
+                      b_var_res_summary[[score]][["summary"]] <-
+                        mean(b_var_res_summary[[score]][["summary"]])
+                      p_values_not_na <- stats::na.omit(b_var_res_summary[[score]][["p_value"]])
+                      p_values_not_na_len <- length(p_values_not_na)
+                      if (p_values_not_na_len > 1){
+                        b_var_res_summary[[score]][["p_value"]] <-
+                          poolr::fisher(b_var_res_summary[[score]][["p_value"]])[["p"]]
+                      } else if (p_values_not_na_len == 1) {
+                        b_var_res_summary[[score]][["p_value"]] <- p_values_not_na
+                      } else {
+                        b_var_res_summary[[score]][["p_value"]] <- NULL
+                        b_var_res_summary[[score]][["summary"]] <- NULL
+                      }
                     }
                     res[[b_var]][["all"]][["Scores"]] <- b_var_res_summary
                   }
@@ -1688,15 +1717,29 @@ get.cluster.score <- function(object = NULL,
                     }
                   }
                   for (score in scores) {
-                    b_var_res_summary[[score]] <- c(
-                      b_var_res_summary[[score]],
+                    b_var_res_summary[[score]][["summary"]] <- c(
+                      b_var_res_summary[[score]][["summary"]],
                       res[[b_var]][[b]][["Scores"]][[score]][["summary"]])
+                    b_var_res_summary[[score]][["p_value"]] <- c(
+                      b_var_res_summary[[score]][["p_value"]],
+                      res[[b_var]][[b]][["Scores"]][[score]][["p_value"]])
                   }
                 }
 
                 for (score in scores) {
-                  b_var_res_summary[[score]] <-
-                    mean(b_var_res_summary[[score]])
+                  b_var_res_summary[[score]][["summary"]] <-
+                    mean(b_var_res_summary[[score]][["summary"]])
+                  p_values_not_na <- stats::na.omit(b_var_res_summary[[score]][["p_value"]])
+                  p_values_not_na_len <- length(p_values_not_na)
+                  if (p_values_not_na_len > 1){
+                    b_var_res_summary[[score]][["p_value"]] <-
+                      poolr::fisher(b_var_res_summary[[score]][["p_value"]])[["p"]]
+                  } else if (p_values_not_na_len == 1) {
+                    b_var_res_summary[[score]][["p_value"]] <- p_values_not_na
+                  } else {
+                    b_var_res_summary[[score]][["p_value"]] <- NULL
+                    b_var_res_summary[[score]][["summary"]] <- NULL
+                  }
                 }
                 res[[b_var]][["all"]][["Scores"]] <- b_var_res_summary
               }
@@ -1792,15 +1835,29 @@ get.cluster.score <- function(object = NULL,
                                                i),
                                  invisible = pca_sig_labs_invisible)
                     for (score in scores) {
-                      b_var_res_summary[[score]] <- c(
-                        b_var_res_summary[[score]],
+                      b_var_res_summary[[score]][["summary"]] <- c(
+                        b_var_res_summary[[score]][["summary"]],
                         res[[b_var]][[b]][["Scores"]][[score]][["summary"]])
+                      b_var_res_summary[[score]][["p_value"]] <- c(
+                        b_var_res_summary[[score]][["p_value"]],
+                        res[[b_var]][[b]][["Scores"]][[score]][["p_value"]])
                     }
                   }
 
                   for (score in scores) {
-                    b_var_res_summary[[score]] <-
-                      mean(b_var_res_summary[[score]])
+                    b_var_res_summary[[score]][["summary"]] <-
+                      mean(b_var_res_summary[[score]][["summary"]])
+                    p_values_not_na <- stats::na.omit(b_var_res_summary[[score]][["p_value"]])
+                    p_values_not_na_len <- length(p_values_not_na)
+                    if (p_values_not_na_len > 1){
+                      b_var_res_summary[[score]][["p_value"]] <-
+                        poolr::fisher(b_var_res_summary[[score]][["p_value"]])[["p"]]
+                    } else if (p_values_not_na_len == 1) {
+                      b_var_res_summary[[score]][["p_value"]] <- p_values_not_na
+                    } else {
+                      b_var_res_summary[[score]][["p_value"]] <- NULL
+                      b_var_res_summary[[score]][["summary"]] <- NULL
+                    }
                   }
                   res[[b_var]][["all"]][["Scores"]] <- b_var_res_summary
                 }
