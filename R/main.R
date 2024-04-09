@@ -1928,9 +1928,16 @@ summarize.cluster.scores <- function(data = NULL,
 
   data_conts <- unlist(data)
   df_pars <- list()
+
   p_value_was_calculated <- TRUE
   for (par in c(".p_value", ".summary")) {
     data_conts_temp <- data_conts[endsWith(names(data_conts), par)]
+
+    if (!is.null(batching)) {
+      data_conts_temp <- data_conts_temp[grepl(".all.Scores.",
+                                               names(data_conts_temp))]
+      names(data_conts_temp) <- gsub("all.", "", names(data_conts_temp))
+    }
 
     if (!length(data_conts_temp) == 0) {
       target_string <- paste0(scores, collapse = "|")
@@ -1946,7 +1953,6 @@ summarize.cluster.scores <- function(data = NULL,
         t() %>%
         as.data.frame()
 
-      # colnames(df) <- gsub(par, "", colnames(df))
       row.names(df) <- gsub(".Scores.",
                             "",
                             row.names(df))
@@ -1976,6 +1982,17 @@ summarize.cluster.scores <- function(data = NULL,
     row.names(df_cluster.by_list[[c]]) <- gsub(paste0(c, "."),
                                                "",
                                                row.names(df_cluster.by_list[[c]]))
+    # Remove batching variable name
+    if (!is.null(batching)) {
+      batch_names <- batching[!batching %in% c]
+      batch_names <- batch_names %>%
+        paste0(".", .) %>%
+        paste(collapse = "|")
+      row.names(df_cluster.by_list[[c]]) <- gsub(batch_names,
+                                                 "",
+                                                 row.names(df_cluster.by_list[[c]]))
+    }
+
     if (p_value_was_calculated) {
       # Adjust p-values and filter
       if (p.adjustment) {
