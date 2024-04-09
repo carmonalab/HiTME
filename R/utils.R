@@ -302,26 +302,26 @@ DESeq2.normalize <- function(matrix,
   # Normalize pseudobulk data using DESeq2
   # do formula for design with the cluster.by elements in order
   dformula <-  stats::formula(paste("~", cluster.by))
-  dds <- DESeq2::DESeqDataSetFromMatrix(countData = matrix,
-                                        colData = metadata,
-                                        design = dformula)
-  dds <- DESeq2::estimateSizeFactors(dds)
+  data <- DESeq2::DESeqDataSetFromMatrix(countData = matrix,
+                                         colData = metadata,
+                                         design = dformula)
+  data <- DESeq2::estimateSizeFactors(data)
 
-  nsub <- min(1000, sum(rowMeans(BiocGenerics::counts(dds, normalized=TRUE)) > 5 ))
+  nsub <- min(1000, sum(rowMeans(BiocGenerics::counts(data, normalized=TRUE)) > 5 ))
 
   # transform counts using vst
-  vsd <- DESeq2::vst(dds, blind = T, nsub = nsub)
-  vsd <- SummarizedExperiment::assay(vsd)
+  data <- DESeq2::vst(data, blind = T, nsub = nsub)
+  data <- SummarizedExperiment::assay(data)
 
   # Remove black listed genes from the matrix
-  vsd <- vsd[!row.names(vsd) %in% black.list,]
+  data <- data[!row.names(data) %in% black.list,]
 
   # filter genes accordingly
   if (gene.filter == "HVG") {
     # get top variable genes
-    rv <- MatrixGenerics::rowVars(vsd)
+    rv <- MatrixGenerics::rowVars(data)
     select <- order(rv, decreasing=TRUE)[seq_len(min(nVarGenes, length(rv)))]
-    select <- row.names(vsd)[select]
+    select <- row.names(data)[select]
 
   } else if (gene.filter == "default_filter") {
     # get predetermined list of genes
@@ -329,9 +329,9 @@ DESeq2.normalize <- function(matrix,
     select <- GO_default
   }
 
-  vsd <- vsd[select[select %in% row.names(vsd)],]
+  data <- data[select[select %in% row.names(data)],]
 
-  return(vsd)
+  return(data)
 }
 
 
