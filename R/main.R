@@ -2145,6 +2145,51 @@ summarize.cluster.scores <- function(data = NULL,
 
 
 
+
+#' Render plots summarizing celltype proportions and distribution in samples
+#'
+#'
+#' @param obj.list List of Seurat objects
+#' @param annot.col Metadata column(s) containing the cell type annotations
+#' @param bottom.mar Adjustable bottom margin for long sample names
+
+#' @importFrom stats setNames
+
+#' @return Plots showing the percentage of not annotated cells per sample.
+#' @export plot.nas
+#'
+
+plot.nas <- function (obj.list = NULL,
+                      annot.col = c("scGate_multi", "functional.cluster"),
+                      bottom.mar = 10.2) {
+  if (is.null(obj.list) &
+      !is.list(obj.list) &
+      !all(lapply(obj.list, inherits, "Seurat"))) {
+    stop("Please provide a list of seurat objects")
+  }
+
+  for (col in annot.col) {
+    na_perc_per_sample <- c()
+    for (i in names(obj.list)) {
+      if (col %in% names(obj.list[[i]]@meta.data)) {
+        percs <- prop.table(table(obj.list[[i]]@meta.data[[col]], useNA = "ifany"))*100
+        nas_perc <- unname(percs[is.na(names(percs))])
+        na_perc_per_sample <- c(na_perc_per_sample, stats::setNames(nas_perc, i))
+      } else {
+        stop(paste(col, " not found in obj.list item ", i))
+      }
+    }
+    par(mar = c(bottom.mar, 4.1, 4.1, 2.1))
+    barplot(na_perc_per_sample,
+            main = col,
+            ylab = "Percentage of NA values",
+            las=2)
+  }
+}
+
+
+
+
 #' Render plots summarizing celltype proportions and distribution in samples
 #'
 #'
