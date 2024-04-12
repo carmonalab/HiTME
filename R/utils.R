@@ -266,7 +266,9 @@ compositional_data <- function(data,
 }
 
 
-# Pre-process pseudobulk data helpers ##############################################################################
+# get.cluster.score helper functions ##############################################################################
+
+### Pre-process pseudobulk count data
 
 preproc_pseudobulk <- function (matrix,
                                 metadata,
@@ -285,6 +287,9 @@ preproc_pseudobulk <- function (matrix,
   return(matrix)
 }
 
+
+
+### Just a helper for preproc_pseudobulk, additional pre-processing steps are needed
 
 DESeq2.normalize <- function(matrix,
                              metadata,
@@ -336,7 +341,6 @@ DESeq2.normalize <- function(matrix,
 
 
 
-# get.cluster.score helper functions ##############################################################################
 
 get.scores <- function(matrix,
                        cluster_labels,
@@ -352,10 +356,10 @@ get.scores <- function(matrix,
   results <- list()
 
   # Check if there are at least 2 clusters,
-  # that there are more than 2 samples and
+  # that there are more than 3 samples and
   # that there are more samples than clusters (not each sample is one separate cluster)
   if (length(unique(cluster_labels)) > 1 &
-      length(cluster_labels) > 2 &
+      length(cluster_labels) > 3 &
       nrow(matrix) > length(unique(cluster_labels))) {
 
     for (s in scores) {
@@ -393,6 +397,7 @@ get.scores <- function(matrix,
                                          "avg_per_group" = avg_per_group,
                                          "summary" = avg_sil,
                                          "conf_int" = CI_intervals,
+                                         "n" = nrow(sils),
                                          "p_value" = p_val)
 
         p <- plot_silhouette(sil_scores = results[["Scores"]][[s]],
@@ -427,6 +432,7 @@ get.scores <- function(matrix,
                                          "avg_per_group" = avg_per_group,
                                          "summary" = avg_sil,
                                          "conf_int" = CI_intervals,
+                                         "n" = nrow(sils),
                                          "p_value" = p_val)
 
         p <- plot_silhouette(sil_scores = results[["Scores"]][[s]],
@@ -461,6 +467,7 @@ get.scores <- function(matrix,
 
           results[["Scores"]][[s]] <- list("igraph" = g,
                                            "summary" = modularity_score,
+                                           "n" = length(g),
                                            "p_value" = p_val)
 
           # Using ggraph layout = "kk" instead of default "stress",
@@ -542,7 +549,7 @@ get.scores <- function(matrix,
 
 
 
-## Calculate scores helpers ##############################################################################
+## get.scores helpers ##############################################################################
 
 ### Calculate silhouette score of group vs all others (instead of nearest other group)
 
@@ -594,7 +601,7 @@ calc_sil_onelabel <- function(labels,
 }
 
 
-### Calculate silhouette score
+### Calculate (classical) silhouette score
 
 calc_sil <- function(labels,
                      dist,
@@ -774,4 +781,40 @@ plot_silhouette <- function(sil_scores,
     ggplot2::theme_bw()
 
   return(p)
+}
+
+
+
+### Combine multiple p-values from get.cluster.scores if batching
+
+combine_pvals <- function(list_pvals_n,
+                          pval.combine.method) {
+
+  use_fallback_method <- FALSE
+
+  # To prevent error from metap, replace zeros with some small value
+  list_pvals_n[["p_value"]][list_pvals_n[["p_value"]] == 0] <- 1e-300
+
+  if (!"p_value" %in% names(list_pvals_n)) {
+    return(list_pvals_n)
+  } else
+  if (pval.combine.method == "weighted_zmethod") {
+    if (!length(list_pvals_n[["p_value"]]) == length(list_pvals_n[["n"]])) {
+      use_fallback_method <- TRUE
+    } else {
+      list_pvals_n[["p_value"]] <- metap::sumz(p = list_pvals_n[["p_value"]],
+                                               weights = list_pvals_n[["n"]])[["p"]][1,1]
+    }
+  } else
+  if (pval.combine.method == "fisher" |
+      use_fallback_method) {
+    list_pvals_n[["p_value"]] <- metap::sumlog(p = list_pvals_n[["p_value"]])[["p"]]
+  } else {
+    stop("pval.combine.method not recognized.
+         Please see documentation for possible methods.")
+  }
+
+  list_pvals_n[["n"]] <- sum(list_pvals_n[["n"]])
+
+  return(list_pvals_n)
 }

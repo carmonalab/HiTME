@@ -15,6 +15,7 @@ get.cluster.score(
   all.concatenated.na.handling = "impute",
   ntests = 100,
   seed = 22,
+  pval.combine.method = "weighted_zmethod",
   pca_comps_labs_invisible = c("quali"),
   pca_pb_labs_invisible = c("var", "quali"),
   pca_sig_labs_invisible = c("quali"),
@@ -22,7 +23,7 @@ get.cluster.score(
   nVarGenes = 500,
   gene.filter = "HVG",
   black.list = NULL,
-  ncores = parallelly::availableCores() - 2,
+  ncores = parallelly::availableCores()/2,
   bparam = NULL,
   progressbar = TRUE
 )
@@ -44,9 +45,9 @@ get.cluster.score(
 
 \item{all.concatenated.na.handling}{How to handle missing values in the "all cell types concatenated vector". Options are "drop" (drop rows, conservative method) or "zero_impute" (replaces missing values with zeros, use with caution as it might change your sample clustering based on number of missing values per sample/group)}
 
-\item{ntests}{Number of shuffling events to calculate p-value for silhouette score}
+\item{ntests}{Number of shuffling events to calculate p-value for scores}
 
-\item{seed}{Set seed for random shuffling events to calculate p-value for silhouette score}
+\item{seed}{Set seed for random shuffling events to calculate p-value for scores}
 
 \item{pca_comps_labs_invisible}{Parameter to pass to fviz_pca defining which labels to plot for composition PCA, see documentation of fviz_pca for details.}
 
@@ -67,6 +68,8 @@ get.cluster.score(
 \item{bparam}{A \code{BiocParallel::bpparam()} object that tells how to parallelize. If provided, it overrides the \code{ncores} parameter.}
 
 \item{progressbar}{Whether to show a progressbar or not}
+
+\item{pval.combine}{Method for combining p-values if calculated using batching. Default is "zmethod" weighted (Stouffer's) Z-method, weighting by sample size per batch. Alternatively, Fisher's method can be used with "fisher".}
 }
 \value{
 Metrics of cell types pseudobulk clustering

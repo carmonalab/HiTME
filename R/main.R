@@ -1318,8 +1318,9 @@ merge.HiTObjects <- function(object = NULL,
 #' @param dist.method Method to compute distance between celltypes, default is euclidean.
 #' @param hclust.method Hierarchical clustering method for hclust. Options are: "single", "complete", "average" (= UPGMA), "mcquitty" (= WPGMA), "median" (= WPGMC) or "centroid" (= UPGMC). (See hclust package for details)
 #' @param all.concatenated.na.handling How to handle missing values in the "all cell types concatenated vector". Options are "drop" (drop rows, conservative method) or "zero_impute" (replaces missing values with zeros, use with caution as it might change your sample clustering based on number of missing values per sample/group)
-#' @param ntests Number of shuffling events to calculate p-value for silhouette score
-#' @param seed Set seed for random shuffling events to calculate p-value for silhouette score
+#' @param ntests Number of shuffling events to calculate p-value for scores
+#' @param seed Set seed for random shuffling events to calculate p-value for scores
+#' @param pval.combine Method for combining p-values if calculated using batching. Default is "zmethod" weighted (Stouffer's) Z-method, weighting by sample size per batch. Alternatively, Fisher's method can be used with "fisher".
 #' @param pca_comps_labs_invisible Parameter to pass to fviz_pca defining which labels to plot for composition PCA, see documentation of fviz_pca for details.
 #' @param pca_pb_labs_invisible Parameter to pass to fviz_pca defining which labels to plot for pseudobulk PCA, see documentation of fviz_pca for details.
 #' @param pca_sig_labs_invisible Parameter to pass to fviz_pca defining which labels to plot for signatures PCA, see documentation of fviz_pca for details.
@@ -1331,13 +1332,12 @@ merge.HiTObjects <- function(object = NULL,
 #' @param bparam A \code{BiocParallel::bpparam()} object that tells how to parallelize. If provided, it overrides the `ncores` parameter.
 #' @param progressbar Whether to show a progressbar or not
 
-#' @importFrom tidyr separate
+#' @importFrom tidyr separate pivot_wider
 #' @importFrom BiocParallel MulticoreParam bplapply
 #' @importFrom parallelly availableCores
 #' @importFrom data.table rbindlist
 #' @importFrom dplyr mutate mutate_if filter %>% coalesce mutate_all full_join row_number
 #' @importFrom BiocParallel MulticoreParam bplapply
-#' @importFrom parallelly availableCores
 #' @importFrom tibble rownames_to_column column_to_rownames remove_rownames
 #' @importFrom caret nearZeroVar
 #' @importFrom ggplot2 aes geom_point guides theme geom_col labs guide_legend annotate theme_bw ggtitle geom_ribbon
@@ -1349,12 +1349,11 @@ merge.HiTObjects <- function(object = NULL,
 #' @importFrom stringr str_to_title
 #' @importFrom stats prcomp na.omit formula pnorm t.test
 #' @importFrom factoextra fviz_pca
-#' @importFrom tidyr pivot_wider
 #' @importFrom scran buildKNNGraph
 #' @importFrom igraph modularity set_vertex_attr layout_nicely V
 #' @importFrom cowplot plot_grid ggdraw
 #' @importFrom ggraph ggraph geom_edge_link geom_node_point
-#' @importFrom poolr fisher
+#' @importFrom metap sumlog sumz
 
 #' @return Metrics of cell types pseudobulk clustering
 #' @export get.cluster.score
@@ -1370,9 +1369,10 @@ get.cluster.score <- function(object = NULL,
                               hclust.method = "complete",
                               all.concatenated.na.handling = "impute",
 
-                              # For silhouette scores
+                              # For scores p-value calculation
                               ntests = 100, # number of shuffling events
                               seed = 22, # seed for random shuffling
+                              pval.combine.method = "weighted_zmethod",
 
                               # For PCA
                               pca_comps_labs_invisible = c("quali"),
@@ -1385,7 +1385,7 @@ get.cluster.score <- function(object = NULL,
                               gene.filter = "HVG",
                               black.list = NULL,
 
-                              ncores = parallelly::availableCores() - 2,
+                              ncores = parallelly::availableCores() / 2, # to reduce memory load
                               bparam = NULL,
                               progressbar = TRUE) {
 
@@ -1491,6 +1491,9 @@ get.cluster.score <- function(object = NULL,
                   b_var_res_summary[[score]][["summary"]] <- c(
                     b_var_res_summary[[score]][["summary"]],
                     results[[cluster_col]][[type]][[layer]][[b_var]][[b]][["Scores"]][[score]][["summary"]])
+                  b_var_res_summary[[score]][["n"]] <- c(
+                    b_var_res_summary[[score]][["n"]],
+                    results[[cluster_col]][[type]][[layer]][[b_var]][[b]][["Scores"]][[score]][["n"]])
                   b_var_res_summary[[score]][["p_value"]] <- c(
                     b_var_res_summary[[score]][["p_value"]],
                     results[[cluster_col]][[type]][[layer]][[b_var]][[b]][["Scores"]][[score]][["p_value"]])
@@ -1500,17 +1503,22 @@ get.cluster.score <- function(object = NULL,
               for (score in scores) {
                 b_var_res_summary[[score]][["summary"]] <-
                   mean(b_var_res_summary[[score]][["summary"]])
+
+                # Requires the number of samples per batch, so run before summing n
                 p_values_not_na <- stats::na.omit(b_var_res_summary[[score]][["p_value"]])
                 p_values_not_na_len <- length(p_values_not_na)
                 if (p_values_not_na_len > 1){
-                  b_var_res_summary[[score]][["p_value"]] <-
-                    poolr::fisher(b_var_res_summary[[score]][["p_value"]])[["p"]]
+                  b_var_res_summary[[score]] <- combine_pvals(b_var_res_summary[[score]],
+                                                              pval.combine.method)
                 } else if (p_values_not_na_len == 1) {
                   b_var_res_summary[[score]][["p_value"]] <- p_values_not_na
                 } else {
                   b_var_res_summary[[score]][["p_value"]] <- NULL
                   b_var_res_summary[[score]][["summary"]] <- NULL
                 }
+
+                b_var_res_summary[[score]][["n"]] <-
+                  sum(b_var_res_summary[[score]][["n"]])
               }
               results[[cluster_col]][[type]][[layer]][[b_var]][["all"]][["Scores"]] <- b_var_res_summary
             }
@@ -1600,6 +1608,9 @@ get.cluster.score <- function(object = NULL,
                         b_var_res_summary[[score]][["summary"]] <- c(
                           b_var_res_summary[[score]][["summary"]],
                           res[[b_var]][[b]][["Scores"]][[score]][["summary"]])
+                        b_var_res_summary[[score]][["n"]] <- c(
+                          b_var_res_summary[[score]][["n"]],
+                          res[[b_var]][[b]][["Scores"]][[score]][["n"]])
                         b_var_res_summary[[score]][["p_value"]] <- c(
                           b_var_res_summary[[score]][["p_value"]],
                           res[[b_var]][[b]][["Scores"]][[score]][["p_value"]])
@@ -1609,17 +1620,22 @@ get.cluster.score <- function(object = NULL,
                     for (score in scores) {
                       b_var_res_summary[[score]][["summary"]] <-
                         mean(b_var_res_summary[[score]][["summary"]])
+
+                      # Requires the number of samples per batch, so run before summing n
                       p_values_not_na <- stats::na.omit(b_var_res_summary[[score]][["p_value"]])
                       p_values_not_na_len <- length(p_values_not_na)
-                      if (p_values_not_na_len > 1){
-                        b_var_res_summary[[score]][["p_value"]] <-
-                          poolr::fisher(b_var_res_summary[[score]][["p_value"]])[["p"]]
+                      if (p_values_not_na_len > 1) {
+                        b_var_res_summary[[score]] <- combine_pvals(b_var_res_summary[[score]],
+                                                                    pval.combine.method)
                       } else if (p_values_not_na_len == 1) {
                         b_var_res_summary[[score]][["p_value"]] <- p_values_not_na
                       } else {
                         b_var_res_summary[[score]][["p_value"]] <- NULL
                         b_var_res_summary[[score]][["summary"]] <- NULL
                       }
+
+                      b_var_res_summary[[score]][["n"]] <-
+                        sum(b_var_res_summary[[score]][["n"]])
                     }
                     res[[b_var]][["all"]][["Scores"]] <- b_var_res_summary
                   }
@@ -1720,6 +1736,9 @@ get.cluster.score <- function(object = NULL,
                     b_var_res_summary[[score]][["summary"]] <- c(
                       b_var_res_summary[[score]][["summary"]],
                       res[[b_var]][[b]][["Scores"]][[score]][["summary"]])
+                    b_var_res_summary[[score]][["n"]] <- c(
+                      b_var_res_summary[[score]][["n"]],
+                      res[[b_var]][[b]][["Scores"]][[score]][["n"]])
                     b_var_res_summary[[score]][["p_value"]] <- c(
                       b_var_res_summary[[score]][["p_value"]],
                       res[[b_var]][[b]][["Scores"]][[score]][["p_value"]])
@@ -1729,17 +1748,22 @@ get.cluster.score <- function(object = NULL,
                 for (score in scores) {
                   b_var_res_summary[[score]][["summary"]] <-
                     mean(b_var_res_summary[[score]][["summary"]])
+
+                  # Requires the number of samples per batch, so run before summing n
                   p_values_not_na <- stats::na.omit(b_var_res_summary[[score]][["p_value"]])
                   p_values_not_na_len <- length(p_values_not_na)
-                  if (p_values_not_na_len > 1){
-                    b_var_res_summary[[score]][["p_value"]] <-
-                      poolr::fisher(b_var_res_summary[[score]][["p_value"]])[["p"]]
+                  if (p_values_not_na_len > 1) {
+                    b_var_res_summary[[score]] <- combine_pvals(b_var_res_summary[[score]],
+                                                                pval.combine.method)
                   } else if (p_values_not_na_len == 1) {
                     b_var_res_summary[[score]][["p_value"]] <- p_values_not_na
                   } else {
                     b_var_res_summary[[score]][["p_value"]] <- NULL
                     b_var_res_summary[[score]][["summary"]] <- NULL
                   }
+
+                  b_var_res_summary[[score]][["n"]] <-
+                    sum(b_var_res_summary[[score]][["n"]])
                 }
                 res[[b_var]][["all"]][["Scores"]] <- b_var_res_summary
               }
@@ -1838,6 +1862,9 @@ get.cluster.score <- function(object = NULL,
                       b_var_res_summary[[score]][["summary"]] <- c(
                         b_var_res_summary[[score]][["summary"]],
                         res[[b_var]][[b]][["Scores"]][[score]][["summary"]])
+                      b_var_res_summary[[score]][["n"]] <- c(
+                        b_var_res_summary[[score]][["n"]],
+                        res[[b_var]][[b]][["Scores"]][[score]][["n"]])
                       b_var_res_summary[[score]][["p_value"]] <- c(
                         b_var_res_summary[[score]][["p_value"]],
                         res[[b_var]][[b]][["Scores"]][[score]][["p_value"]])
@@ -1847,17 +1874,22 @@ get.cluster.score <- function(object = NULL,
                   for (score in scores) {
                     b_var_res_summary[[score]][["summary"]] <-
                       mean(b_var_res_summary[[score]][["summary"]])
+
+                    # Requires the number of samples per batch, so run before summing n
                     p_values_not_na <- stats::na.omit(b_var_res_summary[[score]][["p_value"]])
                     p_values_not_na_len <- length(p_values_not_na)
-                    if (p_values_not_na_len > 1){
-                      b_var_res_summary[[score]][["p_value"]] <-
-                        poolr::fisher(b_var_res_summary[[score]][["p_value"]])[["p"]]
+                    if (p_values_not_na_len > 1) {
+                      b_var_res_summary[[score]] <- combine_pvals(b_var_res_summary[[score]],
+                                                                  pval.combine.method)
                     } else if (p_values_not_na_len == 1) {
                       b_var_res_summary[[score]][["p_value"]] <- p_values_not_na
                     } else {
                       b_var_res_summary[[score]][["p_value"]] <- NULL
                       b_var_res_summary[[score]][["summary"]] <- NULL
                     }
+
+                    b_var_res_summary[[score]][["n"]] <-
+                      sum(b_var_res_summary[[score]][["n"]])
                   }
                   res[[b_var]][["all"]][["Scores"]] <- b_var_res_summary
                 }
@@ -1916,6 +1948,8 @@ summarize.cluster.scores <- function(data = NULL,
                                      p.adjust_method = "fdr",
                                      p.value_cutoff = 0.05) {
 
+  show.variables <- c(".summary", ".n", ".p_value")
+
   if (is.null(data)) {
     message("Please provide scores object (output from get.cluster.scores)")
   }
@@ -1929,8 +1963,7 @@ summarize.cluster.scores <- function(data = NULL,
   data_conts <- unlist(data)
   df_pars <- list()
 
-  p_value_was_calculated <- TRUE
-  for (par in c(".p_value", ".summary")) {
+  for (par in show.variables) {
     data_conts_temp <- data_conts[endsWith(names(data_conts), par)]
 
     if (!is.null(batching)) {
@@ -1939,7 +1972,9 @@ summarize.cluster.scores <- function(data = NULL,
       names(data_conts_temp) <- gsub("all.", "", names(data_conts_temp))
     }
 
-    if (!length(data_conts_temp) == 0) {
+    if (length(data_conts_temp) == 0) {
+      stop("Error happened at ", show.variables, ". No values left after filtering.")
+    } else {
       target_string <- paste0(scores, collapse = "|")
       target_string <- paste0("(", target_string, "+)")
       data_conts_names_split <- strsplit(gsub(target_string,"~\\1",
@@ -1958,21 +1993,30 @@ summarize.cluster.scores <- function(data = NULL,
                             row.names(df))
 
       df_pars[[par]] <- df
-    } else {
-      p_value_was_calculated <- FALSE
     }
   }
 
-  if (p_value_was_calculated) {
-    df <- merge(df_pars[[1]],
-                df_pars[[2]],
-                by = "row.names",
-                all = TRUE)
-    row.names(df) <- df$Row.names
-    df$Row.names <- NULL
-  } else {
-    df <- df_pars[[1]]
+  # Check if all columns with sample numbers are equal
+  df <- as.matrix(df_pars[[".n"]])
+  all_n_cols_equal <- all(apply(df, 2, identical, df[,1]))
+  if (all_n_cols_equal) {
+    df_pars[[".n"]] <- df_pars[[".n"]][, 1, drop = FALSE]
+    colnames(df_pars[[".n"]]) <- "n"
   }
+
+  df <- merge(df_pars[[show.variables[1]]],
+              df_pars[[show.variables[2]]],
+              by = "row.names",
+              all = TRUE)
+  row.names(df) <- df$Row.names
+  df$Row.names <- NULL
+
+  df <- merge(df,
+              df_pars[[show.variables[3]]],
+              by = "row.names",
+              all = TRUE)
+  row.names(df) <- df$Row.names
+  df$Row.names <- NULL
 
   df_cluster.by_list <- list()
   for (c in cluster.by) {
@@ -1993,28 +2037,26 @@ summarize.cluster.scores <- function(data = NULL,
                                                  row.names(df_cluster.by_list[[c]]))
     }
 
-    if (p_value_was_calculated) {
-      # Adjust p-values and filter
-      if (p.adjustment) {
-        p_val_cols <- which(grepl(".p_value",
-                                  colnames(df_cluster.by_list[[c]])))
-        for (i in p_val_cols){
-          df_cluster.by_list[[c]][, i] <-
-            stats::p.adjust(df_cluster.by_list[[c]][, i],
-                            method = p.adjust_method)
-        }
+    # Adjust p-values and filter
+    if (p.adjustment) {
+      p_val_cols <- which(grepl(".p_value",
+                                colnames(df_cluster.by_list[[c]])))
+      for (i in p_val_cols){
+        df_cluster.by_list[[c]][, i] <-
+          stats::p.adjust(df_cluster.by_list[[c]][, i],
+                          method = p.adjust_method)
+      }
 
-        df_cluster.by_list[[c]] <-
-          df_cluster.by_list[[c]][rowMeans(df_cluster.by_list[[c]][, p_val_cols]) <= p.value_cutoff, ]
+      df_cluster.by_list[[c]] <-
+        df_cluster.by_list[[c]][rowMeans(df_cluster.by_list[[c]][, p_val_cols]) <= p.value_cutoff, ]
 
-        df_cluster.by_list[[c]] <- stats::na.omit(df_cluster.by_list[[c]])
+      df_cluster.by_list[[c]] <- stats::na.omit(df_cluster.by_list[[c]])
 
-        if (nrow(df_cluster.by_list[[c]]) == 0) {
-          df_cluster.by_list[[c]] <- NULL
-          message(paste("For ", c, " no separation was found after p-value cutoff. You can try to set it higher."))
+      if (nrow(df_cluster.by_list[[c]]) == 0) {
+        df_cluster.by_list[[c]] <- NULL
+        message(paste("For ", c, " no separation was found after p-value cutoff. You can try to set it higher."))
 
-          next
-        }
+        next
       }
     }
 
@@ -2148,7 +2190,8 @@ plot.celltype.freq <- function(object = NULL,
 
 
   if (is.null(group.by)) {
-    stop("Please provide at least one grouping variable for cell type classification common in all elements of the list of Hit objects")
+    stop("Please provide at least one grouping variable for cell type
+         classification common in all elements of the list of Hit objects")
   } else {
     if (!is.list(group.by)) {
       group.by <- as.list(group.by)
@@ -2163,7 +2206,8 @@ plot.celltype.freq <- function(object = NULL,
   }
 
   if (suppressWarnings(!all(lapply(object, function(x) {any(group.by %in% names(x@metadata))})))) {
-    stop("Not all supplied HiT object contain ", paste(group.by, collapse = ", "),
+    stop("Not all supplied HiT object contain ",
+         paste(group.by, collapse = ", "),
          " group.by elements in their metadata")
   }
   # remove group by if not present in any sample
@@ -2176,7 +2220,8 @@ plot.celltype.freq <- function(object = NULL,
                     }
   )
   if (length(group.by[present]) != length(group.by)) {
-    warning("Celltype classification for ", paste(as.vector(group.by[!present]), collapse = ", "),
+    warning("Celltype classification for ",
+            paste(as.vector(group.by[!present]), collapse = ", "),
             " not present in any object")
 
     group.by <- group.by[present]
@@ -2189,7 +2234,8 @@ plot.celltype.freq <- function(object = NULL,
                                      function(x) {
                                        any(split.by %in% names(x@metadata))
                                      })))) {
-      warning("Not all supplied HiT objects contain ", paste(split.by, collapse = ", "),
+      warning("Not all supplied HiT objects contain ",
+              paste(split.by, collapse = ", "),
               " metadata elements in their metadata")
     }
     present <- sapply(split.by,
@@ -2201,7 +2247,8 @@ plot.celltype.freq <- function(object = NULL,
                       }
     )
     if (length(split.by[present]) != length(split.by)) {
-      warning("Metadata variable ", paste(as.vector(split.by[!present]), collapse = ", "),
+      warning("Metadata variable ",
+              paste(as.vector(split.by[!present]), collapse = ", "),
               " not present in any object")
       split.by <- split.by[present]
     }
@@ -2266,7 +2313,7 @@ plot.celltype.freq <- function(object = NULL,
     }
   }
 
-  # rotat x-axis label
+  # rotate x-axis label
   pl.list <- lapply(pl.list, function(x) {
     x + ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45,
                                                            hjust = 1,
