@@ -2200,192 +2200,101 @@ nas.per.sample <- function (obj.list = NULL,
 #' Render plots summarizing celltype proportions and distribution in samples
 #'
 #'
-#' @param object List of Hit class object
+#' @param hit.object A Hit class object (typically after applying merge.HiTObjects onto a list of HiTObjects)
 #' @param group.by Grouping variable for
 #' @param split.by If desired, indicate how to split plots by metadata variable.
 #' @param by.x Determine which variable show on x-axis, if celltype it shows boxplots of the number of each cell type for each sample. If sample is indicated a barplot is shown with the relative proportions of each celltype within each sample.
 
+#' @importFrom ggplot2 ggplot aes geom_bar theme element_text ggtitle facet_grid
+#' @importFrom stats reformulate
+#' @importFrom cowplot plot_grid
 
-#' @importFrom dplyr mutate group_by distinct
-#' @importFrom ggplot2 aes geom_point facet_wrap geom_col labs geom_boxplot theme_bw
-#' @importFrom data.table rbindlist
-
-#' @return Plots showing the compositional cell type data across the different samples.
-#' @export plot.celltype.freq
+#' @return Plotting function to show the cell type composition from HiTME object across different samples.
+#' @export composition.barplot
 #'
 
-plot.celltype.freq <- function(object = NULL,
-                               group.by = list("layer1" = c("scGate_multi"),
-                                               "layer2" = c("functional.cluster")),
-                               split.by = NULL,
-                               by.x = "celltype") {
-
-  if (is.null(object)) {
-    stop("Please provide a single one or a list of HiT object")
+composition.barplot <- function (hit.object = NULL,
+                                 sample.col = NULL,
+                                 layer = "layer1",
+                                 plot.variable = "freq",
+                                 return.plot.to.var = FALSE,
+                                 group.by = NULL) {
+  if (is.null(hit.object)) {
+    stop("Please provide input hit.object")
+  }
+  if (is.null(sample.col)) {
+    stop("Please specify the metadata column containing unique sample names")
+  }
+  if (length(unique(hit.object@metadata[[sample.col]])) <
+      length(hit.object@metadata[[sample.col]])) {
+    stop("Please specify the metadata column containing unique sample names")
+  }
+  if ((!length(sample.col) && is.character(sample.col)) |
+      (!length(layer) && is.character(layer)) |
+      (!length(plot.variable) && is.character(plot.variable))) {
+    stop("Please provide a character string")
   }
 
-  if (!is.list(object)) {
-    object <- list(object)
-  }
+  comps <- hit.object@composition[[layer]]
+  meta <- hit.object@metadata
+  colnames(meta)[colnames(meta) == sample.col] <- "sample"
 
-  if (suppressWarnings(!all(lapply(object, function(x) {inherits(x, "HiT")})))) {
-    stop("Not all components of the list are HiT objects.")
-  }
+  if(is.data.frame(comps)){
+      comp <- merge(comps, meta[, c("sample", group.by), drop=FALSE], by = "sample")
 
-  # give name to list of hit objects
-  for (v in seq_along(object)) {
-    if (is.null(names(object)[[v]]) ||
-        is.na(names(object)[[v]])) {
-      names(object)[[v]] <- paste0("Sample", v)
+    if (is.null(group.by)) {
+      p <- ggplot(comp, aes(x = sample, y = freq, fill = celltype)) +
+        geom_bar(stat = "identity") +
+        theme(axis.text.x = element_text(angle = 45, hjust=1))
+    } else {
+      p <- ggplot(comp, aes(x = sample, y = freq, fill = celltype)) +
+        geom_bar(stat = "identity") +
+        theme(axis.text.x = element_text(angle = 45, hjust=1)) +
+        facet_grid(reformulate(group.by),  space  = "free", scales = "free")
+    }
+    if (return.plot.to.var) {
+      return(p)
+    } else {
+      print(p)
     }
   }
 
+  else {
+    p_list <- list()
+    for (ct in names(comps)) {
+      comp <- hit.object@composition[[layer]][[ct]]
+      comp <- merge(comp, meta[, c("sample", group.by), drop=FALSE], by = "sample")
 
-  if (is.null(group.by)) {
-    stop("Please provide at least one grouping variable for cell type
-         classification common in all elements of the list of Hit objects")
-  } else {
-    if (!is.list(group.by)) {
-      group.by <- as.list(group.by)
-    }
-    # give name to list of grouping.by variables
-    for (v in seq_along(group.by)) {
-      if (is.null(names(group.by)[[v]]) ||
-          is.na(names(group.by)[[v]])) {
-        names(group.by)[[v]] <- paste0("layer", v)
+      if (is.null(group.by)) {
+        p_list[["plot_list"]][[ct]] <- ggplot(comp, aes(x = sample, y = freq, fill = celltype)) +
+          geom_bar(stat = "identity") +
+          ggtitle(ct) +
+          theme(axis.text.x = element_text(angle = 45, hjust=1))
+      } else {
+        p_list[["plot_list"]][[ct]] <- ggplot(comp, aes(x = sample, y = freq, fill = celltype)) +
+          geom_bar(stat = "identity") +
+          ggtitle(ct) +
+          theme(axis.text.x = element_text(angle = 45, hjust=1)) +
+          facet_grid(reformulate(group.by),  space  = "free", scales = "free")
       }
     }
-  }
+    p_list[["arranged_plots"]] <- cowplot::plot_grid(plotlist = p_list[["plot_list"]])
 
-  if (suppressWarnings(!all(lapply(object, function(x) {any(group.by %in% names(x@metadata))})))) {
-    stop("Not all supplied HiT object contain ",
-         paste(group.by, collapse = ", "),
-         " group.by elements in their metadata")
-  }
-  # remove group by if not present in any sample
-  present <- sapply(group.by,
-                    function(char) {
-                      any(unlist(lapply(object,
-                                        function(df) {char %in% colnames(df@metadata)}
-                      )))
-
-                    }
-  )
-  if (length(group.by[present]) != length(group.by)) {
-    warning("Celltype classification for ",
-            paste(as.vector(group.by[!present]), collapse = ", "),
-            " not present in any object")
-
-    group.by <- group.by[present]
-  }
-
-
-  # check splitting by variables
-  if (!is.null(split.by)) {
-    if (suppressWarnings(!all(lapply(object,
-                                     function(x) {
-                                       any(split.by %in% names(x@metadata))
-                                     })))) {
-      warning("Not all supplied HiT objects contain ",
-              paste(split.by, collapse = ", "),
-              " metadata elements in their metadata")
-    }
-    present <- sapply(split.by,
-                      function(char) {
-                        any(unlist(lapply(object,
-                                          function(df) {char %in% colnames(df@metadata)}
-                        )))
-
-                      }
-    )
-    if (length(split.by[present]) != length(split.by)) {
-      warning("Metadata variable ",
-              paste(as.vector(split.by[!present]), collapse = ", "),
-              " not present in any object")
-      split.by <- split.by[present]
+    if (return.plot.to.var) {
+      return(p_list)
+    } else {
+      print(p_list[["arranged_plots"]])
     }
   }
-
-  # build all table
-  df <- lapply(names(object), function(y) {
-    sel <- names(object[[y]]@metadata) %in% c(group.by, split.by)
-    a <- object[[y]]@metadata[,sel, drop = FALSE] %>%
-      dplyr::mutate(sample = y)
-    return(a)
-  }) %>%
-    data.table::rbindlist(fill = TRUE) %>% as.data.frame()
-
-  # compute counts
-  c.list <- list()
-  for (gr.by in as.vector(group.by)) {
-    #keep only needed columns
-    rm <- group.by[group.by != gr.by] %>% as.character()
-    kp <- which(!names(df) %in% rm)
-
-    # count celltypes
-    c.list[[gr.by]] <- df[ , kp] %>%
-      dplyr::group_by(.data[[gr.by]], sample) %>%
-      dplyr::mutate(count = dplyr::n()) %>%
-      dplyr::distinct() %>%
-      dplyr::group_by(sample) %>%
-      dplyr::mutate(Freq = count/sum(count))
-  }
-
-  # list to store plots
-  pl.list <- list()
-  if (by.x == "celltype") {
-    # count number of celltypes
-    for (gr.by in as.vector(group.by)) {
-      pos <- ggplot2::position_dodge(width = .9)
-      pl.list[[gr.by]] <-
-        c.list[[gr.by]] %>%
-        ggplot2::ggplot(ggplot2::aes(.data[[gr.by]], Freq,
-                                     fill = .data[[gr.by]])) +
-        ggplot2::geom_boxplot(outlier.colour = NA,
-                              position = pos,
-                              show.legend = FALSE,
-                              width = 0.6) +
-        ggplot2::geom_point(position = pos,
-                            show.legend = FALSE) +
-        ggplot2::labs(title = paste0(gr.by), " classification") +
-        ggplot2::theme_bw()
-    }
-
-
-  } else if (by.x == "sample") {
-    for (gr.by in as.vector(group.by)) {
-      pl.list[[gr.by]] <-
-        c.list[[gr.by]] %>%
-        ggplot2::ggplot(ggplot2::aes(sample,
-                                     Freq,
-                                     fill = .data[[gr.by]])) +
-        ggplot2::geom_col() +
-        ggplot2::labs(title = paste0(gr.by), " classification") +
-        ggplot2::theme_bw()
-    }
-  }
-
-  # rotate x-axis label
-  pl.list <- lapply(pl.list, function(x) {
-    x + ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45,
-                                                           hjust = 1,
-                                                           vjust = 1))
-  })
-
-  for (spl in split.by) {
-    pl.list <- lapply(pl.list, function(x) {
-      x + ggplot2::facet_wrap(~.data[[spl]])
-    })
-  }
-  return(pl.list)
 }
+
 
 
 
 #' Build confusion matrix-like plots between different cell type classification approaches
 #'
 #'
-#' @param object List of Hit class object
+#' @param hit.object List of Hit class object
 #' @param var.1 1st of grouping variables on the x-axis. If using \code{relative = TRUE} proportions will be normalized to this variable.
 #' @param var.2 2nd of grouping variables on the x-axis.
 #' @param relative Whether to show absolute number of cells, or relative number cells out of the 1st variable indicted. Default is FALSE.
