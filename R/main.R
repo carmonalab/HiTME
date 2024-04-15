@@ -2155,18 +2155,21 @@ summarize.cluster.scores <- function(data = NULL,
 
 #' @importFrom stats setNames
 
-#' @return Plots showing the percentage of not annotated cells per sample.
-#' @export plot.nas
+#' @return Get percentage of not annotated cells per sample and plot it.
+#' @export nas.per.sample
 #'
 
-plot.nas <- function (obj.list = NULL,
-                      annot.col = c("scGate_multi", "functional.cluster"),
-                      bottom.mar = 10.2) {
+nas.per.sample <- function (obj.list = NULL,
+                            annot.col = c("scGate_multi", "functional.cluster"),
+                            return.plot = TRUE,
+                            bottom.mar = 10.2) {
   if (is.null(obj.list) &
       !is.list(obj.list) &
       !all(lapply(obj.list, inherits, "Seurat"))) {
     stop("Please provide a list of seurat objects")
   }
+
+  na_list <- list()
 
   for (col in annot.col) {
     na_perc_per_sample <- c()
@@ -2180,11 +2183,15 @@ plot.nas <- function (obj.list = NULL,
       }
     }
     par(mar = c(bottom.mar, 4.1, 4.1, 2.1))
-    barplot(na_perc_per_sample,
-            main = col,
-            ylab = "Percentage of NA values",
-            las=2)
+    if (return.plot) {
+      barplot(na_perc_per_sample,
+              main = col,
+              ylab = "Percentage of NA values",
+              las=2)
+    }
+    na_list[[col]] <- na_perc_per_sample
   }
+  return(na_list)
 }
 
 
