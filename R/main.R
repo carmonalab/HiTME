@@ -1048,7 +1048,7 @@ get.GOList <- function(GO_accession = NULL,
 
 #' Merge HiTObjects
 #'
-#' @param object List of HiTObjects
+#' @param hit.object List of HiTObjects
 #' @param group.by If only merging for certain layers of annotation is intended, layers names can be indicated here as vector. Otherwise all layers present in all HiT object will be merged.
 #' @param metadata.vars Variables to keep as metadata. (Default: NULL, keeping unique metadata columns per sample, dropping single-cell metadata)
 #' @param pseudobulk.matrix Paramater to determine whther obtain the pseudobulk matrix as a single matrix (\code{"unique"}), or as one matrix for each cell type in the layer (\code{"list"})
@@ -1068,7 +1068,7 @@ get.GOList <- function(GO_accession = NULL,
 #' @export merge.HiTObjects
 #'
 
-merge.HiTObjects <- function(object = NULL,
+merge.HiTObjects <- function(hit.object = NULL,
                              group.by = NULL,
                              metadata.vars = NULL,
                              pseudobulk.matrix = "list",
@@ -1077,24 +1077,24 @@ merge.HiTObjects <- function(object = NULL,
                              progressbar = FALSE,
                              verbose = FALSE) {
 
-  if (is.null(object) ||
-      !is.list(object)) {
+  if (is.null(hit.object) ||
+      !is.list(hit.object)) {
     stop("Please provide a list of HiT object containing more than one sample")
-    if (suppressWarnings(!all(lapply(object, function(x) {inherits(x, "HiT")})))) {
+    if (suppressWarnings(!all(lapply(hit.object, function(x) {inherits(x, "HiT")})))) {
       stop("Not all components of the list are HiT objects.")
     }
   }
 
   # give name to list of hit objects
-  for (v in seq_along(object)) {
-    if (is.null(names(object)[v]) ||
-        is.na(names(object)[v])) {
-      names(object)[v] <- paste0("Sample", v)
+  for (v in seq_along(hit.object)) {
+    if (is.null(names(hit.object)[v]) ||
+        is.na(names(hit.object)[v])) {
+      names(hit.object)[v] <- paste0("Sample", v)
     }
   }
 
   # fetch which layers are included in all HiT objects
-  layers_in_hit <- lapply(object, function(x) {
+  layers_in_hit <- lapply(hit.object, function(x) {
     a <- names(x@composition)
     b <- names(x@aggregated_profile$pseudobulk)
     c <- names(x@aggregated_profile$signatures)
@@ -1125,21 +1125,21 @@ merge.HiTObjects <- function(object = NULL,
       present.sum <- colSums(present)
 
       for (l in names(group.by)) {
-        message("** ", l, " present in ", present.sum[[l]], " / ", length(object), " HiT objects.")
+        message("** ", l, " present in ", present.sum[[l]], " / ", length(hit.object), " HiT objects.")
       }
     }
   }
 
   if (!is.null(metadata.vars)) {
     if (verbose) {message("\n#### Metadata ####")}
-    if (suppressWarnings(!all(lapply(object, function(x) {any(metadata.vars %in% names(x@metadata))})))) {
+    if (suppressWarnings(!all(lapply(hit.object, function(x) {any(metadata.vars %in% names(x@metadata))})))) {
       message("Not all supplied HiT object contain ", paste(metadata.vars, collapse = ", "),
               "metadata elements in their metadata")
     }
     if (verbose) {
       in.md <- sapply(metadata.vars,
                       function(char) {
-                        unlist(lapply(object,
+                        unlist(lapply(hit.object,
                                       function(df) {char %in% colnames(df@metadata)}
                         ))
                       }
@@ -1147,7 +1147,7 @@ merge.HiTObjects <- function(object = NULL,
       in.md.sum <- colSums(in.md)
 
       for (l in metadata.vars) {
-        message("** ", l, " present in ", in.md.sum[[l]], " / ", length(object), " HiT objects.")
+        message("** ", l, " present in ", in.md.sum[[l]], " / ", length(hit.object), " HiT objects.")
       }
     }
   }
@@ -1164,13 +1164,13 @@ merge.HiTObjects <- function(object = NULL,
     # Per HiTObject from input, get metadata column names which have all the same value.
     # E.g. each HiTObject is from a specific sample, so each HiTObject has metadata column "Sample" which contains all the same value (e.g. "sample1" for sample 1, "sample2" for sample 2, etc.)
     # Other metadata columns, e.g. scGate_multi can be dropped, as the merged HiTObject is a summary per sample, so single-cell metadata columns don't make sense.
-    umc <- lapply(names(object), function (x) {
-      apply(object[[x]]@metadata, 2, function(y) length(unique(y))) == 1
+    umc <- lapply(names(hit.object), function (x) {
+      apply(hit.object[[x]]@metadata, 2, function(y) length(unique(y))) == 1
     })
     umc <- umc %>% Reduce("&", .)
     metadata.vars <- names(umc)[umc == TRUE]
   }
-  metadata <- lapply(names(object), function (x) {object[[x]]@metadata[1, metadata.vars] %>% mutate(sample = x)})
+  metadata <- lapply(names(hit.object), function (x) {hit.object[[x]]@metadata[1, metadata.vars] %>% mutate(sample = x)})
   metadata <- data.table::rbindlist(metadata, use.names=TRUE, fill=TRUE)
 
   comp.prop <- list()
@@ -1187,12 +1187,12 @@ merge.HiTObjects <- function(object = NULL,
     type <- "composition"
 
     # assess that all HiT objects in the list contain the composition data for that layer
-    is_df_check <- object[layer_present] %>%
+    is_df_check <- hit.object[layer_present] %>%
       lapply(methods::slot, name = type) %>%
       lapply("[[", gb) %>%
       lapply(is.data.frame) %>%
       unlist()
-    is_list_check <- object[layer_present] %>%
+    is_list_check <- hit.object[layer_present] %>%
       lapply(methods::slot, name = type) %>%
       lapply("[[", gb) %>%
       lapply(function(x) {is.list(x) & !inherits(x, "data.frame")}) %>%
@@ -1202,13 +1202,13 @@ merge.HiTObjects <- function(object = NULL,
       df <- BiocParallel::bplapply(X = layer_present,
                                    BPPARAM = param,
                                    function(x) {
-                                     object[[x]]@composition[[gb]] %>% mutate(sample = x)
+                                     hit.object[[x]]@composition[[gb]] %>% mutate(sample = x)
                                    })
       df <- data.table::rbindlist(df, use.names=TRUE, fill=TRUE)
       comp.prop[[gb]] <- df
 
     } else if (all(is_list_check)) {
-      gb_sublevel_unique_names <- object[layer_present] %>%
+      gb_sublevel_unique_names <- hit.object[layer_present] %>%
         lapply(methods::slot, name = type) %>%
         lapply("[[", gb) %>%
         lapply(names) %>%
@@ -1218,8 +1218,8 @@ merge.HiTObjects <- function(object = NULL,
         df <- BiocParallel::bplapply(X = layer_present,
                                      BPPARAM = param,
                                      function(x) {
-                                       if (!is.null(object[[x]]@composition[[gb]][[i]])) {
-                                         object[[x]]@composition[[gb]][[i]] %>% mutate(sample = x)
+                                       if (!is.null(hit.object[[x]]@composition[[gb]][[i]])) {
+                                         hit.object[[x]]@composition[[gb]][[i]] %>% mutate(sample = x)
                                        }
                                      })
         df <- data.table::rbindlist(df, use.names=TRUE, fill=TRUE)
@@ -1234,22 +1234,22 @@ merge.HiTObjects <- function(object = NULL,
     type <- "pseudobulk"
 
     # Aggregated_profile Pseudobulk
-    celltypes <- lapply(names(object),
+    celltypes <- lapply(names(hit.object),
                         function(x) {
-                          colnames(object[[x]]@aggregated_profile[[type]][[gb]])
+                          colnames(hit.object[[x]]@aggregated_profile[[type]][[gb]])
                         }) %>%
       unlist() %>% unique()
 
     for (ct in celltypes) {
-      ct_present <- lapply(names(object),
+      ct_present <- lapply(names(hit.object),
                            function(x) {
-                             ct %in% colnames(object[[x]]@aggregated_profile[[type]][[gb]]) }) %>%
+                             ct %in% colnames(hit.object[[x]]@aggregated_profile[[type]][[gb]]) }) %>%
         unlist()
-      layer_ct_present <- names(object)[(names(object) %in% layer_present) & ct_present]
+      layer_ct_present <- names(hit.object)[(names(hit.object) %in% layer_present) & ct_present]
       df <- BiocParallel::bplapply(X = layer_ct_present,
                                    BPPARAM = param,
                                    function(x) {
-                                     object[[x]]@aggregated_profile[[type]][[gb]][, ct]
+                                     hit.object[[x]]@aggregated_profile[[type]][[gb]][, ct]
                                    })
       df <- do.call(cbind, df)
       df <- Matrix::Matrix(df, sparse = TRUE)
@@ -1282,8 +1282,8 @@ merge.HiTObjects <- function(object = NULL,
     df <- BiocParallel::bplapply(X = layer_present,
                                  BPPARAM = param,
                                  function(x) {
-                                   if (!is.null(object[[x]]@aggregated_profile[[type]][[gb]])) {
-                                     object[[x]]@aggregated_profile[[type]][[gb]] %>% mutate(sample = x)
+                                   if (!is.null(hit.object[[x]]@aggregated_profile[[type]][[gb]])) {
+                                     hit.object[[x]]@aggregated_profile[[type]][[gb]] %>% mutate(sample = x)
                                    }
                                  })
     df <- data.table::rbindlist(df,
@@ -1310,7 +1310,7 @@ merge.HiTObjects <- function(object = NULL,
 
 #' Get metrics of cell types pseudobulk clustering
 #'
-#' @param object A Hit class object obtained with \link{get.HiTObject} or pseudobulk raw count matrix (\code{HitObject@aggregated_profile$pseudobulk$layer1})
+#' @param hit.object A Hit class object obtained with \link{get.HiTObject} or pseudobulk raw count matrix (\code{HitObject@aggregated_profile$pseudobulk$layer1})
 #' @param metadata Metadata data frame corresponding for each sample in the pseudobulk matrix. Row names in this dataframe should be identical as the colnames of the count matrix. If not provided (\code{NULL}) metadata will be extracted from HiT object provided.
 #' @param cluster.by Vector indicating the variable for clustering, default is celltype (for the annotation) and sample
 #' @param batching Vector indicating the variable for batching to allow calculating scores per batch, to account for batch effect
@@ -1360,7 +1360,7 @@ merge.HiTObjects <- function(object = NULL,
 #'
 
 
-get.cluster.score <- function(object = NULL,
+get.cluster.score <- function(hit.object = NULL,
                               metadata = NULL,
                               cluster.by = NULL,
                               batching = NULL,
@@ -1389,8 +1389,8 @@ get.cluster.score <- function(object = NULL,
                               bparam = NULL,
                               progressbar = TRUE) {
 
-  if (is.null(object) ||
-      !inherits(object, "HiT")) {
+  if (is.null(hit.object) ||
+      !inherits(hit.object, "HiT")) {
     stop("Please provide a Hit class object or a count matrix.\n")
   }
 
@@ -1432,11 +1432,11 @@ get.cluster.score <- function(object = NULL,
 
     type <- "composition"
 
-    comp_layers <- names(object@composition)
+    comp_layers <- names(hit.object@composition)
 
     for (layer in comp_layers) {
-      if (inherits(object@composition[[layer]], "data.frame")) {
-        mat <- object@composition[[layer]][, c("celltype", "clr", "sample"), with = FALSE]
+      if (inherits(hit.object@composition[[layer]], "data.frame")) {
+        mat <- hit.object@composition[[layer]][, c("celltype", "clr", "sample"), with = FALSE]
         mat <- mat %>%
           tidyr::pivot_wider(names_from = sample,
                              values_from = clr) %>%
@@ -1525,13 +1525,13 @@ get.cluster.score <- function(object = NULL,
           }
         }
 
-      } else if (is.list(object@composition[[layer]])) {
+      } else if (is.list(hit.object@composition[[layer]])) {
         results[[cluster_col]][[type]][[layer]] <-
           BiocParallel::bplapply(
-            X = names(object@composition[[layer]]),
+            X = names(hit.object@composition[[layer]]),
             BPPARAM = param,
             function(i){
-              mat <- object@composition[[layer]][[i]][, c("celltype", "clr", "sample"), with = F]
+              mat <- hit.object@composition[[layer]][[i]][, c("celltype", "clr", "sample"), with = F]
               mat <- mat %>%
                 tidyr::pivot_wider(names_from = sample,
                                    values_from = clr) %>%
@@ -1649,7 +1649,7 @@ get.cluster.score <- function(object = NULL,
             }
           )
         names(results[[cluster_col]][[type]][[layer]]) <-
-          names(object@composition[[layer]])
+          names(hit.object@composition[[layer]])
       }
     }
 
@@ -1659,14 +1659,14 @@ get.cluster.score <- function(object = NULL,
 
     type <- "pseudobulk"
 
-    pb_layers <- names(object@aggregated_profile[[type]])
+    pb_layers <- names(hit.object@aggregated_profile[[type]])
 
     for (layer in pb_layers) {
       results[[cluster_col]][[type]][[layer]] <- BiocParallel::bplapply(
-        X = names(object@aggregated_profile[[type]][[layer]]),
+        X = names(hit.object@aggregated_profile[[type]][[layer]]),
         BPPARAM = param,
         function(i){
-          mat <- object@aggregated_profile[[type]][[layer]][[i]]
+          mat <- hit.object@aggregated_profile[[type]][[layer]][[i]]
           meta <- metadata %>%
             dplyr::filter(sample %in% colnames(mat))
           cluster_labels <- meta[[cluster_col]]
@@ -1777,7 +1777,7 @@ get.cluster.score <- function(object = NULL,
         }
       )
       names(results[[cluster_col]][[type]][[layer]]) <-
-        names(object@aggregated_profile[[type]][[layer]])
+        names(hit.object@aggregated_profile[[type]][[layer]])
     }
 
 
@@ -1786,18 +1786,18 @@ get.cluster.score <- function(object = NULL,
 
     type <- "signatures"
 
-    comp_layers <- names(object@aggregated_profile[[type]])
+    comp_layers <- names(hit.object@aggregated_profile[[type]])
 
     if (!is.null(comp_layers)) {
       for (layer in comp_layers) {
-        cols <- colnames(object@aggregated_profile[[type]][[layer]])
+        cols <- colnames(hit.object@aggregated_profile[[type]][[layer]])
         signatures <- cols[2:(length(cols) - 1)]
 
         results[[cluster_col]][[type]][[layer]] <- BiocParallel::bplapply(
           X = signatures,
           BPPARAM = param,
           function(i){
-            mat <- object@aggregated_profile[[type]][[layer]][, c("celltype", i, "sample"), with = FALSE]
+            mat <- hit.object@aggregated_profile[[type]][[layer]][, c("celltype", i, "sample"), with = FALSE]
             mat <- mat %>%
               tidyr::pivot_wider(names_from = sample, values_from = i) %>%
               tibble::column_to_rownames(var = "celltype")
@@ -2401,30 +2401,30 @@ plot.celltype.freq <- function(object = NULL,
 #' @export plot.confusion.matrix
 #'
 
-plot.confusion.matrix <- function(object = NULL,
+plot.confusion.matrix <- function(hit.object = NULL,
                                   var.1 = NULL,
                                   var.2 = NULL,
                                   relative = FALSE,
                                   useNA = "ifany",
                                   type = "tile") {
 
-  if (is.null(object)) {
+  if (is.null(hit.object)) {
     stop("Please provide a single one or a list of HiT object")
   }
 
-  if (!is.list(object)) {
-    object <- list(object)
+  if (!is.list(hit.object)) {
+    hit.object <- list(hit.object)
   }
 
-  if (suppressWarnings(!all(lapply(object, function(x) {inherits(x, "HiT")})))) {
+  if (suppressWarnings(!all(lapply(hit.object, function(x) {inherits(x, "HiT")})))) {
     stop("Not all components of the list are HiT objects.")
   }
 
   #give name to list of hit objects
-  for (v in seq_along(object)) {
-    if (is.null(names(object)[[v]]) ||
-        is.na(names(object)[[v]])) {
-      names(object)[[v]] <- paste0("Sample", v)
+  for (v in seq_along(hit.object)) {
+    if (is.null(names(hit.object)[[v]]) ||
+        is.na(names(hit.object)[[v]])) {
+      names(hit.object)[[v]] <- paste0("Sample", v)
     }
   }
 
@@ -2435,7 +2435,7 @@ plot.confusion.matrix <- function(object = NULL,
     stop("Please provide 2 cell type classification labels common in all elements of the list of Hit objects: var.1 and var.2")
   }
 
-  if (suppressWarnings(!all(lapply(object,
+  if (suppressWarnings(!all(lapply(hit.object,
                                    function(x) {
                                      any(vars %in% names(x@metadata))
                                    })))) {
@@ -2446,9 +2446,9 @@ plot.confusion.matrix <- function(object = NULL,
 
 
   # build all table
-  data <- lapply(names(object), function(y) {
-    sel <- names(object[[y]]@metadata) %in% vars
-    a <- object[[y]]@metadata[,sel, drop = FALSE] %>%
+  data <- lapply(names(hit.object), function(y) {
+    sel <- names(hit.object[[y]]@metadata) %in% vars
+    a <- hit.object[[y]]@metadata[,sel, drop = FALSE] %>%
       dplyr::mutate(sample = y)
     return(a)
   }) %>%
