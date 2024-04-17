@@ -9,7 +9,7 @@
   topN = NULL,
   create_plots = TRUE,
   p.adjustment = TRUE,
-  p.adjust_method = "fdr",
+  p.adjust.method = "fdr",
   p.value_cutoff = 0.05
 )
 }
@@ -22,7 +22,7 @@
 
 \item{p.adjustment}{Whether to adjust p-value columns or not}
 
-\item{p.adjust_method}{Method for adjusting p-values (see stats::p.adjust for methods)}
+\item{p.adjust.method}{Method for adjusting p-values (see stats::p.adjust for methods)}
 
 \item{p.value_cutoff}{p-value (mean of all p-value columns) cutoff to filter out non-significant results}
 }
