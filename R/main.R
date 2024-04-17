@@ -2307,7 +2307,7 @@ composition.barplot <- function (hit.object = NULL,
 #' @param legend.position Where to put the legend. Possible options: "top", "right", "bottom", "left"
 
 #' @importFrom ggplot2 ggplot aes geom_boxplot theme element_text ggtitle facet_grid position_jitterdodge
-#' @importFrom ggpubr stat_pwc
+#' @importFrom ggpubr stat_pwc ggboxplot
 #' @importFrom stats reformulate
 #' @importFrom cowplot plot_grid
 
@@ -2376,19 +2376,26 @@ composition.boxplot <- function (hit.object = NULL,
   if (is.data.frame(comps)) {
     comp <- merge(comps, meta[, c("sample", group.by, facet.by), drop=FALSE], by = "sample")
 
-    p <- ggboxplot(comp,
-                   x = "celltype",
-                   y = plot.var,
-                   color = group.by,
-                   outlier.shape = NA,
-                   palette = palette,
-                   facet.by = facet.by,
-                   legend = legend.position) +
-      theme(axis.text.x = element_text(angle = 45, hjust=1)) +
-      scale_y_continuous(expand = expansion(mult = c(0.05, 0.1)))
-
-    if (!is.null(group.by)) {
-      p <- p +
+    # Need to check if group.by is NULL
+    # Due to a presumed bug, if group.by is passed as variable to ggboxplot, even if it is assigned NULL, it throws an error
+    if (is.null(group.by)) {
+      p <- ggboxplot(comp,
+                     x = "celltype",
+                     y = plot.var,
+                     outlier.shape = NA,
+                     palette = palette,
+                     facet.by = facet.by,
+                     legend = legend.position) +
+        geom_jitter(width = 0.2, size = 1)
+    } else {
+      p <- ggboxplot(comp,
+                     x = "celltype",
+                     y = plot.var,
+                     color = group.by,
+                     outlier.shape = NA,
+                     palette = palette,
+                     facet.by = facet.by,
+                     legend = legend.position) +
         geom_jitter(mapping = aes(color = !!group.by.gg), position=position_jitterdodge(), size = 1) +
         stat_pwc(aes(group = !!group.by.gg),
                  label = "p.signif",
@@ -2396,10 +2403,11 @@ composition.boxplot <- function (hit.object = NULL,
                  p.adjust.by = "panel",
                  tip.length = 0,
                  hide.ns = TRUE)
-    } else {
-      p <- p +
-        geom_jitter(width = 0.2, size = 1)
     }
+
+    p <- p +
+      theme(axis.text.x = element_text(angle = 45, hjust=1)) +
+      scale_y_continuous(expand = expansion(mult = c(0.05, 0.1)))
 
     if (return.plot.to.var) {
       return(p)
@@ -2414,19 +2422,26 @@ composition.boxplot <- function (hit.object = NULL,
       comp <- hit.object@composition[[layer]][[ct]]
       comp <- merge(comp, meta[, c("sample", group.by, facet.by), drop=FALSE], by = "sample")
 
-      p_list[["plot_list"]][[ct]] <- ggboxplot(comp,
-                                               x = "celltype",
-                                               y = plot.var,
-                                               color = group.by,
-                                               outlier.shape = NA,
-                                               palette = palette,
-                                               facet.by = facet.by,
-                                               legend = legend.position) +
-        theme(axis.text.x = element_text(angle = 45, hjust=1)) +
-        scale_y_continuous(expand = expansion(mult = c(0.05, 0.1)))
-
-      if (!is.null(group.by)) {
-        p_list[["plot_list"]][[ct]] <- p_list[["plot_list"]][[ct]] +
+      # Need to check if group.by is NULL
+      # Due to a presumed bug, if group.by is passed as variable to ggboxplot, even if it is assigned NULL, it throws an error
+      if (is.null(group.by)) {
+        p_list[["plot_list"]][[ct]] <- ggboxplot(comp,
+                                                 x = "celltype",
+                                                 y = plot.var,
+                                                 outlier.shape = NA,
+                                                 palette = palette,
+                                                 facet.by = facet.by,
+                                                 legend = legend.position) +
+          geom_jitter(width = 0.2, size = 1)
+      } else {
+        p_list[["plot_list"]][[ct]] <- ggboxplot(comp,
+                                                 x = "celltype",
+                                                 y = plot.var,
+                                                 color = group.by,
+                                                 outlier.shape = NA,
+                                                 palette = palette,
+                                                 facet.by = facet.by,
+                                                 legend = legend.position) +
           geom_jitter(mapping = aes(color = !!group.by.gg), position=position_jitterdodge(), size = 1) +
           stat_pwc(aes(group = !!group.by.gg),
                    label = "p.signif",
@@ -2434,10 +2449,12 @@ composition.boxplot <- function (hit.object = NULL,
                    p.adjust.by = "panel",
                    tip.length = 0,
                    hide.ns = TRUE)
-      } else {
-        p_list[["plot_list"]][[ct]] <- p_list[["plot_list"]][[ct]] +
-          geom_jitter(width = 0.2, size = 1)
       }
+
+      p_list[["plot_list"]][[ct]] <- p_list[["plot_list"]][[ct]] +
+        theme(axis.text.x = element_text(angle = 45, hjust=1)) +
+        scale_y_continuous(expand = expansion(mult = c(0.05, 0.1)))
+
     }
     p_list[["arranged_plots"]] <- cowplot::plot_grid(plotlist = p_list[["plot_list"]])
 
