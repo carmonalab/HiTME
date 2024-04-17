@@ -2189,13 +2189,14 @@ nas.per.sample <- function (obj.list = NULL,
 
 
 
-#' Render plots summarizing celltype proportions and distribution in samples
+#' Render bar plots summarizing celltype proportions and distribution in samples and groups
 #'
 #'
 #' @param hit.object A Hit class object (typically after applying merge.HiTObjects onto a list of HiTObjects)
-#' @param group.by Grouping variable for
-#' @param split.by If desired, indicate how to split plots by metadata variable.
-#' @param by.x Determine which variable show on x-axis, if celltype it shows boxplots of the number of each cell type for each sample. If sample is indicated a barplot is shown with the relative proportions of each celltype within each sample.
+#' @param sample.col Metadata column in the hit.object$metadata containing unique sample names
+#' @param layer Default "layer1" if you have one cell type annotation layer in your hit.object. Alternatively "layer2" etc. if you have multiple layers of annotation depths.
+#' @param return.plot.to.var Optionally, you can save the ggplots to a variable if you would like to further modify and adapt the plots on your own.
+#' @param facet.by This allows you to pass a metadata column name present in your hit.object$metadata to show your samples in facets with ggplot facet_grid, for example by "condition".
 
 #' @importFrom ggplot2 ggplot aes geom_bar theme element_text ggtitle facet_grid
 #' @importFrom stats reformulate
