@@ -1311,7 +1311,6 @@ merge.HiTObjects <- function(hit.object = NULL,
 #' Get metrics of cell types pseudobulk clustering
 #'
 #' @param hit.object A Hit class object obtained with \link{get.HiTObject} or pseudobulk raw count matrix (\code{HitObject@aggregated_profile$pseudobulk$layer1})
-#' @param metadata Metadata data frame corresponding for each sample in the pseudobulk matrix. Row names in this dataframe should be identical as the colnames of the count matrix. If not provided (\code{NULL}) metadata will be extracted from HiT object provided.
 #' @param cluster.by Vector indicating the variable for clustering, default is celltype (for the annotation) and sample
 #' @param batching Vector indicating the variable for batching to allow calculating scores per batch, to account for batch effect
 #' @param scores Scores to compute clustering of samples based on cell type prediction.
@@ -1361,7 +1360,6 @@ merge.HiTObjects <- function(hit.object = NULL,
 
 
 get.cluster.score <- function(hit.object = NULL,
-                              metadata = NULL,
                               cluster.by = NULL,
                               batching = NULL,
                               scores = c("Silhouette_isolated", "Silhouette", "Modularity"),
@@ -1393,12 +1391,6 @@ get.cluster.score <- function(hit.object = NULL,
       !inherits(hit.object, "HiT")) {
     stop("Please provide a Hit class object or a count matrix.\n")
   }
-
-  if (is.null(metadata) ||
-      !inherits(metadata, "data.frame")) {
-    stop("Please provide a metadata object as dataframe for this HiTObject\n")
-  }
-
   if (is.null(cluster.by)) {
     stop("Please provide a metadata column name to cluster by\n")
   }
@@ -1446,7 +1438,7 @@ get.cluster.score <- function(hit.object = NULL,
                 scale = FALSE)
 
         if (is.null(batching))  {
-          cluster_labels <- metadata %>%
+          cluster_labels <- hit.object@metadata %>%
             dplyr::filter(sample %in% colnames(mat)) %>%
             .[[cluster_col]]
 
@@ -1466,8 +1458,8 @@ get.cluster.score <- function(hit.object = NULL,
           for (b_var in batching) {
             if (b_var != cluster_col) {
               b_var_res_summary <- list()
-              for (b in unique(metadata[[b_var]])) {
-                meta <- metadata %>%
+              for (b in unique(hit.object@metadata[[b_var]])) {
+                meta <- hit.object@metadata %>%
                   dplyr::filter(get(b_var) == b) %>%
                   dplyr::filter(sample %in% colnames(mat))
 
@@ -1554,7 +1546,7 @@ get.cluster.score <- function(hit.object = NULL,
                            scale = FALSE)
 
               if (is.null(batching))  {
-                cluster_labels <- metadata %>%
+                cluster_labels <- hit.object@metadata %>%
                   dplyr::filter(sample %in% colnames(mat)) %>%
                   .[[cluster_col]]
 
@@ -1580,8 +1572,8 @@ get.cluster.score <- function(hit.object = NULL,
                 for (b_var in batching) {
                   if (b_var != cluster_col) {
                     b_var_res_summary <- list()
-                    for (b in unique(metadata[[b_var]])) {
-                      meta <- metadata %>%
+                    for (b in unique(hit.object@metadata[[b_var]])) {
+                      meta <- hit.object@metadata %>%
                         dplyr::filter(get(b_var) == b) %>%
                         dplyr::filter(sample %in% colnames(mat))
 
@@ -1667,7 +1659,7 @@ get.cluster.score <- function(hit.object = NULL,
         BPPARAM = param,
         function(i){
           mat <- hit.object@aggregated_profile[[type]][[layer]][[i]]
-          meta <- metadata %>%
+          meta <- hit.object@metadata %>%
             dplyr::filter(sample %in% colnames(mat))
           cluster_labels <- meta[[cluster_col]]
 
@@ -1701,8 +1693,8 @@ get.cluster.score <- function(hit.object = NULL,
             for (b_var in batching) {
               if (b_var != cluster_col) {
                 b_var_res_summary <- list()
-                for (b in unique(metadata[[b_var]])) {
-                  met <- metadata %>%
+                for (b in unique(hit.object@metadata[[b_var]])) {
+                  met <- hit.object@metadata %>%
                     dplyr::filter(get(b_var) == b) %>%
                     dplyr::filter(sample %in% colnames(mat))
 
@@ -1814,7 +1806,7 @@ get.cluster.score <- function(hit.object = NULL,
                          scale = TRUE)
 
             if (is.null(batching))  {
-              cluster_labels <- metadata %>%
+              cluster_labels <- hit.object@metadata %>%
                 filter(sample %in% colnames(mat)) %>%
                 .[[cluster_col]]
 
@@ -1836,8 +1828,8 @@ get.cluster.score <- function(hit.object = NULL,
               for (b_var in batching) {
                 if (b_var != cluster_col) {
                   b_var_res_summary <- list()
-                  for (b in unique(metadata[[b_var]])) {
-                    meta <- metadata %>%
+                  for (b in unique(hit.object@metadata[[b_var]])) {
+                    meta <- hit.object@metadata %>%
                       dplyr::filter(get(b_var) == b) %>%
                       dplyr::filter(sample %in% colnames(mat))
 
