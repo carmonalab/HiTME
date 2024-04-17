@@ -6,7 +6,6 @@
 \usage{
 get.cluster.score(
   hit.object = NULL,
-  metadata = NULL,
   cluster.by = NULL,
   batching = NULL,
   scores = c("Silhouette_isolated", "Silhouette", "Modularity"),
@@ -30,8 +29,6 @@ get.cluster.score(
 }
 \arguments{
 \item{hit.object}{A Hit class object obtained with \link{get.HiTObject} or pseudobulk raw count matrix (\code{HitObject@aggregated_profile$pseudobulk$layer1})}
-
-\item{metadata}{Metadata data frame corresponding for each sample in the pseudobulk matrix. Row names in this dataframe should be identical as the colnames of the count matrix. If not provided (\code{NULL}) metadata will be extracted from HiT object provided.}
 
 \item{cluster.by}{Vector indicating the variable for clustering, default is celltype (for the annotation) and sample}
 
