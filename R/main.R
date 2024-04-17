@@ -2209,42 +2209,55 @@ nas.per.sample <- function (obj.list = NULL,
 composition.barplot <- function (hit.object = NULL,
                                  sample.col = NULL,
                                  layer = "layer1",
-                                 plot.variable = "freq",
                                  return.plot.to.var = FALSE,
-                                 group.by = NULL) {
+                                 facet.by = NULL) {
+
   if (is.null(hit.object)) {
     stop("Please provide input hit.object")
   }
   if (is.null(sample.col)) {
     stop("Please specify the metadata column containing unique sample names")
   }
+  if (!length(sample.col) == 1 || !is.character(sample.col)) {
+    stop("Please provide one character string for sample.col")
+  }
+  if (!sample.col %in% names(hit.object@metadata)) {
+    stop(paste("sample.col ", sample.col, " not found in hit.object@metadata column names"))
+  }
   if (length(unique(hit.object@metadata[[sample.col]])) <
       length(hit.object@metadata[[sample.col]])) {
-    stop("Please specify the metadata column containing unique sample names")
+    stop("Sample names are not unique. Please specify the metadata column containing unique sample names")
   }
-  if ((!length(sample.col) && is.character(sample.col)) |
-      (!length(layer) && is.character(layer)) |
-      (!length(plot.variable) && is.character(plot.variable))) {
-    stop("Please provide a character string")
+  if (!length(layer) == 1 || !is.character(layer)) {
+    stop("Please provide one character string for layer parameter")
   }
+  if (!is.null(facet.by)) {
+    if (!is.character(facet.by)) {
+      stop("Please provide a character string or a vector of character strings for the facet.by parameter")
+    }
+    facet.by.in.colnames <- facet.by %in% names(hit.object@metadata)
+    if (!all(facet.by.in.colnames)) {
+      facet.by.not.in.colnames <- facet.by[!facet.by.in.colnames]
+      stop(paste("facet.by ", facet.by.not.in.colnames, " not found in hit.object@metadata column names"))
+    }
+  }
+
 
   comps <- hit.object@composition[[layer]]
   meta <- hit.object@metadata
   colnames(meta)[colnames(meta) == sample.col] <- "sample"
 
-  if(is.data.frame(comps)){
-      comp <- merge(comps, meta[, c("sample", group.by), drop=FALSE], by = "sample")
+  if (is.data.frame(comps)) {
+    comp <- merge(comps, meta[, c("sample", facet.by), drop=FALSE], by = "sample")
 
-    if (is.null(group.by)) {
-      p <- ggplot(comp, aes(x = sample, y = freq, fill = celltype)) +
-        geom_bar(stat = "identity") +
-        theme(axis.text.x = element_text(angle = 45, hjust=1))
-    } else {
-      p <- ggplot(comp, aes(x = sample, y = freq, fill = celltype)) +
-        geom_bar(stat = "identity") +
-        theme(axis.text.x = element_text(angle = 45, hjust=1)) +
-        facet_grid(reformulate(group.by),  space  = "free", scales = "free")
+    p <- ggplot(comp, aes(x = sample, y = freq, fill = celltype)) +
+      geom_bar(stat = "identity") +
+      theme(axis.text.x = element_text(angle = 45, hjust=1))
+
+    if (!is.null(facet.by)) {
+      p + facet_grid(reformulate(facet.by),  space  = "free", scales = "free")
     }
+
     if (return.plot.to.var) {
       return(p)
     } else {
@@ -2256,20 +2269,18 @@ composition.barplot <- function (hit.object = NULL,
     p_list <- list()
     for (ct in names(comps)) {
       comp <- hit.object@composition[[layer]][[ct]]
-      comp <- merge(comp, meta[, c("sample", group.by), drop=FALSE], by = "sample")
+      comp <- merge(comp, meta[, c("sample", facet.by), drop=FALSE], by = "sample")
 
-      if (is.null(group.by)) {
-        p_list[["plot_list"]][[ct]] <- ggplot(comp, aes(x = sample, y = freq, fill = celltype)) +
-          geom_bar(stat = "identity") +
-          ggtitle(ct) +
-          theme(axis.text.x = element_text(angle = 45, hjust=1))
-      } else {
-        p_list[["plot_list"]][[ct]] <- ggplot(comp, aes(x = sample, y = freq, fill = celltype)) +
-          geom_bar(stat = "identity") +
-          ggtitle(ct) +
-          theme(axis.text.x = element_text(angle = 45, hjust=1)) +
-          facet_grid(reformulate(group.by),  space  = "free", scales = "free")
+      p_list[["plot_list"]][[ct]] <- ggplot(comp, aes(x = sample, y = freq, fill = celltype)) +
+        geom_bar(stat = "identity") +
+        ggtitle(ct) +
+        theme(axis.text.x = element_text(angle = 45, hjust=1)) +
+        ggtitle(ct)
+
+      if (!is.null(facet.by)) {
+        p_list[["plot_list"]][[ct]] + facet_grid(reformulate(facet.by),  space  = "free", scales = "free")
       }
+
     }
     p_list[["arranged_plots"]] <- cowplot::plot_grid(plotlist = p_list[["plot_list"]])
 
@@ -2281,6 +2292,162 @@ composition.barplot <- function (hit.object = NULL,
   }
 }
 
+
+#' Render box plots summarizing celltype proportions and distribution in samples and groups
+#'
+#'
+#' @param hit.object A Hit class object (typically after applying merge.HiTObjects onto a list of HiTObjects)
+#' @param sample.col Metadata column in the hit.object$metadata containing unique sample names
+#' @param plot.var Column in the hit.object$composition: either "freq" for cell type relative abundance in percent or "clr" (for centered log-ratio transformed). Default: "clr" as it is better suited for statistical analysis and is better able to also show low abundant cell types.
+#' @param layer Default "layer1" if you have one cell type annotation layer in your hit.object. Alternatively "layer2" etc. if you have multiple layers of annotation depths.
+#' @param return.plot.to.var Optionally, you can save the ggplots to a variable if you would like to further modify and adapt the plots on your own.
+#' @param group.by This allows you to pass a metadata column name present in your hit.object$metadata to show your samples in groups, for example by "condition".
+#' @param facet.by This allows you to pass a metadata column name present in your hit.object$metadata to show your samples in facets with ggplot facet_grid, for example by "condition".
+#' @param palette Choose a palette of your liking. For available palettes, see ggsci package. Default: "lancet"
+#' @param legend.position Where to put the legend. Possible options: "top", "right", "bottom", "left"
+
+#' @importFrom ggplot2 ggplot aes geom_boxplot theme element_text ggtitle facet_grid position_jitterdodge
+#' @importFrom ggpubr stat_pwc
+#' @importFrom stats reformulate
+#' @importFrom cowplot plot_grid
+
+#' @return Plotting function to show the cell type composition from HiTME object across different samples.
+#' @export composition.boxplot
+#'
+
+composition.boxplot <- function (hit.object = NULL,
+                                 sample.col = NULL,
+                                 plot.var = "clr",
+                                 layer = "layer1",
+                                 return.plot.to.var = FALSE,
+                                 group.by = NULL,
+                                 facet.by = NULL,
+                                 palette = "lancet",
+                                 legend.position = "right") {
+
+  if (is.null(hit.object)) {
+    stop("Please provide input hit.object")
+  }
+  if (is.null(sample.col)) {
+    stop("Please specify the metadata column containing unique sample names")
+  }
+  if (!length(sample.col) == 1 || !is.character(sample.col)) {
+    stop("Please provide one character string for sample.col")
+  }
+  if (!sample.col %in% names(hit.object@metadata)) {
+    stop(paste("sample.col ", sample.col, " not found in hit.object@metadata column names"))
+  }
+  if (length(unique(hit.object@metadata[[sample.col]])) <
+      length(hit.object@metadata[[sample.col]])) {
+    stop("Sample names are not unique. Please specify the metadata column containing unique sample names")
+  }
+  if (!length(plot.var) == 1 ||
+      !is.character(plot.var) ||
+      !plot.var %in% c("freq", "clr")) {
+    stop("Please provide one character string for plot.var, either 'freq' or 'clr'")
+  }
+  if (!length(layer) == 1 || !is.character(layer)) {
+    stop("Please provide one character string for layer parameter")
+  }
+  if (!is.null(group.by)) {
+    if (!length(group.by) == 1 || !is.character(group.by)) {
+      stop("Please provide one character string for the group.by parameter")
+    }
+    group.by.gg <- sym(group.by)
+  }
+  if (!is.null(facet.by)) {
+    if (!is.character(facet.by)) {
+      stop("Please provide a character string or a vector of character strings for the facet.by parameter")
+    }
+    facet.by.in.colnames <- facet.by %in% names(hit.object@metadata)
+    if (!all(facet.by.in.colnames)) {
+      facet.by.not.in.colnames <- facet.by[!facet.by.in.colnames]
+      stop(paste("facet.by ", facet.by.not.in.colnames, " not found in hit.object@metadata column names"))
+    }
+  }
+
+
+  comps <- hit.object@composition[[layer]]
+  meta <- hit.object@metadata
+  colnames(meta)[colnames(meta) == sample.col] <- "sample"
+
+  plot.var.gg <- sym(plot.var)
+
+  if (is.data.frame(comps)) {
+    comp <- merge(comps, meta[, c("sample", group.by, facet.by), drop=FALSE], by = "sample")
+
+    p <- ggboxplot(comp,
+                   x = "celltype",
+                   y = plot.var,
+                   color = group.by,
+                   outlier.shape = NA,
+                   palette = palette,
+                   facet.by = facet.by,
+                   legend = legend.position) +
+      theme(axis.text.x = element_text(angle = 45, hjust=1)) +
+      scale_y_continuous(expand = expansion(mult = c(0.05, 0.1)))
+
+    if (!is.null(group.by)) {
+      p <- p +
+        geom_jitter(mapping = aes(color = !!group.by.gg), position=position_jitterdodge(), size = 1) +
+        stat_pwc(aes(group = !!group.by.gg),
+                 label = "p.signif",
+                 method = "wilcox.test",
+                 p.adjust.by = "panel",
+                 tip.length = 0,
+                 hide.ns = TRUE)
+    } else {
+      p <- p +
+        geom_jitter(width = 0.2, size = 1)
+    }
+
+    if (return.plot.to.var) {
+      return(p)
+    } else {
+      print(p)
+    }
+  }
+
+  else {
+    p_list <- list()
+    for (ct in names(comps)) {
+      comp <- hit.object@composition[[layer]][[ct]]
+      comp <- merge(comp, meta[, c("sample", group.by, facet.by), drop=FALSE], by = "sample")
+
+      p_list[["plot_list"]][[ct]] <- ggboxplot(comp,
+                                               x = "celltype",
+                                               y = plot.var,
+                                               color = group.by,
+                                               outlier.shape = NA,
+                                               palette = palette,
+                                               facet.by = facet.by,
+                                               legend = legend.position) +
+        theme(axis.text.x = element_text(angle = 45, hjust=1)) +
+        scale_y_continuous(expand = expansion(mult = c(0.05, 0.1)))
+
+      if (!is.null(group.by)) {
+        p_list[["plot_list"]][[ct]] <- p_list[["plot_list"]][[ct]] +
+          geom_jitter(mapping = aes(color = !!group.by.gg), position=position_jitterdodge(), size = 1) +
+          stat_pwc(aes(group = !!group.by.gg),
+                   label = "p.signif",
+                   method = "wilcox.test",
+                   p.adjust.by = "panel",
+                   tip.length = 0,
+                   hide.ns = TRUE)
+      } else {
+        p_list[["plot_list"]][[ct]] <- p_list[["plot_list"]][[ct]] +
+          geom_jitter(width = 0.2, size = 1)
+      }
+    }
+    p_list[["arranged_plots"]] <- cowplot::plot_grid(plotlist = p_list[["plot_list"]])
+
+    if (return.plot.to.var) {
+      return(p_list)
+    } else {
+      print(p_list[["arranged_plots"]])
+    }
+  }
+}
 
 
 
