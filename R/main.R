@@ -1916,7 +1916,7 @@ get.cluster.score <- function(hit.object = NULL,
 #' @param topN Integer indicating number of topN highest scoring (most discriminating) features ranked for each score
 #' @param create_plots Boolean indicating whether to create and show plots or not
 #' @param p.adjustment Whether to adjust p-value columns or not
-#' @param p.adjust_method Method for adjusting p-values (see stats::p.adjust for methods)
+#' @param p.adjust.method Method for adjusting p-values (see stats::p.adjust for methods)
 #' @param p.value_cutoff p-value (mean of all p-value columns) cutoff to filter out non-significant results
 #'
 #' @importFrom dplyr mutate filter
@@ -1937,7 +1937,7 @@ summarize.cluster.scores <- function(data = NULL,
                                      topN = NULL,
                                      create_plots = TRUE,
                                      p.adjustment = TRUE,
-                                     p.adjust_method = "fdr",
+                                     p.adjust.method = "fdr",
                                      p.value_cutoff = 0.05) {
 
   show.variables <- c(".summary", ".n", ".p_value")
@@ -2036,7 +2036,7 @@ summarize.cluster.scores <- function(data = NULL,
       for (i in p_val_cols){
         df_cluster.by_list[[c]][, i] <-
           stats::p.adjust(df_cluster.by_list[[c]][, i],
-                          method = p.adjust_method)
+                          method = p.adjust.method)
       }
 
       df_cluster.by_list[[c]] <-
@@ -2303,6 +2303,8 @@ composition.barplot <- function (hit.object = NULL,
 #' @param return.plot.to.var Optionally, you can save the ggplots to a variable if you would like to further modify and adapt the plots on your own.
 #' @param group.by This allows you to pass a metadata column name present in your hit.object$metadata to show your samples in groups, for example by "condition".
 #' @param facet.by This allows you to pass a metadata column name present in your hit.object$metadata to show your samples in facets with ggplot facet_grid, for example by "condition".
+#' @param pval.method Specify method how to calculate the p-value. Wilcoxon test is recommended as compositional data might not fullfill the assumption of a gaussian distribution. For alternatives, see documentation of ggpubr::stat_pwc.
+#' @param p.adjust.method Method for adjusting p-values (see ggpubr::stat_pwc for available methods)
 #' @param palette Choose a palette of your liking. For available palettes, see ggsci package. Default: "lancet"
 #' @param legend.position Where to put the legend. Possible options: "top", "right", "bottom", "left"
 
@@ -2322,6 +2324,8 @@ composition.boxplot <- function (hit.object = NULL,
                                  return.plot.to.var = FALSE,
                                  group.by = NULL,
                                  facet.by = NULL,
+                                 pval.method = "wilcox.test",
+                                 p.adjust.method = "BH",
                                  palette = "lancet",
                                  legend.position = "right") {
 
@@ -2399,7 +2403,8 @@ composition.boxplot <- function (hit.object = NULL,
         geom_jitter(mapping = aes(color = !!group.by.gg), position=position_jitterdodge(), size = 1) +
         stat_pwc(aes(group = !!group.by.gg),
                  label = "p.signif",
-                 method = "wilcox.test",
+                 method = pval.method,
+                 p.adjust.method = p.adjust.method,
                  p.adjust.by = "panel",
                  tip.length = 0,
                  hide.ns = TRUE)
@@ -2445,7 +2450,8 @@ composition.boxplot <- function (hit.object = NULL,
           geom_jitter(mapping = aes(color = !!group.by.gg), position=position_jitterdodge(), size = 1) +
           stat_pwc(aes(group = !!group.by.gg),
                    label = "p.signif",
-                   method = "wilcox.test",
+                   method = pval.method,
+                   p.adjust.method = p.adjust.method,
                    p.adjust.by = "panel",
                    tip.length = 0,
                    hide.ns = TRUE)
