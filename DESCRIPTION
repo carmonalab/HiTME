@@ -1,6 +1,6 @@
 Package: HiTME
 Title: Classify Cell Types in the Tumor Microenvironment
-Version: 1.2.0
+Version: 1.3.0
 Authors@R: c(
   person(given = 'Josep', family = 'Garnica',
     email = 'josep.garnica@unil.ch',

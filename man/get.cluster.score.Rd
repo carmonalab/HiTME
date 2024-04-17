@@ -5,7 +5,7 @@
 \title{Get metrics of cell types pseudobulk clustering}
 \usage{
 get.cluster.score(
-  object = NULL,
+  hit.object = NULL,
   metadata = NULL,
   cluster.by = NULL,
   batching = NULL,
@@ -29,7 +29,7 @@ get.cluster.score(
 )
 }
 \arguments{
-\item{object}{A Hit class object obtained with \link{get.HiTObject} or pseudobulk raw count matrix (\code{HitObject@aggregated_profile$pseudobulk$layer1})}
+\item{hit.object}{A Hit class object obtained with \link{get.HiTObject} or pseudobulk raw count matrix (\code{HitObject@aggregated_profile$pseudobulk$layer1})}
 
 \item{metadata}{Metadata data frame corresponding for each sample in the pseudobulk matrix. Row names in this dataframe should be identical as the colnames of the count matrix. If not provided (\code{NULL}) metadata will be extracted from HiT object provided.}
 

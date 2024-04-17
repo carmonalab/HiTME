@@ -5,7 +5,7 @@
 \title{Merge HiTObjects}
 \usage{
 \method{merge}{HiTObjects}(
-  object = NULL,
+  hit.object = NULL,
   group.by = NULL,
   metadata.vars = NULL,
   pseudobulk.matrix = "list",
@@ -16,7 +16,7 @@
 )
 }
 \arguments{
-\item{object}{List of HiTObjects}
+\item{hit.object}{List of HiTObjects}
 
 \item{group.by}{If only merging for certain layers of annotation is intended, layers names can be indicated here as vector. Otherwise all layers present in all HiT object will be merged.}
 

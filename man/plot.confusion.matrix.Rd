@@ -5,7 +5,7 @@
 \title{Build confusion matrix-like plots between different cell type classification approaches}
 \usage{
 \method{plot}{confusion.matrix}(
-  object = NULL,
+  hit.object = NULL,
   var.1 = NULL,
   var.2 = NULL,
   relative = FALSE,
@@ -14,7 +14,7 @@
 )
 }
 \arguments{
-\item{object}{List of Hit class object}
+\item{hit.object}{List of Hit class object}
 
 \item{var.1}{1st of grouping variables on the x-axis. If using \code{relative = TRUE} proportions will be normalized to this variable.}
 
