@@ -2255,7 +2255,7 @@ composition.barplot <- function (hit.object = NULL,
       theme(axis.text.x = element_text(angle = 45, hjust=1))
 
     if (!is.null(facet.by)) {
-      p + facet_grid(reformulate(facet.by),  space  = "free", scales = "free")
+      p <- p + facet_grid(reformulate(facet.by),  space  = "free", scales = "free")
     }
 
     if (return.plot.to.var) {
@@ -2278,7 +2278,8 @@ composition.barplot <- function (hit.object = NULL,
         ggtitle(ct)
 
       if (!is.null(facet.by)) {
-        p_list[["plot_list"]][[ct]] + facet_grid(reformulate(facet.by),  space  = "free", scales = "free")
+        p_list[["plot_list"]][[ct]] <- p_list[["plot_list"]][[ct]] +
+          facet_grid(reformulate(facet.by),  space  = "free", scales = "free")
       }
 
     }
