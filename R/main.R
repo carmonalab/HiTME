@@ -1294,12 +1294,6 @@ merge.HiTObjects <- function(hit.object = NULL,
     aggr.signature[[gb]] <- df
   }
 
-  # Combine all celltype modules into one big concatenated df
-  flat_list <- rrapply::rrapply(comp.prop,
-                                classes = "data.frame",
-                                how = "flatten")
-  comp.prop[["all_concatenated"]] <- bind_rows(flat_list)
-
   hit <- methods::new("HiT",
                       metadata = metadata,
                       composition = comp.prop,
