@@ -2257,18 +2257,20 @@ composition.barplot <- function (hit.object = NULL,
     stop("Please provide input hit.object")
   }
   if (is.null(sample.col)) {
-    stop("Please specify the metadata column containing unique sample names")
+    sample.col <- "sample"
   }
   if (!length(sample.col) == 1 || !is.character(sample.col)) {
     stop("Please provide one character string for sample.col")
   }
   if (!sample.col %in% names(hit.object@metadata)) {
-    stop(paste("sample.col ", sample.col, " not found in hit.object@metadata column names"))
+    stop(paste("sample.col ", sample.col, " not found in hit.object@metadata column names.
+               Please specify metadata column containing sample names with sample.col argument"))
   }
   if (length(unique(hit.object@metadata[[sample.col]])) <
       length(hit.object@metadata[[sample.col]])) {
     stop("Sample names are not unique. Please specify the metadata column containing unique sample names")
   }
+
   if (!length(layer) == 1 || !is.character(layer)) {
     stop("Please provide one character string for layer parameter")
   }
@@ -2375,13 +2377,14 @@ composition.boxplot <- function (hit.object = NULL,
     stop("Please provide input hit.object")
   }
   if (is.null(sample.col)) {
-    stop("Please specify the metadata column containing unique sample names")
+    sample.col <- "sample"
   }
   if (!length(sample.col) == 1 || !is.character(sample.col)) {
     stop("Please provide one character string for sample.col")
   }
   if (!sample.col %in% names(hit.object@metadata)) {
-    stop(paste("sample.col ", sample.col, " not found in hit.object@metadata column names"))
+    stop(paste("sample.col ", sample.col, " not found in hit.object@metadata column names.
+               Please specify metadata column containing sample names with sample.col argument"))
   }
   if (length(unique(hit.object@metadata[[sample.col]])) <
       length(hit.object@metadata[[sample.col]])) {
