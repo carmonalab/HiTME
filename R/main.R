@@ -3,6 +3,7 @@
 #' @param object A seurat object or a list of seurat objects
 #' @param scGate.model The scGate model to use (use get_scGateDB() to get a list of available models), by default fetch the HiTME models: \code{ scGate::get_scGateDB(branch = scGate.model.branch)[[species]][["HiTME"]]}.
 #' @param scGate.model.branch From which branch Run.HiTME fetch the scGate models, by default models are retrieved from \code{master} branch.
+#' @param multi.asNA How to label cells that are "Pure" for multiple annotations: "Multi" (FALSE) or NA (TRUE)
 #' @param additional.signatures UCell additional signatures to compute on each cell, by default \code{SignatuR} programs are included.
 #' @param ref.maps A named list of the ProjecTILs reference maps to use. They ought to be Seurat objects. It is recommended to add in reference object slost \code{misc} the identifier connecting to layer 1 classification (scGate): \code{ref.map@misc$layer1_link}
 #' @param split.by A Seurat object metadata column to split by (e.g. sample names).
@@ -54,6 +55,7 @@
 Run.HiTME <- function(object = NULL,
                       scGate.model = "default",
                       scGate.model.branch = c("master", "dev"),
+                      multi.asNA = TRUE,
                       additional.signatures = "default",
                       ref.maps = NULL,
                       split.by = NULL,
@@ -201,7 +203,7 @@ Run.HiTME <- function(object = NULL,
                             model=scGate.model,
                             additional.signatures = additional.signatures,
                             BPPARAM = param,
-                            multi.asNA = T)
+                            multi.asNA = multi.asNA)
         return(x)
       }
     )

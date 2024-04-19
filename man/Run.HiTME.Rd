@@ -8,6 +8,7 @@ Run.HiTME(
   object = NULL,
   scGate.model = "default",
   scGate.model.branch = c("master", "dev"),
+  multi.asNA = TRUE,
   additional.signatures = "default",
   ref.maps = NULL,
   split.by = NULL,
@@ -28,6 +29,8 @@ Run.HiTME(
 \item{scGate.model}{The scGate model to use (use get_scGateDB() to get a list of available models), by default fetch the HiTME models: \code{ scGate::get_scGateDB(branch = scGate.model.branch)[[species]][["HiTME"]]}.}
 
 \item{scGate.model.branch}{From which branch Run.HiTME fetch the scGate models, by default models are retrieved from \code{master} branch.}
+
+\item{multi.asNA}{How to label cells that are "Pure" for multiple annotations: "Multi" (FALSE) or NA (TRUE)}
 
 \item{additional.signatures}{UCell additional signatures to compute on each cell, by default \code{SignatuR} programs are included.}
 
