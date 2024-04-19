@@ -7,6 +7,7 @@
 get.cluster.score(
   hit.object = NULL,
   cluster.by = NULL,
+  cluster.by.drop.na = TRUE,
   batching = NULL,
   scores = c("Silhouette_isolated", "Silhouette", "Modularity"),
   dist.method = "euclidean",
@@ -31,6 +32,8 @@ get.cluster.score(
 \item{hit.object}{A Hit class object obtained with \link{get.HiTObject} or pseudobulk raw count matrix (\code{HitObject@aggregated_profile$pseudobulk$layer1})}
 
 \item{cluster.by}{Vector indicating the variable for clustering, default is celltype (for the annotation) and sample}
+
+\item{cluster.by.drop.na}{Whether to keep (FALSE) or drop (TRUE) NAs present in cluster.by column.}
 
 \item{batching}{Vector indicating the variable for batching to allow calculating scores per batch, to account for batch effect}
 

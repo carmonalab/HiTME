@@ -1314,6 +1314,7 @@ merge.HiTObjects <- function(hit.object = NULL,
 #'
 #' @param hit.object A Hit class object obtained with \link{get.HiTObject} or pseudobulk raw count matrix (\code{HitObject@aggregated_profile$pseudobulk$layer1})
 #' @param cluster.by Vector indicating the variable for clustering, default is celltype (for the annotation) and sample
+#' @param cluster.by.drop.na Whether to keep (FALSE) or drop (TRUE) NAs present in cluster.by column.
 #' @param batching Vector indicating the variable for batching to allow calculating scores per batch, to account for batch effect
 #' @param scores Scores to compute clustering of samples based on cell type prediction.
 #' @param dist.method Method to compute distance between celltypes, default is euclidean.
@@ -1363,6 +1364,7 @@ merge.HiTObjects <- function(hit.object = NULL,
 
 get.cluster.score <- function(hit.object = NULL,
                               cluster.by = NULL,
+                              cluster.by.drop.na = TRUE,
                               batching = NULL,
                               scores = c("Silhouette_isolated", "Silhouette", "Modularity"),
                               dist.method = "euclidean",
@@ -1391,10 +1393,35 @@ get.cluster.score <- function(hit.object = NULL,
 
   if (is.null(hit.object) ||
       !inherits(hit.object, "HiT")) {
-    stop("Please provide a Hit class object or a count matrix.\n")
+    stop("Please provide a Hit class object or a count matrix.")
   }
   if (is.null(cluster.by)) {
-    stop("Please provide a metadata column name to cluster by\n")
+    stop("Please provide a metadata column name to cluster by.")
+  }
+
+  if (!any(cluster.by %in% names(hit.object@metadata))) {
+    stop("Group.by variables ", paste(cluster.by, collapse = ", "), " not found in metadata")
+  } else if (!all(cluster.by %in% names(hit.object@metadata))) {
+    cluster.by <- cluster.by[cluster.by %in% names(hit.object@metadata)]
+    message("Only found ", paste(cluster.by, collapse = ", ") , " as grouping variable for HiT Object.")
+  }
+
+  for (i in cluster.by) {
+    if (length(unique(hit.object@metadata[[i]])) == 1) {
+      stop("All values are the same in cluster.by ", i, ". Please provide a metadata column with at least two different groups.")
+    }
+  }
+
+  # Convert NA to factor level or drop
+  for (i in cluster.by) {
+    if (cluster.by.drop.na) {
+      hit.object@metadata <- hit.object@metadata[!is.na(hit.object@metadata[[cluster.by]]), ]
+    } else {
+      hit.object@metadata[[cluster.by]] <- as.character(hit.object@metadata[[cluster.by]])
+      hit.object@metadata[[cluster.by]][is.na(hit.object@metadata[[cluster.by]])] <- "NA"
+    }
+    # cluster.by column must be factor
+    hit.object@metadata[[cluster.by]] <- as.factor(hit.object@metadata[[cluster.by]])
   }
 
   scores <- str_to_title(tolower(scores))
@@ -1431,6 +1458,9 @@ get.cluster.score <- function(hit.object = NULL,
     for (layer in comp_layers) {
       if (inherits(hit.object@composition[[layer]], "data.frame")) {
         mat <- hit.object@composition[[layer]][, c("celltype", "clr", "sample"), with = FALSE]
+        if (cluster.by.drop.na) {
+          mat <- mat %>% filter(sample %in% hit.object@metadata[["sample"]])
+        }
         mat <- mat %>%
           tidyr::pivot_wider(names_from = sample,
                              values_from = clr) %>%
@@ -1526,6 +1556,9 @@ get.cluster.score <- function(hit.object = NULL,
             BPPARAM = param,
             function(i){
               mat <- hit.object@composition[[layer]][[i]][, c("celltype", "clr", "sample"), with = F]
+              if (cluster.by.drop.na) {
+                mat <- mat %>% filter(sample %in% hit.object@metadata[["sample"]])
+              }
               mat <- mat %>%
                 tidyr::pivot_wider(names_from = sample,
                                    values_from = clr) %>%
@@ -1664,6 +1697,9 @@ get.cluster.score <- function(hit.object = NULL,
           meta <- hit.object@metadata %>%
             dplyr::filter(sample %in% colnames(mat))
           cluster_labels <- meta[[cluster_col]]
+          if (cluster.by.drop.na) {
+            mat <- mat[, meta[["sample"]]]
+          }
 
           if (is.null(batching))  {
             if (length(unique(cluster_labels)) > 1) {
@@ -1792,6 +1828,9 @@ get.cluster.score <- function(hit.object = NULL,
           BPPARAM = param,
           function(i){
             mat <- hit.object@aggregated_profile[[type]][[layer]][, c("celltype", i, "sample"), with = FALSE]
+            if (cluster.by.drop.na) {
+              mat <- mat %>% filter(sample %in% hit.object@metadata[["sample"]])
+            }
             mat <- mat %>%
               tidyr::pivot_wider(names_from = sample, values_from = i) %>%
               tibble::column_to_rownames(var = "celltype")
