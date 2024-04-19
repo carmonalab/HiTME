@@ -1415,13 +1415,13 @@ get.cluster.score <- function(hit.object = NULL,
   # Convert NA to factor level or drop
   for (i in cluster.by) {
     if (cluster.by.drop.na) {
-      hit.object@metadata <- hit.object@metadata[!is.na(hit.object@metadata[[cluster.by]]), ]
+      hit.object@metadata <- hit.object@metadata[!is.na(hit.object@metadata[[i]]), ]
     } else {
-      hit.object@metadata[[cluster.by]] <- as.character(hit.object@metadata[[cluster.by]])
-      hit.object@metadata[[cluster.by]][is.na(hit.object@metadata[[cluster.by]])] <- "NA"
+      hit.object@metadata[[i]] <- as.character(hit.object@metadata[[i]])
+      hit.object@metadata[[i]][is.na(hit.object@metadata[[i]])] <- "NA"
     }
     # cluster.by column must be factor
-    hit.object@metadata[[cluster.by]] <- as.factor(hit.object@metadata[[cluster.by]])
+    hit.object@metadata[[i]] <- as.factor(hit.object@metadata[[i]])
   }
 
   scores <- str_to_title(tolower(scores))
