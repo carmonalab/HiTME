@@ -707,7 +707,7 @@ get.celltype.composition <- function(object = NULL,
 
             # Keep only subtypes with a minimum amount of cells
             ctable.split <- ctable.split %>%
-              keep( ~ sum(.$cell_counts) >= min.cells.composition)
+              purrr::keep( ~ sum(.$cell_counts) >= min.cells.composition)
 
             ctable <- c(ctable.split)
           }

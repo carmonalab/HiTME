@@ -63,7 +63,8 @@ Imports:
   gridExtra (>= 2.3),
   pheatmap (>= 1.0.12),
   metap (>= 1.9),
-  multtest (>= 2.58.0)
+  multtest (>= 2.58.0),
+  purrr (>= 1.0.2)
 Suggests: 
     knitr,
     rmarkdown,
