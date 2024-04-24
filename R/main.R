@@ -2145,7 +2145,12 @@ summarize.cluster.scores <- function(data = NULL,
           scale <- "none"
         }
 
-        plot_list[[n]] <- pheatmap::pheatmap(df,
+        df_pval_invert <- df
+        df_pval <- df_pval_invert[, grepl(".p_value", names(df))]
+        df_pval <- 1 / (df_pval + 1e-16)
+        df_pval_invert[, grepl(".p_value", names(df))] <- df_pval
+
+        plot_list[[n]] <- pheatmap::pheatmap(df_pval_invert,
                                              main = n,
                                              angle_col = 45,
                                              scale = scale,
