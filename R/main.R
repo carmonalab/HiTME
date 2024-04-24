@@ -157,6 +157,8 @@ Run.HiTME <- function(object = NULL,
         sig.species <- "Mm"
       }
       additional.signatures <- SignatuR::GetSignature(SignatuR::SignatuR[[sig.species]][["Programs"]])
+      selected.SignatuR.programs <- c("IFN", "HeatShock", "cellCycle.G1S", "cellCycle.G2M")
+      additional.signatures <- additional.signatures[selected.SignatuR.programs]
       message(" - Adding additional signatures: ", paste(names(additional.signatures), collapse = ", "), "\n")
     }
   } else {
