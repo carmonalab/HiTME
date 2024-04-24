@@ -2189,7 +2189,7 @@ summarize.cluster.scores <- function(data = NULL,
 #'
 
 nas.per.sample <- function (obj.list = NULL,
-                            annot.col = c("scGate_multi", "functional.cluster"),
+                            annot.col = c("scGate_multi"),
                             return.plot = TRUE,
                             bottom.mar = 10.2) {
   if (is.null(obj.list) &
