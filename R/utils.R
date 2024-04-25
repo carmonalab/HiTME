@@ -345,6 +345,7 @@ DESeq2.normalize <- function(matrix,
 get.scores <- function(matrix,
                        cluster_labels,
                        scores,
+                       modularity.k,
                        ntests = 100, # number of shuffling events
                        seed = 22, # seed for random shuffling
                        title = "", # Title for summary
@@ -356,10 +357,10 @@ get.scores <- function(matrix,
   results <- list()
 
   # Check if there are at least 2 clusters,
-  # that there are more than 3 samples and
+  # that there are more than 4 samples and
   # that there are more samples than clusters (not each sample is one separate cluster)
   if (length(unique(cluster_labels)) > 1 &
-      length(cluster_labels) > 3 &
+      length(cluster_labels) > 4 &
       nrow(matrix) > length(unique(cluster_labels))) {
 
     for (s in scores) {
@@ -443,14 +444,10 @@ get.scores <- function(matrix,
 
       if (s == "Modularity") {
 
-        # A low number of k = 3 neighbors was chosen to better account for the case if
-        # one group's number of samples << other group(s)'s number of samples
-        k <- 3
-
-        if (length(cluster_labels) >= (k+1)) {
+        if (length(cluster_labels) >= (modularity.k+1)) {
           g <- scran::buildKNNGraph(matrix,
                                     transposed = TRUE,
-                                    k = k)
+                                    k = modularity.k)
 
           # Calculate modularity score
           modularity_score <- igraph::modularity(g, membership = as.numeric(factor(cluster_labels)))
@@ -478,7 +475,7 @@ get.scores <- function(matrix,
                                     shape = 21,
                                     color = "black",
                                     size = 5) +
-            ggplot2::ggtitle(paste("KNN plot with k = ", k,
+            ggplot2::ggtitle(paste("KNN plot with k = ", modularity.k,
                                    "\nModularity score = ", round(modularity_score, 3),
                                    ifelse(!is.null(p_val),
                                           paste("\np-value:",
@@ -487,8 +484,6 @@ get.scores <- function(matrix,
             ggplot2::theme(panel.background = element_rect(fill = "white"))
 
           results[["Plots"]][[s]] <- p
-        } else {
-          message("too few samples to run modularity score\n")
         }
       }
     }
@@ -720,13 +715,15 @@ plot_PCA <- function(matrix,
                      color.cluster.by = "none") {
   res.pca <- stats::prcomp(matrix)
   suppressWarnings(
-    p <- factoextra::fviz_pca(res.pca,
-                              habillage = color.cluster.by,
-                              label = "var",
-                              pointsize = 3,
-                              invisible = invisible) +
-      # Remove shapes added by fviz_pca
-      scale_shape_manual(values = c(rep(19, length(unique(color.cluster.by)))))
+    suppressMessages(
+      p <- factoextra::fviz_pca(res.pca,
+                                habillage = color.cluster.by,
+                                label = "var",
+                                pointsize = 3,
+                                invisible = invisible) +
+        # Remove shapes added by fviz_pca
+        scale_shape_manual(values = c(rep(19, length(unique(color.cluster.by)))))
+    )
   )
 
   return(p)

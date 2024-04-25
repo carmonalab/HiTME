@@ -10,9 +10,9 @@ get.cluster.score(
   cluster.by.drop.na = TRUE,
   batching = NULL,
   scores = c("Silhouette_isolated", "Silhouette", "Modularity"),
+  modularity.k = 3,
   dist.method = "euclidean",
   hclust.method = "complete",
-  all.concatenated.na.handling = "impute",
   ntests = 100,
   seed = 22,
   pval.combine.method = "weighted_zmethod",
@@ -23,7 +23,7 @@ get.cluster.score(
   nVarGenes = 500,
   gene.filter = "HVG",
   black.list = NULL,
-  ncores = parallelly::availableCores()/2,
+  ncores = round(parallelly::availableCores()/3),
   bparam = NULL,
   progressbar = TRUE
 )
@@ -39,11 +39,11 @@ get.cluster.score(
 
 \item{scores}{Scores to compute clustering of samples based on cell type prediction.}
 
+\item{modularity.k}{Number of k-nearest neighbours to use to build graph for the calculation of the modularity score}
+
 \item{dist.method}{Method to compute distance between celltypes, default is euclidean.}
 
 \item{hclust.method}{Hierarchical clustering method for hclust. Options are: "single", "complete", "average" (= UPGMA), "mcquitty" (= WPGMA), "median" (= WPGMC) or "centroid" (= UPGMC). (See hclust package for details)}
-
-\item{all.concatenated.na.handling}{How to handle missing values in the "all cell types concatenated vector". Options are "drop" (drop rows, conservative method) or "zero_impute" (replaces missing values with zeros, use with caution as it might change your sample clustering based on number of missing values per sample/group)}
 
 \item{ntests}{Number of shuffling events to calculate p-value for scores}
 

@@ -1313,9 +1313,9 @@ merge.HiTObjects <- function(hit.object = NULL,
 #' @param cluster.by.drop.na Whether to keep (FALSE) or drop (TRUE) NAs present in cluster.by column.
 #' @param batching Vector indicating the variable for batching to allow calculating scores per batch, to account for batch effect
 #' @param scores Scores to compute clustering of samples based on cell type prediction.
+#' @param modularity.k Number of k-nearest neighbours to use to build graph for the calculation of the modularity score
 #' @param dist.method Method to compute distance between celltypes, default is euclidean.
 #' @param hclust.method Hierarchical clustering method for hclust. Options are: "single", "complete", "average" (= UPGMA), "mcquitty" (= WPGMA), "median" (= WPGMC) or "centroid" (= UPGMC). (See hclust package for details)
-#' @param all.concatenated.na.handling How to handle missing values in the "all cell types concatenated vector". Options are "drop" (drop rows, conservative method) or "zero_impute" (replaces missing values with zeros, use with caution as it might change your sample clustering based on number of missing values per sample/group)
 #' @param ntests Number of shuffling events to calculate p-value for scores
 #' @param seed Set seed for random shuffling events to calculate p-value for scores
 #' @param pval.combine Method for combining p-values if calculated using batching. Default is "zmethod" weighted (Stouffer's) Z-method, weighting by sample size per batch. Alternatively, Fisher's method can be used with "fisher".
@@ -1334,7 +1334,7 @@ merge.HiTObjects <- function(hit.object = NULL,
 #' @importFrom BiocParallel MulticoreParam bplapply
 #' @importFrom parallelly availableCores
 #' @importFrom data.table rbindlist
-#' @importFrom dplyr mutate mutate_if filter %>% coalesce mutate_all full_join row_number
+#' @importFrom dplyr mutate mutate_if filter %>% coalesce mutate_all full_join row_number replace_na
 #' @importFrom BiocParallel MulticoreParam bplapply
 #' @importFrom tibble rownames_to_column column_to_rownames remove_rownames
 #' @importFrom caret nearZeroVar
@@ -1363,9 +1363,9 @@ get.cluster.score <- function(hit.object = NULL,
                               cluster.by.drop.na = TRUE,
                               batching = NULL,
                               scores = c("Silhouette_isolated", "Silhouette", "Modularity"),
+                              modularity.k = 3,
                               dist.method = "euclidean",
                               hclust.method = "complete",
-                              all.concatenated.na.handling = "impute",
 
                               # For scores p-value calculation
                               ntests = 100, # number of shuffling events
@@ -1383,7 +1383,7 @@ get.cluster.score <- function(hit.object = NULL,
                               gene.filter = "HVG",
                               black.list = NULL,
 
-                              ncores = parallelly::availableCores() / 2, # to reduce memory load
+                              ncores = round(parallelly::availableCores() / 3), # to reduce memory load
                               bparam = NULL,
                               progressbar = TRUE) {
 
@@ -1474,6 +1474,7 @@ get.cluster.score <- function(hit.object = NULL,
             get.scores(matrix = mat,
                        cluster_labels = cluster_labels,
                        scores = scores,
+                       modularity.k = modularity.k,
                        ntests = ntests,
                        seed = seed,
                        title = paste(cluster_col,
@@ -1501,6 +1502,7 @@ get.cluster.score <- function(hit.object = NULL,
                   get.scores(matrix = m,
                              cluster_labels = cluster_labels,
                              scores = scores,
+                             modularity.k = modularity.k,
                              ntests = ntests,
                              seed = seed,
                              title = paste(cluster_col,
@@ -1560,19 +1562,6 @@ get.cluster.score <- function(hit.object = NULL,
                                    values_from = clr) %>%
                 tibble::column_to_rownames(var = "celltype")
 
-              if (all.concatenated.na.handling == "drop") {
-                mat <- stats::na.omit(mat)
-              }
-              if (all.concatenated.na.handling == "impute") {
-                if (any(is.na(mat))) {
-                  # Impute with row min
-                  ind <- which(is.na(mat),
-                               arr.ind = TRUE)
-                  mat[ind] <- MatrixGenerics::rowMins(as.matrix(mat),
-                                                      na.rm = TRUE)[ind[,1]]
-                }
-              }
-
               mat <- scale(mat, center = TRUE,
                            scale = FALSE)
 
@@ -1585,6 +1574,7 @@ get.cluster.score <- function(hit.object = NULL,
                   res <- get.scores(matrix = mat,
                                     cluster_labels = cluster_labels,
                                     scores = scores,
+                                    modularity.k = modularity.k,
                                     ntests = ntests,
                                     seed = seed,
                                     title = paste(cluster_col,
@@ -1618,6 +1608,7 @@ get.cluster.score <- function(hit.object = NULL,
                           get.scores(matrix = m,
                                      cluster_labels = cluster_labels,
                                      scores = scores,
+                                     modularity.k = modularity.k,
                                      ntests = ntests,
                                      seed = seed,
                                      title = paste(cluster_col,
@@ -1709,6 +1700,7 @@ get.cluster.score <- function(hit.object = NULL,
               res <- get.scores(matrix = mat,
                                 cluster_labels = cluster_labels,
                                 scores = scores,
+                                modularity.k = modularity.k,
                                 ntests = ntests,
                                 seed = seed,
                                 title = paste(cluster_col,
@@ -1749,6 +1741,7 @@ get.cluster.score <- function(hit.object = NULL,
                         get.scores(matrix = m,
                                    cluster_labels = cluster_labels,
                                    scores = scores,
+                                   modularity.k = modularity.k,
                                    ntests = ntests,
                                    seed = seed,
                                    title = paste(cluster_col,
@@ -1829,20 +1822,14 @@ get.cluster.score <- function(hit.object = NULL,
             }
             mat <- mat %>%
               tidyr::pivot_wider(names_from = sample, values_from = i) %>%
-              tibble::column_to_rownames(var = "celltype")
-
-            if (all.concatenated.na.handling == "drop") {
-              mat <- stats::na.omit(mat)
-            }
-            if (all.concatenated.na.handling == "impute") {
-              mat[is.na(mat)] <- 0
-            }
-
-            mat <- scale(mat,
-                         center = TRUE,
-                         scale = TRUE)
+              tibble::column_to_rownames(var = "celltype") %>%
+              replace(is.na(.), 0)
 
             if (is.null(batching))  {
+              mat <- scale(mat,
+                           center = TRUE,
+                           scale = TRUE)
+
               cluster_labels <- hit.object@metadata %>%
                 filter(sample %in% colnames(mat)) %>%
                 .[[cluster_col]]
@@ -1850,6 +1837,7 @@ get.cluster.score <- function(hit.object = NULL,
               res <- get.scores(matrix = mat,
                                 cluster_labels = cluster_labels,
                                 scores = scores,
+                                modularity.k = modularity.k,
                                 ntests = ntests,
                                 seed = seed,
                                 title = paste(cluster_col,
@@ -1880,6 +1868,7 @@ get.cluster.score <- function(hit.object = NULL,
                       get.scores(matrix = m,
                                  cluster_labels = cluster_labels,
                                  scores = scores,
+                                 modularity.k = modularity.k,
                                  ntests = ntests,
                                  seed = seed,
                                  title = paste(cluster_col,
