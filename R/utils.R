@@ -719,7 +719,7 @@ plot_PCA <- function(matrix,
                      invisible = c("var", "quali"),
                      color.cluster.by = "none") {
   res.pca <- stats::prcomp(matrix)
-  suppressMessages(
+  suppressWarnings(
     p <- factoextra::fviz_pca(res.pca,
                               habillage = color.cluster.by,
                               label = "var",
