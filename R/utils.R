@@ -372,7 +372,7 @@ get.scores <- function(matrix,
 
       # Calculate scores + plots ###############################################
       if (s == "Silhouette_isolated") {
-        dist <- dist(matrix)
+        dist <- stats::dist(matrix)
         sils <- calc_sil_onelabel(labels = cluster_labels,
                                   dist = dist,
                                   return_mean_for_permtest = FALSE)
@@ -407,7 +407,7 @@ get.scores <- function(matrix,
       }
 
       if (s == "Silhouette") {
-        dist <- dist(matrix)
+        dist <- stats::dist(matrix)
 
         sils <- calc_sil(labels = cluster_labels,
                          dist = dist,

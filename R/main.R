@@ -1872,7 +1872,7 @@ get.cluster.score <- function(hit.object = NULL,
 
                     cluster_labels <- meta[[cluster_col]]
 
-                    m <- mat[ , colnames(mat) %in% meta$sample] %>%
+                    m <- mat[ , colnames(mat) %in% meta[["sample"]]] %>%
                       scale(center = TRUE,
                             scale = TRUE)
 
