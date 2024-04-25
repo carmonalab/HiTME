@@ -294,9 +294,14 @@ Run.HiTME <- function(object = NULL,
                      x@misc[["layer1_param"]][["additional.signatures"]] <- names(additional.signatures)
 
                      if (!is.null(scGate.model)) {
+                       levs <- names(scGate.model)
+                       if (!multi.asNA) {
+                         levs <- c(levs, "Multi")
+                       }
                        x$scGate_multi <- factor(x$scGate_multi,
-                                                levels = names(scGate.model))
+                                                levels = levs)
                      }
+
                      if (!is.null(ref.maps)) {
                        # get ref.maps all cells types
                        if ("functional.cluster" %in% names(x@meta.data)) {
@@ -1334,7 +1339,7 @@ merge.HiTObjects <- function(hit.object = NULL,
 #' @importFrom BiocParallel MulticoreParam bplapply
 #' @importFrom parallelly availableCores
 #' @importFrom data.table rbindlist
-#' @importFrom dplyr mutate mutate_if filter %>% coalesce mutate_all full_join row_number replace_na
+#' @importFrom dplyr mutate mutate_if filter %>% coalesce mutate_all full_join row_number
 #' @importFrom BiocParallel MulticoreParam bplapply
 #' @importFrom tibble rownames_to_column column_to_rownames remove_rownames
 #' @importFrom caret nearZeroVar
