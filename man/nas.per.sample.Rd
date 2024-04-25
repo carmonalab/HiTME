@@ -6,7 +6,7 @@
 \usage{
 nas.per.sample(
   obj.list = NULL,
-  annot.col = c("scGate_multi", "functional.cluster"),
+  annot.col = c("scGate_multi"),
   return.plot = TRUE,
   bottom.mar = 10.2
 )
