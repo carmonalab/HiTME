@@ -1445,7 +1445,7 @@ get.cluster.score <- function(hit.object = NULL,
     message("Processing ", cluster_col)
 
     ## Process celltype composition ###############################################
-    message("Processing cell type composition")
+    message("\n\nProcessing cell type composition\n\n")
 
     type <- "composition"
 
@@ -1669,7 +1669,7 @@ get.cluster.score <- function(hit.object = NULL,
 
 
     ## Process pseudobulk ###############################################
-    message("Processing Pseudobulks")
+    message("\n\nProcessing Pseudobulks\n\n")
 
     type <- "pseudobulk"
 
@@ -1801,7 +1801,7 @@ get.cluster.score <- function(hit.object = NULL,
 
 
     ## Process signatures ###############################################
-    message("Processing Signatures")
+    message("\n\nProcessing Signatures\n\n")
 
     type <- "signatures"
 
