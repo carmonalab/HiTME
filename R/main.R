@@ -2862,3 +2862,85 @@ read_objs <- function(dir = NULL,
   names(obj.list) <- stringr::str_remove_all(file_names, '.rds')
   return(obj.list)
 }
+
+
+
+#' Make a HiTME reference for kNN projection on layer2
+#'
+#' Converts a Seurat object to a reference atlas for layer2 (fine-grain) for \link[ProjecTILs]{https://github.com/carmonalab/ProjecTILs}
+#' using \link[make.reference]{ProjecTILs::make.reference} function. In addition, it adds the link with layer 1 for HiTME annotation.
+#'
+#'
+#' @param reference Seurat object to be used as reference
+#' @param layer1_link Cell type label in layer1 of HiTME to classify using this reference map. When later running \link{Run.HiTME} and \link{get.HiTObject} respect the this layer.
+#' @param ... Other parameters for \link[make.reference]{ProjecTILs::make.reference} from link[ProjecTILs]{https://github.com/carmonalab/ProjecTILs}
+
+#' @importFrom ProjecTILs make.reference
+
+#' @return Reference compatible with HiTME annotation, linking layer1 and layer2.
+#' @export make.HiTReference
+#'
+#' @examples
+#' # assign layer1 or coarse-grain annotation label
+#'
+#' # With CellOntology link between layer1 and layer2 (default)
+#'
+#' ref <- make.HiTReference(myref, layer1_link = "CL:0000624")
+#'
+#' seurat.object <- Run.HiTME(object = seurat.object,
+#'                   ref.maps = ref,
+#'                   # Default parameter to subset object for layer2 classification
+#'                   layer1_link = "CellOntology_ID")
+#'                   get.HiTObject <- function(object,
+#'
+#' Hit <- get.HiTObject(seurat.object,
+#'                     # Which metadata variables define layer1 and layer2
+#'                     layers_links = c("CellOntology_ID" = "functional.cluster"),
+#'                     layer1_link = "CellOntology_ID"
+#'                     )
+#'
+#'
+#' # With other links between layer1 and layer2
+#'
+#' ref <- make.HiTReference(myref, layer1_link = "CD4T")
+#'
+#' seurat.object <- Run.HiTME(object = seurat.object,
+#'                   ref.maps = ref,
+#'                   # Subset for other metadata variables containing the label indicated above
+#'                   layer1_link = "scGate_multi")
+#'
+#' Hit <- get.HiTObject(seurat.object,
+#'                     # Which metadata variables define layer1 and layer2
+#'                     layers_links = c("scGate_multi" = "functional.cluster"),
+#'                     layer1_link = "scGate_multi"
+#'                     )
+#'
+
+make.HiTReference <- function (reference = NULL,
+                               layer1_link = NULL,
+                               ... ) {
+  if (is.null(reference) | !inherits(reference, "Seurat")){
+    stop("Please provide a Seurat object or a list of them")
+  }
+
+  if (is.null(layer1_link)){
+    stop("layer1_link not specificied")
+  }
+
+  # only use make.reference if the provided reference has not been processed by ProjecTILs::make.refernece already
+
+  if(!"projecTILs" %in% names(reference@misc)){
+    reference <- ProjecTILs::make.reference(reference,
+                                            ...)
+  }
+
+  # add layer1_link
+
+  reference@misc$layer1_link <- layer1_link
+
+
+  return(reference)
+}
+
+
+
