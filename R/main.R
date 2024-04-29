@@ -2865,81 +2865,99 @@ read_objs <- function(dir = NULL,
 
 
 
-#' Make a HiTME reference for kNN projection on layer2
+#' Add metadata to an annotated Seurat object to then obtain a HiT object
 #'
-#' Converts a Seurat object to a reference atlas for layer2 (fine-grain) for \link[ProjecTILs]{https://github.com/carmonalab/ProjecTILs}
-#' using \link[make.reference]{ProjecTILs::make.reference} function. In addition, it adds the link with layer 1 for HiTME annotation.
+#' Add metadata in misc slot of a Seurat object previously annotated to run \link{get.HiTObject}.
+#' This needed data is by default incorporated by \link{Run.HiTME}, however, in objects annotated otherwise or splitted or merged these slots are lost. This metadata is needed basically to be able to link layer1 and layer2.
 #'
 #'
-#' @param reference Seurat object to be used as reference
-#' @param layer1_link Cell type label in layer1 of HiTME to classify using this reference map. When later running \link{Run.HiTME} and \link{get.HiTObject} respect the this layer.
-#' @param ... Other parameters for \link[make.reference]{ProjecTILs::make.reference} from link[ProjecTILs]{https://github.com/carmonalab/ProjecTILs}
+#' @param object Annotated Seurat object
+#' @param scGate.models names of the scGate models used for layer1 annotation. Usually this is a list, here names of the list should be provided.
+#' @param add.signatures names of the signatures computed during HiTME annotation, provide names of the list of signatures.
+#' @param layer2_annotation Metadata column with layer2 annotation data.
+#' @param ref.maps Reference maps used for annotation on layer2 can be provided to extract their information.
+#' @param layer2_levels If reference maps are not provided, a vector or list with the levels of the layer2 annotation can be provided. These must be named with corresponding layer1_link.
 
-#' @importFrom ProjecTILs make.reference
 
 #' @return Reference compatible with HiTME annotation, linking layer1 and layer2.
-#' @export make.HiTReference
+#' @export add.HiTMetadata
 #'
 #' @examples
-#' # assign layer1 or coarse-grain annotation label
+#' # scGate models to run
+#' HiT_scGate_models <- all_models$human$HiTME
+#' # additional signatures
+#' additional.signatures <- GetSignature(SignatuR[[species]][["Programs"]])
 #'
-#' # With CellOntology link between layer1 and layer2 (default)
+#' # add scGate_link to ref.maps, by default coarse cell type cell ontology ID
+#'  layer1.links <- list(CD8 = "CL:0000625", CD4 = "CL:0000624", DC = "CL:0000451", MoMac = "CL:0000576_CL:0000235")
+#'  for (a in names(ref.maps)) {
+#'   ref.maps[[a]]@misc$layer1_link <- layer1.links[[a]]
+#'  }
 #'
-#' ref <- make.HiTReference(myref, layer1_link = "CL:0000624")
+#'  # Run HiTME
+#'  object <- Run.HiTME(object,
+#'   scGate.model = HiT_scGate_models,
+#'   ref.maps = ref.maps)
 #'
-#' seurat.object <- Run.HiTME(object = seurat.object,
-#'                   ref.maps = ref,
-#'                   # Default parameter to subset object for layer2 classification
-#'                   layer1_link = "CellOntology_ID")
-#'                   get.HiTObject <- function(object,
+#'  # misc data should be contained in the resulting object, if lost run:
+#'  object <- add.HiTMetadata(object = object,
+#'               scGate.models = names(HiT_scGate_models),
+#'               add.signatures = names(additional.signatures),
+#'               ref.maps = ref.maps)
 #'
-#' Hit <- get.HiTObject(seurat.object,
-#'                     # Which metadata variables define layer1 and layer2
-#'                     layers_links = c("CellOntology_ID" = "functional.cluster"),
-#'                     layer1_link = "CellOntology_ID"
-#'                     )
-#'
-#'
-#' # With other links between layer1 and layer2
-#'
-#' ref <- make.HiTReference(myref, layer1_link = "CD4T")
-#'
-#' seurat.object <- Run.HiTME(object = seurat.object,
-#'                   ref.maps = ref,
-#'                   # Subset for other metadata variables containing the label indicated above
-#'                   layer1_link = "scGate_multi")
-#'
-#' Hit <- get.HiTObject(seurat.object,
-#'                     # Which metadata variables define layer1 and layer2
-#'                     layers_links = c("scGate_multi" = "functional.cluster"),
-#'                     layer1_link = "scGate_multi"
-#'                     )
-#'
+#' # Alternatively to specificying reference maps used, a list named with layer1_link and levels for each refernece map can be used:
+#' layer2_levels <- list("CL:0000625" = c("CD8.NaiveLike, CD8.Tex, CD8.Tpex...),
+#'                         ...)
 
-make.HiTReference <- function (reference = NULL,
-                               layer1_link = NULL,
-                               ... ) {
-  if (is.null(reference) | !inherits(reference, "Seurat")){
-    stop("Please provide a Seurat object or a list of them")
+add.HiTMetadata <- function (object = NULL,
+                             scGate.models = NULL,
+                             add.signatures = NULL,
+                             layer2_annotation = "functional.cluster",
+                             ref.maps = NULL,
+                             layer2_levels = NULL) {
+
+  if(is.null(object)){
+    stop("Please provide an annotated Seurat object")
   }
 
-  if (is.null(layer1_link)){
-    stop("layer1_link not specificied")
+  # add misc slot, removed when merging or splitting
+  object@misc[["layer1_param"]] <- list()
+  object@misc[["layer1_param"]][["scGate_models"]] <- scGate.models
+  object@misc[["layer1_param"]][["additional.signatures"]] <- add.signatures
+
+  if (!is.null(scGate.model)) {
+    object$scGate_multi <- factor(object$scGate_multi,
+                                  levels = scGate.models)
   }
 
-  # only use make.reference if the provided reference has not been processed by ProjecTILs::make.refernece already
-
-  if(!"projecTILs" %in% names(reference@misc)){
-    reference <- ProjecTILs::make.reference(reference,
-                                            ...)
+  if(is.null(layer2_levels) && is.null(ref.maps)){
+    warning("Not adding misc metadata for layer2 as no reference maps or layer2_levels were indicated.")
   }
 
-  # add layer1_link
+  if (!layer2_annotation %in% names(object@meta.data)) {
+    stop(layer2_annotation, "not found in object metadata")
+  }
 
-  reference@misc$layer1_link <- layer1_link
+  if(!is.null(ref.maps)){
+    ref.maps <- as.list(ref.maps)
+
+    layer2_levels <- lapply(ref.maps, function(x) {
+      unique(x[[layer2_annotation]])
+    })
+
+    names(layer2_levels) <- lapply(ref.maps, function(y) {
+      y@misc$layer1_link
+    })
+  }
 
 
-  return(reference)
+  object@meta.data[[layer2_annotation]] <- factor(object@meta.data[[layer2_annotation]],
+                                                  levels = unlist(layer2_levels))
+
+
+  object@misc[["layer2_param"]][[layer2_annotation]][["levels2_per_levels1"]] <- layer2_levels
+
+  return(object)
 }
 
 
