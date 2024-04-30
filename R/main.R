@@ -2925,7 +2925,7 @@ add.HiTMetadata <- function (object = NULL,
   object@misc[["layer1_param"]][["scGate_models"]] <- scGate.models
   object@misc[["layer1_param"]][["additional.signatures"]] <- add.signatures
 
-  if (!is.null(scGate.model)) {
+  if (!is.null(scGate.models)) {
     object$scGate_multi <- factor(object$scGate_multi,
                                   levels = scGate.models)
   }
