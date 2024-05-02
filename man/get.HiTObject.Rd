@@ -16,11 +16,14 @@ get.HiTObject(
   layers_links = c(scGate_multi = "functional.cluster"),
   gene.filter = NULL,
   assay = "RNA",
-  layer1_link = "CellOntology_ID"
+  layer1_link = "CellOntology_ID",
+  ncores = parallelly::availableCores() - 2,
+  bparam = NULL,
+  progressbar = TRUE
 )
 }
 \arguments{
-\item{object}{A Seurat object}
+\item{object}{A Seurat object or a list of Seurat objects}
 
 \item{group.by}{List or vector with one or multiple Seurat object metadata columns with cell type predictions to group by (e.g. layer 1 cell type classification)}
 

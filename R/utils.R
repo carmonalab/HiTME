@@ -210,59 +210,72 @@ compositional_data <- function(data,
                                clr_zero_impute_perc = 1,
                                only.counts = FALSE) {
 
-  # set grouping variables
-  gr_vars <- c(split.by, group.by.1)
-  gr_vars2 <- c(split.by)
-
-  ctable <- data %>%
-    # drop = F keeps all levels of the factor
-    dplyr::group_by(dplyr::across(dplyr::all_of(gr_vars)), .drop = F) %>%
-    dplyr::summarize(cell_counts = dplyr::n()) %>%
-    dplyr::ungroup()
-
-  colnames(ctable)[1] <- "celltype"
-
-  if (!only.counts) {
-    ctable <- ctable %>%
-      dplyr::filter(if (!useNA) !is.na(.data[["celltype"]])
-                    else rep(TRUE, n())) %>%
-      dplyr::group_by(across(all_of(gr_vars2))) %>%
-      dplyr::mutate(freq = cell_counts/sum(cell_counts) * 100,
-                    !!"celltype" := coalesce(.data[["celltype"]], "NA")) %>%
-      as.data.frame() %>%
-      na.omit()
-
-    if (nrow(ctable) > 0) {
-      # compute clr
-      clr.df <- ctable %>%
-        dplyr::select(-cell_counts) %>%
-        # add pseudocount
-        dplyr::mutate(freq = freq + clr_zero_impute_perc) %>%
-        tidyr::pivot_wider(names_from = "celltype",
-                           values_from = "freq")
-
-      # accommodate df for clr transformation
-      ## Remove character columns
-      num_cols_bool_idx <- sapply(clr.df, is.numeric)
-      num_cols <- names(clr.df)[num_cols_bool_idx]
-      chr_cols <- names(clr.df)[!num_cols_bool_idx]
-      clr.df.ref <- clr.df %>% dplyr::select(all_of(num_cols))
-
-      clr <- Hotelling::clr(clr.df.ref)
-
-      # add extra cols (if any)
-      clr <- cbind(clr.df[,chr_cols],clr)  %>%
-        tidyr::pivot_longer(-chr_cols,
-                            names_to = "celltype",
-                            values_to = "clr")
-      # join clr df to main dataframe
-      ctable <- dplyr::left_join(ctable,
-                                 clr,
-                                 by = c(chr_cols, "celltype"))
+  if (all(is.na(data[[group.by.1]]))) {
+    if (!only.counts) {
+      ctable <- data.frame("celltype" = character(),
+                           "cell_counts" = integer(),
+                           "freq" = numeric(),
+                           "clr" = numeric())
+    } else {
+      ctable <- data.frame("celltype" = character(),
+                           "cell_counts" = integer())
     }
-  }
+    return(ctable)
+  } else {
+    # set grouping variables
+    gr_vars <- c(split.by, group.by.1)
+    gr_vars2 <- c(split.by)
 
-  return(ctable)
+    ctable <- data %>%
+      # drop = F keeps all levels of the factor
+      dplyr::group_by(dplyr::across(dplyr::all_of(gr_vars)), .drop = F) %>%
+      dplyr::summarize(cell_counts = dplyr::n()) %>%
+      dplyr::ungroup()
+
+    colnames(ctable)[1] <- "celltype"
+
+    if (!only.counts) {
+      ctable <- ctable %>%
+        dplyr::filter(if (!useNA) !is.na(.data[["celltype"]])
+                      else rep(TRUE, n())) %>%
+        dplyr::group_by(across(all_of(gr_vars2))) %>%
+        dplyr::mutate(freq = cell_counts/sum(cell_counts) * 100,
+                      !!"celltype" := coalesce(.data[["celltype"]], "NA")) %>%
+        as.data.frame() %>%
+        na.omit()
+
+      if (nrow(ctable) > 0) {
+        # compute clr
+        clr.df <- ctable %>%
+          dplyr::select(-cell_counts) %>%
+          # add pseudocount
+          dplyr::mutate(freq = freq + clr_zero_impute_perc) %>%
+          tidyr::pivot_wider(names_from = "celltype",
+                             values_from = "freq")
+
+        # accommodate df for clr transformation
+        ## Remove character columns
+        num_cols_bool_idx <- sapply(clr.df, is.numeric)
+        num_cols <- names(clr.df)[num_cols_bool_idx]
+        chr_cols <- names(clr.df)[!num_cols_bool_idx]
+        clr.df.ref <- clr.df %>% dplyr::select(all_of(num_cols))
+
+        clr <- Hotelling::clr(clr.df.ref)
+
+        # add extra cols (if any)
+        clr <- cbind(clr.df[,chr_cols],clr)  %>%
+          tidyr::pivot_longer(-chr_cols,
+                              names_to = "celltype",
+                              values_to = "clr")
+        # join clr df to main dataframe
+        ctable <- dplyr::left_join(ctable,
+                                   clr,
+                                   by = c(chr_cols, "celltype"))
+      }
+    }
+
+    return(ctable)
+  }
 }
 
 
