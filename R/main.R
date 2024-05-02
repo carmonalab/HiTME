@@ -266,6 +266,12 @@ Run.HiTME <- function(object = NULL,
                                            ref.maps = ref.maps,
                                            bparam = param,
                                            layer1_link = layer1_link)
+          # Check if ProjecTIL columns were added
+          # If not, add NA columns
+          ProjecTILs_cols <- c("functional.cluster", "functional.cluster.conf")
+          if (!any(ProjecTILs_cols %in% names(x@meta.data))) {
+            x@meta.data[ProjecTILs_cols[!ProjecTILs_cols %in% names(x@meta.data)]] <- NA
+          }
           return(x)
         }
       )
