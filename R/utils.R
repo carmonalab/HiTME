@@ -325,7 +325,7 @@ DESeq2.normalize <- function(matrix,
                                          design = dformula)
   data <- DESeq2::estimateSizeFactors(data)
 
-  nsub <- min(1000, sum(rowMeans(BiocGenerics::counts(data, normalized=TRUE)) > 5 ))
+  nsub <- min(1000, sum(rowMeans(BiocGenerics::counts(data, normalized=TRUE)) > 10 ))
 
   # transform counts using vst
   data <- DESeq2::vst(data, blind = T, nsub = nsub)
@@ -733,20 +733,23 @@ plot_PCA <- function(matrix,
   matrix_filtered <- matrix[, -constant_columns_indices, drop=FALSE]
   # Otherwise, stats::prcomp would fail with error (if using scale. = TRUE by default)
 
-  res.pca <- stats::prcomp(matrix_filtered)
-  suppressWarnings(
-    suppressMessages(
-      p <- factoextra::fviz_pca(res.pca,
-                                habillage = color.cluster.by,
-                                label = "var",
-                                pointsize = 3,
-                                invisible = invisible) +
-        # Remove shapes added by fviz_pca
-        scale_shape_manual(values = c(rep(19, length(unique(color.cluster.by)))))
+  # If there are still columns left
+  if (ncol(matrix_filtered) > 0) {
+    res.pca <- stats::prcomp(matrix_filtered)
+    suppressWarnings(
+      suppressMessages(
+        p <- factoextra::fviz_pca(res.pca,
+                                  habillage = color.cluster.by,
+                                  label = "var",
+                                  pointsize = 3,
+                                  invisible = invisible) +
+          # Remove shapes added by fviz_pca
+          scale_shape_manual(values = c(rep(19, length(unique(color.cluster.by)))))
+      )
     )
-  )
 
-  return(p)
+    return(p)
+  }
 }
 
 

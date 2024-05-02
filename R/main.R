@@ -1539,10 +1539,10 @@ get.cluster.score <- function(hit.object = NULL,
       if (inherits(hit.object@composition[[layer]], "data.frame")) {
         mat <- hit.object@composition[[layer]][, c("celltype", "clr", "hitme.sample"), with = FALSE]
         if (cluster.by.drop.na) {
-          mat <- mat %>% filter(sample %in% hit.object@metadata[["hitme.sample"]])
+          mat <- mat %>% filter(hitme.sample %in% hit.object@metadata[["hitme.sample"]])
         }
         mat <- mat %>%
-          tidyr::pivot_wider(names_from = sample,
+          tidyr::pivot_wider(names_from = hitme.sample,
                              values_from = clr) %>%
           stats::na.omit() %>%
           tibble::column_to_rownames(var = "celltype") %>%
@@ -1551,7 +1551,7 @@ get.cluster.score <- function(hit.object = NULL,
 
         if (is.null(batching))  {
           cluster_labels <- hit.object@metadata %>%
-            dplyr::filter(sample %in% colnames(mat)) %>%
+            dplyr::filter(hitme.sample %in% colnames(mat)) %>%
             .[[cluster_col]]
 
           results[[cluster_col]][[type]][[layer]] <-
@@ -1574,7 +1574,7 @@ get.cluster.score <- function(hit.object = NULL,
               for (b in unique(hit.object@metadata[[b_var]])) {
                 meta <- hit.object@metadata %>%
                   dplyr::filter(get(b_var) == b) %>%
-                  dplyr::filter(sample %in% colnames(mat))
+                  dplyr::filter(hitme.sample %in% colnames(mat))
 
                 cluster_labels <- meta[[cluster_col]]
 
@@ -1639,10 +1639,10 @@ get.cluster.score <- function(hit.object = NULL,
             function(i){
               mat <- hit.object@composition[[layer]][[i]][, c("celltype", "clr", "hitme.sample"), with = F]
               if (cluster.by.drop.na) {
-                mat <- mat %>% filter(sample %in% hit.object@metadata[["hitme.sample"]])
+                mat <- mat %>% filter(hitme.sample %in% hit.object@metadata[["hitme.sample"]])
               }
               mat <- mat %>%
-                tidyr::pivot_wider(names_from = sample,
+                tidyr::pivot_wider(names_from = hitme.sample,
                                    values_from = clr) %>%
                 tibble::column_to_rownames(var = "celltype")
 
@@ -1651,7 +1651,7 @@ get.cluster.score <- function(hit.object = NULL,
 
               if (is.null(batching))  {
                 cluster_labels <- hit.object@metadata %>%
-                  dplyr::filter(sample %in% colnames(mat)) %>%
+                  dplyr::filter(hitme.sample %in% colnames(mat)) %>%
                   .[[cluster_col]]
 
                 if (nrow(mat) > 1) {
@@ -1680,7 +1680,7 @@ get.cluster.score <- function(hit.object = NULL,
                     for (b in unique(hit.object@metadata[[b_var]])) {
                       meta <- hit.object@metadata %>%
                         dplyr::filter(get(b_var) == b) %>%
-                        dplyr::filter(sample %in% colnames(mat))
+                        dplyr::filter(hitme.sample %in% colnames(mat))
 
                       cluster_labels <- meta[[cluster_col]]
 
@@ -1766,7 +1766,7 @@ get.cluster.score <- function(hit.object = NULL,
         function(i){
           mat <- hit.object@aggregated_profile[[type]][[layer]][[i]]
           meta <- hit.object@metadata %>%
-            dplyr::filter(sample %in% colnames(mat))
+            dplyr::filter(hitme.sample %in% colnames(mat))
           cluster_labels <- meta[[cluster_col]]
           if (cluster.by.drop.na) {
             mat <- mat[, meta[["hitme.sample"]]]
@@ -1806,7 +1806,7 @@ get.cluster.score <- function(hit.object = NULL,
                 for (b in unique(hit.object@metadata[[b_var]])) {
                   met <- hit.object@metadata %>%
                     dplyr::filter(get(b_var) == b) %>%
-                    dplyr::filter(sample %in% colnames(mat))
+                    dplyr::filter(hitme.sample %in% colnames(mat))
 
                   cluster_labels <- met[[cluster_col]]
 
@@ -1902,10 +1902,10 @@ get.cluster.score <- function(hit.object = NULL,
           function(i){
             mat <- hit.object@aggregated_profile[[type]][[layer]][, c("celltype", i, "hitme.sample"), with = FALSE]
             if (cluster.by.drop.na) {
-              mat <- mat %>% filter(sample %in% hit.object@metadata[["hitme.sample"]])
+              mat <- mat %>% filter(hitme.sample %in% hit.object@metadata[["hitme.sample"]])
             }
             mat <- mat %>%
-              tidyr::pivot_wider(names_from = sample, values_from = i) %>%
+              tidyr::pivot_wider(names_from = hitme.sample, values_from = i) %>%
               tibble::column_to_rownames(var = "celltype") %>%
               replace(is.na(.), 0)
 
@@ -1915,7 +1915,7 @@ get.cluster.score <- function(hit.object = NULL,
                            scale = TRUE)
 
               cluster_labels <- hit.object@metadata %>%
-                filter(sample %in% colnames(mat)) %>%
+                filter(hitme.sample %in% colnames(mat)) %>%
                 .[[cluster_col]]
 
               res <- get.scores(matrix = mat,
@@ -1940,7 +1940,7 @@ get.cluster.score <- function(hit.object = NULL,
                   for (b in unique(hit.object@metadata[[b_var]])) {
                     meta <- hit.object@metadata %>%
                       dplyr::filter(get(b_var) == b) %>%
-                      dplyr::filter(sample %in% colnames(mat))
+                      dplyr::filter(hitme.sample %in% colnames(mat))
 
                     cluster_labels <- meta[[cluster_col]]
 
