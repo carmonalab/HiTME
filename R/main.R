@@ -380,7 +380,7 @@ Run.HiTME <- function(object = NULL,
 #'
 #'
 #'
-#' @param object A Seurat object
+#' @param object A Seurat object or a list of Seurat objects
 #' @param group.by List or vector with one or multiple Seurat object metadata columns with cell type predictions to group by (e.g. layer 1 cell type classification)
 #' @param split.by A Seurat object metadata column to split by compositional data (e.g. sample names) \link{get.celltype.composition}
 #' @param min.cells.composition Parameter for internal \link{get.celltype.composition}. Minimum number of cells annotated in a group.by parameter to render the cell type composition. If the number of cells annotated for a certain group.by parameter is less, compositional data will not be rendered. Default value is 10.
@@ -394,6 +394,9 @@ Run.HiTME <- function(object = NULL,
 #' @param layer1_link Column of metadata linking layer1 prediction (e.g. scGate ~ CellOntology_ID) in order to perform subsetting for second layer classification.
 #'
 #' @importFrom methods setClass new
+#' @importFrom BiocParallel MulticoreParam bplapply
+#' @importFrom parallelly availableCores
+#'
 #' @import SeuratObject
 #'
 #' @return HiT object summarizing cell type classification and aggregated profiles.
@@ -414,7 +417,59 @@ get.HiTObject <- function(object,
                           layers_links = c("scGate_multi" = "functional.cluster"),
                           gene.filter = NULL,
                           assay = "RNA",
-                          layer1_link = "CellOntology_ID") {
+                          layer1_link = "CellOntology_ID",
+
+                          ncores = parallelly::availableCores() - 2,
+                          bparam = NULL,
+                          progressbar = TRUE) {
+
+  # if object is a single Seurat object, turn into a list
+  if (!is.list(object)) {
+    object <- list(object)
+  }
+
+  args <- list(group.by,
+               split.by,
+               min.cells.composition,
+               min.cells.aggregated,
+               name.additional.signatures,
+               useNA,
+               clr_zero_impute_perc,
+               layers_links,
+               gene.filter,
+               assay,
+               layer1_link)
+
+  # set parallelization parameters
+  param <- set_parallel_params(ncores = ncores,
+                               bparam = bparam,
+                               progressbar = progressbar)
+
+  hit.list <- BiocParallel::bplapply(X = object,
+                                     BPPARAM = param,
+                                     function(x) {
+                                       do.call(get.HiTObject.helper,
+                                               c(x, args)
+                                       )
+                                     })
+
+  return(hit.list)
+}
+
+get.HiTObject.helper <- function(object,
+                                 group.by = list("layer1" = c("scGate_multi"),
+                                                 "layer2" = c("functional.cluster")
+                                 ),
+                                 split.by = NULL,
+                                 min.cells.composition = 10,
+                                 min.cells.aggregated = 10,
+                                 name.additional.signatures = NULL,
+                                 useNA = FALSE,
+                                 clr_zero_impute_perc = 1,
+                                 layers_links = c("scGate_multi" = "functional.cluster"),
+                                 gene.filter = NULL,
+                                 assay = "RNA",
+                                 layer1_link = "CellOntology_ID") {
 
   if (is.null(object)) {
     stop("Please provide a Seurat object")
@@ -445,7 +500,7 @@ get.HiTObject <- function(object,
   }
 
 
-  # make list of list for layers for predictions slot
+  # Make list of list for layers for predictions slot
   pred.list <- list()
   for (a in names(group.by)) {
     pred.list[[a]] <- list()
@@ -454,8 +509,8 @@ get.HiTObject <- function(object,
 
 
 
-  #run extended if object got scGate info
-  # extract values from misc slot from object
+  # Run extended if object got scGate info
+  # Extract values from misc slot from object
   if (any(group.by == "scGate_multi")) {
     layer.scgate <- names(group.by[group.by == "scGate_multi"])
     if (is.null(name.additional.signatures)) {
@@ -488,8 +543,8 @@ get.HiTObject <- function(object,
     }
   }
 
-  #run extended if object got projectils info
-  # extract values from misc slot from object
+  # Run extended if object got ProjecTILs info
+  # Extract values from misc slot from object
   if (any(group.by == "functional.cluster")) {
     layer.pt <- names(group.by[group.by == "functional.cluster"])
     pred.list[[layer.pt]][["functional.cluster"]] <- object@meta.data[,"functional.cluster", drop = FALSE]
@@ -498,7 +553,7 @@ get.HiTObject <- function(object,
 
 
   # Compute proportions
-  message("\nComputing cell type composition...\n")
+  # message("\nComputing cell type composition...\n")
 
   comp.prop <- get.celltype.composition(object,
                                         group.by.composition = group.by,
@@ -509,7 +564,7 @@ get.HiTObject <- function(object,
                                         layer1_link = layer1_link,
                                         layers_links = layers_links)
   # Compute avg expression
-  message("\nComputing aggregated profile...\n")
+  # message("\nComputing aggregated profile...\n")
 
   avg.expr <- get.aggregated.profile(object,
                                      group.by.aggregated = group.by,
