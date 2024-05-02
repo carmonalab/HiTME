@@ -713,7 +713,14 @@ p.val_zscore <- function(obs,
 plot_PCA <- function(matrix,
                      invisible = c("var", "quali"),
                      color.cluster.by = "none") {
-  res.pca <- stats::prcomp(matrix)
+
+  # Remove constant columns with variance = 0
+  constant_columns <- apply(matrix, 2, function(col) var(col) == 0)
+  constant_columns_indices <- which(constant_columns)
+  matrix_filtered <- matrix[, -constant_columns_indices, drop=FALSE]
+  # Otherwise, stats::prcomp would fail with error (if using scale. = TRUE by default)
+
+  res.pca <- stats::prcomp(matrix_filtered)
   suppressWarnings(
     suppressMessages(
       p <- factoextra::fviz_pca(res.pca,
