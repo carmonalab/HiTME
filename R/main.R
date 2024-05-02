@@ -1914,6 +1914,9 @@ get.cluster.score <- function(hit.object = NULL,
                            center = TRUE,
                            scale = TRUE)
 
+              # Drop columns containing NAN, caused by scaling zero variance columns
+              mat <- mat[ , colSums(is.nan(mat)) == 0]
+
               cluster_labels <- hit.object@metadata %>%
                 filter(hitme.sample %in% colnames(mat)) %>%
                 .[[cluster_col]]
@@ -1947,6 +1950,9 @@ get.cluster.score <- function(hit.object = NULL,
                     m <- mat[ , colnames(mat) %in% meta[["hitme.sample"]]] %>%
                       scale(center = TRUE,
                             scale = TRUE)
+
+                    # Drop columns containing NAN, caused by scaling zero variance columns
+                    m <- m[ , colSums(is.nan(m)) == 0]
 
                     res[[b_var]][[b]] <-
                       get.scores(matrix = m,
