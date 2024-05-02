@@ -730,12 +730,15 @@ plot_PCA <- function(matrix,
   # Remove constant columns with variance = 0
   constant_columns <- apply(matrix, 2, function(col) var(col) == 0)
   constant_columns_indices <- which(constant_columns)
-  matrix_filtered <- matrix[, -constant_columns_indices, drop=FALSE]
+  if (length(constant_columns_indices) > 0) {
+    matrix <- matrix[, -constant_columns_indices, drop=FALSE]
+  }
+
   # Otherwise, stats::prcomp would fail with error (if using scale. = TRUE by default)
 
   # If there are still columns left
-  if (ncol(matrix_filtered) > 0) {
-    res.pca <- stats::prcomp(matrix_filtered)
+  if (ncol(matrix) > 0) {
+    res.pca <- stats::prcomp(matrix)
     suppressWarnings(
       suppressMessages(
         p <- factoextra::fviz_pca(res.pca,
