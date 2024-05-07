@@ -158,17 +158,12 @@ match_dictionary <- function(cell_type,
 
 
 
-
 StandardizeCellNames <- function(cell.names, dictionary = NULL) {
-
-  standarized_cellnames <- sapply(cell.names,
-                                  match_dictionary,
-                                  dictionary)
+  standarized_cellnames <- sapply(cell.names, match_dictionary, dictionary)
   standarized_cellnames <- unname(standarized_cellnames)
 
   return(standarized_cellnames)
 }
-
 
 
 
@@ -187,7 +182,7 @@ set_parallel_params <- function(ncores,
 
   # set parallelization parameters
   if (is.null(bparam)) {
-    if (ncores>1) {
+    if (ncores > 1) {
       param <- BiocParallel::MulticoreParam(workers =  ncores,
                                             progressbar = progressbar)
     } else {
