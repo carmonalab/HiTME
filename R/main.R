@@ -437,7 +437,17 @@ get.HiTObject <- function(object,
 
   # if object is a single Seurat object, turn into a list
   if (!is.list(object)) {
-    object <- get.HiTObject.helper(object, args)
+    hit.list <- get.HiTObject.helper(object, group.by,
+                                     split.by,
+                                     min.cells.composition,
+                                     min.cells.aggregated,
+                                     name.additional.signatures,
+                                     useNA,
+                                     clr_zero_impute_perc,
+                                     layers_links,
+                                     gene.filter,
+                                     assay,
+                                     layer1_link)
   } else {
     # set parallelization parameters
     param <- set_parallel_params(ncores = ncores,
@@ -863,6 +873,16 @@ get.aggregated.profile <- function(object,
     # compute pseudobulk
     suppressWarnings({
       obj_tmp <- object
+
+      # Calculate total (sample) pseudobulk
+      if (i == names(group.by.aggregated)[1]) {
+        avg.exp[[i]] <- obj_tmp@assays[["RNA"]]["counts"]
+        row_names <- row.names(avg.exp[[i]])
+        avg.exp[[i]] <- Matrix::Matrix(rowSums(avg.exp[[i]]))
+        row.names(avg.exp[[i]]) <- row_names
+        colnames(avg.exp[[i]]) <- "all"
+      }
+
       # remove from aggregated data cell with less than min.cells.aggregated
       cnts <- compositional_data(obj_tmp@meta.data,
                                  group.by.1 = group.by.aggregated[[i]],
@@ -880,18 +900,17 @@ get.aggregated.profile <- function(object,
       obj_tmp@meta.data$fltr <- obj_tmp@meta.data[[group.by.aggregated[[i]]]]
       obj_tmp <- obj_tmp[, as.character(obj_tmp$fltr) %in% keep]
 
-
       # Handle not annotated cells being labelled as NA
       obj_tmp@meta.data[[group.by.aggregated[[i]]]] <- as.character(obj_tmp@meta.data[[group.by.aggregated[[i]]]])
       obj_tmp@meta.data[[group.by.aggregated[[i]]]][is.na(obj_tmp@meta.data[[group.by.aggregated[[i]]]])] <- "NA"
       obj_tmp@meta.data[[group.by.aggregated[[i]]]] <- as.factor(obj_tmp@meta.data[[group.by.aggregated[[i]]]])
 
-      # Calculate total (sample) pseudobulk
+      # Calculate pseudobulk of all annotated cells
       avg.exp[[i]] <- obj_tmp@assays[["RNA"]]["counts"]
       row_names <- row.names(avg.exp[[i]])
       avg.exp[[i]] <- Matrix::Matrix(rowSums(avg.exp[[i]]))
       row.names(avg.exp[[i]]) <- row_names
-      colnames(avg.exp[[i]]) <- "all"
+      colnames(avg.exp[[i]]) <- "all.annotated_only"
 
       if (length(unique(obj_tmp@meta.data[[group.by.aggregated[[i]]]])) >= 2) {
         mat <-
