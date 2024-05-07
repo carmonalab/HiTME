@@ -1578,7 +1578,7 @@ get.cluster.score <- function(hit.object = NULL,
 
                 cluster_labels <- meta[[cluster_col]]
 
-                m <- mat[ , colnames(mat) %in% meta[["hitme.sample"]]] %>%
+                m <- mat[ , colnames(mat) %in% as.character(meta[["hitme.sample"]])] %>%
                   scale(center = TRUE,
                         scale = FALSE)
 
@@ -1684,7 +1684,7 @@ get.cluster.score <- function(hit.object = NULL,
 
                       cluster_labels <- meta[[cluster_col]]
 
-                      m <- mat[ , colnames(mat) %in% meta[["hitme.sample"]]] %>%
+                      m <- mat[ , colnames(mat) %in% as.character(meta[["hitme.sample"]])] %>%
                         scale(center = TRUE, scale = FALSE)
 
                       if (nrow(m) > 1) {
@@ -1769,7 +1769,7 @@ get.cluster.score <- function(hit.object = NULL,
             dplyr::filter(hitme.sample %in% colnames(mat))
           cluster_labels <- meta[[cluster_col]]
           if (cluster.by.drop.na) {
-            mat <- mat[, meta[["hitme.sample"]]]
+            mat <- mat[, colnames(mat) %in% as.character(meta[["hitme.sample"]])]
           }
 
           if (is.null(batching))  {
@@ -1947,7 +1947,7 @@ get.cluster.score <- function(hit.object = NULL,
 
                     cluster_labels <- meta[[cluster_col]]
 
-                    m <- mat[ , colnames(mat) %in% meta[["hitme.sample"]]] %>%
+                    m <- mat[ , colnames(mat) %in% as.character(meta[["hitme.sample"]])] %>%
                       scale(center = TRUE,
                             scale = TRUE)
 
