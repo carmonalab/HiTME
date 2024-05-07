@@ -423,11 +423,6 @@ get.HiTObject <- function(object,
                           bparam = NULL,
                           progressbar = TRUE) {
 
-  # if object is a single Seurat object, turn into a list
-  if (!is.list(object)) {
-    object <- list(object)
-  }
-
   args <- list(group.by,
                split.by,
                min.cells.composition,
@@ -440,18 +435,23 @@ get.HiTObject <- function(object,
                assay,
                layer1_link)
 
-  # set parallelization parameters
-  param <- set_parallel_params(ncores = ncores,
-                               bparam = bparam,
-                               progressbar = progressbar)
+  # if object is a single Seurat object, turn into a list
+  if (!is.list(object)) {
+    object <- get.HiTObject.helper(object, args)
+  } else {
+    # set parallelization parameters
+    param <- set_parallel_params(ncores = ncores,
+                                 bparam = bparam,
+                                 progressbar = progressbar)
 
-  hit.list <- BiocParallel::bplapply(X = object,
-                                     BPPARAM = param,
-                                     function(x) {
-                                       do.call(get.HiTObject.helper,
-                                               c(x, args)
-                                       )
-                                     })
+    hit.list <- BiocParallel::bplapply(X = object,
+                                       BPPARAM = param,
+                                       function(x) {
+                                         do.call(get.HiTObject.helper,
+                                                 c(x, args)
+                                         )
+                                       })
+  }
 
   return(hit.list)
 }
