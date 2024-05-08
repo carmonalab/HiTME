@@ -354,6 +354,7 @@ get.scores <- function(matrix,
                        cluster_labels,
                        scores,
                        modularity.k,
+                       dist.method = "euclidean",
                        ntests = 100, # number of shuffling events
                        seed = 22, # seed for random shuffling
                        title = "", # Title for summary
@@ -381,7 +382,7 @@ get.scores <- function(matrix,
 
       # Calculate scores + plots ###############################################
       if (s == "Silhouette_isolated") {
-        dist <- stats::dist(matrix)
+        dist <- stats::dist(matrix, method = dist.method)
         sils <- calc_sil_onelabel(labels = cluster_labels,
                                   dist = dist,
                                   return_mean_for_permtest = FALSE)
@@ -416,7 +417,7 @@ get.scores <- function(matrix,
       }
 
       if (s == "Silhouette") {
-        dist <- stats::dist(matrix)
+        dist <- stats::dist(matrix, method = dist.method)
 
         sils <- calc_sil(labels = cluster_labels,
                          dist = dist,
