@@ -2392,7 +2392,7 @@ composition.barplot <- function (hit.object = NULL,
   if (is.data.frame(comps)) {
     comp <- merge(comps, meta[, c("hitme.sample", facet.by), drop=FALSE], by = "hitme.sample")
 
-    p <- ggplot(comp, aes(x = sample, y = freq, fill = celltype)) +
+    p <- ggplot(comp, aes(x = hitme.sample, y = freq, fill = celltype)) +
       geom_bar(stat = "identity") +
       theme(axis.text.x = element_text(angle = 45, hjust=1))
 
@@ -2413,7 +2413,7 @@ composition.barplot <- function (hit.object = NULL,
       comp <- hit.object@composition[[layer]][[ct]]
       comp <- merge(comp, meta[, c("hitme.sample", facet.by), drop=FALSE], by = "hitme.sample")
 
-      p_list[["plot_list"]][[ct]] <- ggplot(comp, aes(x = sample, y = freq, fill = celltype)) +
+      p_list[["plot_list"]][[ct]] <- ggplot(comp, aes(x = hitme.sample, y = freq, fill = celltype)) +
         geom_bar(stat = "identity") +
         ggtitle(ct) +
         theme(axis.text.x = element_text(angle = 45, hjust=1)) +
