@@ -2388,6 +2388,9 @@ composition.barplot <- function (hit.object = NULL,
   meta <- hit.object@metadata
   colnames(meta)[colnames(meta) == sample.col] <- "hitme.sample"
 
+  # Need to add "`" if column name contains spaces or other strange symbols
+  facet.by_reformulate <- reformulate(paste0("`", facet.by, "`"))
+
   if (is.data.frame(comps)) {
     comp <- merge(comps, meta[, c("hitme.sample", facet.by), drop=FALSE], by = "hitme.sample")
 
@@ -2396,7 +2399,10 @@ composition.barplot <- function (hit.object = NULL,
       theme(axis.text.x = element_text(angle = 45, hjust=1))
 
     if (!is.null(facet.by)) {
-      p <- p + facet_grid(reformulate(facet.by),  space  = "free", scales = "free")
+
+      p <- p + facet_grid(facet.by_reformulate,
+                          space  = "free",
+                          scales = "free")
     }
 
     if (return.plot.to.var) {
@@ -2420,7 +2426,9 @@ composition.barplot <- function (hit.object = NULL,
 
       if (!is.null(facet.by)) {
         p_list[["plot_list"]][[ct]] <- p_list[["plot_list"]][[ct]] +
-          facet_grid(reformulate(facet.by),  space  = "free", scales = "free")
+          facet_grid(facet.by_reformulate,
+                     space  = "free",
+                     scales = "free")
       }
 
     }
