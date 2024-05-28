@@ -15,8 +15,6 @@ composition.barplot(
 \arguments{
 \item{hit.object}{A Hit class object (typically after applying merge.HiTObjects onto a list of HiTObjects)}
 
-\item{sample.col}{Metadata column in the hit.object$metadata containing unique sample names}
-
 \item{layer}{Default "layer1" if you have one cell type annotation layer in your hit.object. Alternatively "layer2" etc. if you have multiple layers of annotation depths.}
 
 \item{return.plot.to.var}{Optionally, you can save the ggplots to a variable if you would like to further modify and adapt the plots on your own.}

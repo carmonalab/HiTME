@@ -2333,7 +2333,6 @@ nas.per.sample <- function (obj.list = NULL,
 #'
 #'
 #' @param hit.object A Hit class object (typically after applying merge.HiTObjects onto a list of HiTObjects)
-#' @param sample.col Metadata column in the hit.object$metadata containing unique sample names
 #' @param layer Default "layer1" if you have one cell type annotation layer in your hit.object. Alternatively "layer2" etc. if you have multiple layers of annotation depths.
 #' @param return.plot.to.var Optionally, you can save the ggplots to a variable if you would like to further modify and adapt the plots on your own.
 #' @param facet.by This allows you to pass a metadata column name present in your hit.object$metadata to show your samples in facets with ggplot facet_grid, for example by "condition".
@@ -2352,24 +2351,14 @@ composition.barplot <- function (hit.object = NULL,
                                  return.plot.to.var = FALSE,
                                  facet.by = NULL) {
 
+  # Need to replace special characters
+  colnames(hit.object@metadata) <- make.names(colnames(hit.object@metadata))
+
+  sample.col <- "hitme.sample"
+
   if (is.null(hit.object)) {
     stop("Please provide input hit.object")
   }
-  if (is.null(sample.col)) {
-    sample.col <- "hitme.sample"
-  }
-  if (!length(sample.col) == 1 || !is.character(sample.col)) {
-    stop("Please provide one character string for sample.col")
-  }
-  if (!sample.col %in% names(hit.object@metadata)) {
-    stop(paste("sample.col ", sample.col, " not found in hit.object@metadata column names.
-               Please specify metadata column containing sample names with sample.col argument"))
-  }
-  if (length(unique(hit.object@metadata[[sample.col]])) <
-      length(hit.object@metadata[[sample.col]])) {
-    stop("Sample names are not unique. Please specify the metadata column containing unique sample names")
-  }
-
   if (!length(layer) == 1 || !is.character(layer)) {
     stop("Please provide one character string for layer parameter")
   }
@@ -2377,6 +2366,7 @@ composition.barplot <- function (hit.object = NULL,
     if (!is.character(facet.by)) {
       stop("Please provide a character string or a vector of character strings for the facet.by parameter")
     }
+    facet.by <- make.names(facet.by)
     facet.by.in.colnames <- facet.by %in% names(hit.object@metadata)
     if (!all(facet.by.in.colnames)) {
       facet.by.not.in.colnames <- facet.by[!facet.by.in.colnames]
@@ -2387,15 +2377,13 @@ composition.barplot <- function (hit.object = NULL,
 
   comps <- hit.object@composition[[layer]]
   meta <- hit.object@metadata
-  colnames(meta)[colnames(meta) == sample.col] <- "hitme.sample"
 
   if (!is.null(facet.by)) {
-    # Need to add "`" if column name contains spaces or other strange symbols
-    facet.by_reformulate <- reformulate(paste0("`", facet.by, "`"))
+    facet.by_reformulate <- reformulate(facet.by)
   }
 
   if (is.data.frame(comps)) {
-    comp <- merge(comps, meta[, c("hitme.sample", facet.by), drop=FALSE], by = "hitme.sample")
+    comp <- merge(comps, meta[, c(sample.col, facet.by), drop=FALSE], by = sample.col)
 
     p <- ggplot(comp, aes(x = hitme.sample, y = freq, fill = celltype)) +
       geom_bar(stat = "identity") +
@@ -2419,7 +2407,7 @@ composition.barplot <- function (hit.object = NULL,
     p_list <- list()
     for (ct in names(comps)) {
       comp <- hit.object@composition[[layer]][[ct]]
-      comp <- merge(comp, meta[, c("hitme.sample", facet.by), drop=FALSE], by = "hitme.sample")
+      comp <- merge(comp, meta[, c(sample.col, facet.by), drop=FALSE], by = sample.col)
 
       p_list[["plot_list"]][[ct]] <- ggplot(comp, aes(x = hitme.sample, y = freq, fill = celltype)) +
         geom_bar(stat = "identity") +
@@ -2450,7 +2438,6 @@ composition.barplot <- function (hit.object = NULL,
 #'
 #'
 #' @param hit.object A Hit class object (typically after applying merge.HiTObjects onto a list of HiTObjects)
-#' @param sample.col Metadata column in the hit.object$metadata containing unique sample names
 #' @param plot.var Column in the hit.object$composition: either "freq" for cell type relative abundance in percent or "clr" (for centered log-ratio transformed). Default: "clr" as it is better suited for statistical analysis and is better able to also show low abundant cell types.
 #' @param layer Default "layer1" if you have one cell type annotation layer in your hit.object. Alternatively "layer2" etc. if you have multiple layers of annotation depths.
 #' @param return.plot.to.var Optionally, you can save the ggplots to a variable if you would like to further modify and adapt the plots on your own.
@@ -2471,7 +2458,6 @@ composition.barplot <- function (hit.object = NULL,
 #'
 
 composition.boxplot <- function (hit.object = NULL,
-                                 sample.col = NULL,
                                  plot.var = "clr",
                                  layer = "layer1",
                                  return.plot.to.var = FALSE,
@@ -2482,22 +2468,13 @@ composition.boxplot <- function (hit.object = NULL,
                                  palette = "lancet",
                                  legend.position = "right") {
 
+  # Need to replace special characters
+  colnames(hit.object@metadata) <- make.names(colnames(hit.object@metadata))
+
+  sample.col <- "hitme.sample"
+
   if (is.null(hit.object)) {
     stop("Please provide input hit.object")
-  }
-  if (is.null(sample.col)) {
-    sample.col <- "hitme.sample"
-  }
-  if (!length(sample.col) == 1 || !is.character(sample.col)) {
-    stop("Please provide one character string for sample.col")
-  }
-  if (!sample.col %in% names(hit.object@metadata)) {
-    stop(paste("sample.col ", sample.col, " not found in hit.object@metadata column names.
-               Please specify metadata column containing sample names with sample.col argument"))
-  }
-  if (length(unique(hit.object@metadata[[sample.col]])) <
-      length(hit.object@metadata[[sample.col]])) {
-    stop("Sample names are not unique. Please specify the metadata column containing unique sample names")
   }
   if (!length(plot.var) == 1 ||
       !is.character(plot.var) ||
@@ -2511,6 +2488,7 @@ composition.boxplot <- function (hit.object = NULL,
     if (!length(group.by) == 1 || !is.character(group.by)) {
       stop("Please provide one character string for the group.by parameter")
     }
+    group.by <- make.names(group.by)
     group.by.gg <- sym(group.by)
     nr_of_boxplots <- hit.object@metadata[[group.by]] %>%
       unique() %>%
@@ -2523,6 +2501,8 @@ composition.boxplot <- function (hit.object = NULL,
     if (!is.character(facet.by)) {
       stop("Please provide a character string or a vector of character strings for the facet.by parameter")
     }
+    facet.by <- make.names(facet.by)
+
     facet.by.in.colnames <- facet.by %in% names(hit.object@metadata)
     if (!all(facet.by.in.colnames)) {
       facet.by.not.in.colnames <- facet.by[!facet.by.in.colnames]
@@ -2530,15 +2510,13 @@ composition.boxplot <- function (hit.object = NULL,
     }
   }
 
-
   comps <- hit.object@composition[[layer]]
   meta <- hit.object@metadata
-  colnames(meta)[colnames(meta) == sample.col] <- "hitme.sample"
 
   plot.var.gg <- sym(plot.var)
 
   if (is.data.frame(comps)) {
-    comp <- merge(comps, meta[, c("hitme.sample", group.by, facet.by), drop=FALSE], by = "hitme.sample")
+    comp <- merge(comps, meta[, c(sample.col, group.by, facet.by), drop=FALSE], by = sample.col)
 
     # Need to check if group.by is NULL
     # Due to a presumed bug, if group.by is passed as variable to ggboxplot, even if it is assigned NULL, it throws an error
@@ -2585,7 +2563,7 @@ composition.boxplot <- function (hit.object = NULL,
     p_list <- list()
     for (ct in names(comps)) {
       comp <- hit.object@composition[[layer]][[ct]]
-      comp <- merge(comp, meta[, c("hitme.sample", group.by, facet.by), drop=FALSE], by = "hitme.sample")
+      comp <- merge(comp, meta[, c(sample.col, group.by, facet.by), drop=FALSE], by = sample.col)
 
       # Need to check if group.by is NULL
       # Due to a presumed bug, if group.by is passed as variable to ggboxplot, even if it is assigned NULL, it throws an error

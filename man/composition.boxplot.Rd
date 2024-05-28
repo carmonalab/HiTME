@@ -6,7 +6,6 @@
 \usage{
 composition.boxplot(
   hit.object = NULL,
-  sample.col = NULL,
   plot.var = "clr",
   layer = "layer1",
   return.plot.to.var = FALSE,
@@ -20,8 +19,6 @@ composition.boxplot(
 }
 \arguments{
 \item{hit.object}{A Hit class object (typically after applying merge.HiTObjects onto a list of HiTObjects)}
-
-\item{sample.col}{Metadata column in the hit.object$metadata containing unique sample names}
 
 \item{plot.var}{Column in the hit.object$composition: either "freq" for cell type relative abundance in percent or "clr" (for centered log-ratio transformed). Default: "clr" as it is better suited for statistical analysis and is better able to also show low abundant cell types.}
 
