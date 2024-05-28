@@ -2512,6 +2512,12 @@ composition.boxplot <- function (hit.object = NULL,
       stop("Please provide one character string for the group.by parameter")
     }
     group.by.gg <- sym(group.by)
+    nr_of_boxplots <- hit.object@metadata[[group.by]] %>%
+      unique() %>%
+      length() %>%
+      "*"(1.5) %>%
+      round()
+    hit.object@metadata[group.by] <- lapply(hit.object@metadata[group.by], as.factor)
   }
   if (!is.null(facet.by)) {
     if (!is.character(facet.by)) {
@@ -2546,12 +2552,6 @@ composition.boxplot <- function (hit.object = NULL,
                      legend = legend.position) +
         geom_jitter(width = 0.2, size = 1)
     } else {
-      nr_of_boxplots <- hit.object@metadata[[group.by]] %>%
-        unique() %>%
-        length() %>%
-        "*"(1.5) %>%
-        round()
-
       p <- ggboxplot(comp,
                      x = "celltype",
                      y = plot.var,
@@ -2599,12 +2599,6 @@ composition.boxplot <- function (hit.object = NULL,
                                                  legend = legend.position) +
           geom_jitter(width = 0.2, size = 1)
       } else {
-        nr_of_boxplots <- hit.object@metadata[[group.by]] %>%
-          unique() %>%
-          length() %>%
-          "*"(1.5) %>%
-          round()
-
         p_list[["plot_list"]][[ct]] <- ggboxplot(comp,
                                                  x = "celltype",
                                                  y = plot.var,
