@@ -2546,6 +2546,13 @@ composition.boxplot <- function (hit.object = NULL,
                      legend = legend.position) +
         geom_jitter(width = 0.2, size = 1)
     } else {
+      nr_of_boxplots <- hit.object@metadata[[group.by]] %>%
+        unique() %>%
+        length() %>%
+        "*"(1.5) %>%
+        round()
+      print(nr_of_boxplots)
+
       p <- ggboxplot(comp,
                      x = "celltype",
                      y = plot.var,
@@ -2554,7 +2561,7 @@ composition.boxplot <- function (hit.object = NULL,
                      palette = palette,
                      facet.by = facet.by,
                      legend = legend.position) +
-        geom_jitter(mapping = aes(color = !!group.by.gg), position=position_jitterdodge(), size = 1) +
+        geom_jitter(mapping = aes(color = !!group.by.gg), position=position_jitterdodge(jitter.width = 1/nr_of_boxplots), size = 1) +
         stat_pwc(aes(group = !!group.by.gg),
                  label = "p.signif",
                  method = pval.method,
@@ -2593,6 +2600,13 @@ composition.boxplot <- function (hit.object = NULL,
                                                  legend = legend.position) +
           geom_jitter(width = 0.2, size = 1)
       } else {
+        nr_of_boxplots <- hit.object@metadata[[group.by]] %>%
+          unique() %>%
+          length() %>%
+          "*"(1.5) %>%
+          round()
+        print(nr_of_boxplots)
+
         p_list[["plot_list"]][[ct]] <- ggboxplot(comp,
                                                  x = "celltype",
                                                  y = plot.var,
@@ -2601,7 +2615,7 @@ composition.boxplot <- function (hit.object = NULL,
                                                  palette = palette,
                                                  facet.by = facet.by,
                                                  legend = legend.position) +
-          geom_jitter(mapping = aes(color = !!group.by.gg), position=position_jitterdodge(), size = 1) +
+          geom_jitter(mapping = aes(color = !!group.by.gg), position=position_jitterdodge(jitter.width = 1/nr_of_boxplots), size = 1) +
           stat_pwc(aes(group = !!group.by.gg),
                    label = "p.signif",
                    method = pval.method,
