@@ -2061,6 +2061,7 @@ get.cluster.score <- function(hit.object = NULL,
 #' @importFrom RColorBrewer brewer.pal
 #' @importFrom pheatmap pheatmap
 #' @importFrom gridExtra grid.arrange arrangeGrob
+#' @importFrom ggplotify as.ggplot
 #'
 #' @return Average silhouette widths per grouping variable. Optionally, a heatmap plot for visualization
 #' @export summarize.cluster.scores
@@ -2267,7 +2268,7 @@ summarize.cluster.scores <- function(data = NULL,
         gridExtra::arrangeGrob(grobs = plot_list,
                                ncol=length(plot_list))
       )
-      df_cluster.by_list[["plots"]][["summary_plot"]] <- g
+      df_cluster.by_list[["plots"]][["summary_plot"]] <- ggplotify::as.ggplot(g)
     }
 
     return(df_cluster.by_list)
