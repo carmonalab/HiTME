@@ -1505,6 +1505,10 @@ get.cluster.score <- function(hit.object = NULL,
     message("Only found ", paste(cluster.by, collapse = ", ") , " as grouping variable for HiT Object.")
   }
 
+  # Need to replace special characters
+  colnames(hit.object@metadata) <- make.names(colnames(hit.object@metadata))
+  cluster.by <- make.names(cluster.by)
+
   for (i in cluster.by) {
     if (length(unique(hit.object@metadata[[i]])) == 1) {
       stop("All values are the same in cluster.by ", i, ". Please provide a metadata column with at least two different groups.")
