@@ -285,12 +285,16 @@ preproc_pseudobulk <- function (matrix,
                                 gene.filter = "HVG",
                                 black.list = NULL) {
 
-  matrix <- DESeq2.normalize(matrix = matrix,
-                             metadata = metadata,
-                             cluster.by = cluster.by,
-                             nVarGenes = nVarGenes,
-                             gene.filter = gene.filter,
-                             black.list = black.list)
+  suppressMessages({
+    suppressWarnings({
+      matrix <- DESeq2.normalize(matrix = matrix,
+                                 metadata = metadata,
+                                 cluster.by = cluster.by,
+                                 nVarGenes = nVarGenes,
+                                 gene.filter = gene.filter,
+                                 black.list = black.list)
+    })
+  })
 
   return(matrix)
 }
@@ -372,130 +376,136 @@ get.scores <- function(matrix,
       length(cluster_labels) > 4 &
       nrow(matrix) > length(unique(cluster_labels))) {
 
-    for (s in scores) {
+    suppressMessages({
+      suppressWarnings({
 
-      # Plot PCA ###############################################
-      results[["Plots"]][["PCA"]] <- plot_PCA(matrix,
-                                              color.cluster.by = cluster_labels,
-                                              invisible = invisible)
-
-
-      # Calculate scores + plots ###############################################
-      if (s == "Silhouette_isolated") {
-        dist <- stats::dist(matrix, method = dist.method)
-        sils <- calc_sil_onelabel(labels = cluster_labels,
-                                  dist = dist,
-                                  return_mean_for_permtest = FALSE)
-
-        avg_per_group <- sils %>%
-          dplyr::group_by(group) %>%
-          dplyr::summarize(avg_sil_width = mean(sil_width))
-
-        avg_sil <- mean(sils[["sil_width"]])
-
-        CI_intervals <- stats::t.test(sils[["sil_width"]])$conf.int
-
-        p_val <- perm_test(fun = calc_sil_onelabel,
-                           data = dist,
-                           labels = cluster_labels,
-                           obs = avg_sil,
-                           ntests = ntests,
-                           seed = seed)
-
-
-        results[["Scores"]][[s]] <- list("samples" = sils,
-                                         "avg_per_group" = avg_per_group,
-                                         "summary" = avg_sil,
-                                         "conf_int" = CI_intervals,
-                                         "n" = nrow(sils),
-                                         "p_value" = p_val)
-
-        p <- plot_silhouette(sil_scores = results[["Scores"]][[s]],
-                             title = "Silhouette (isolated) plot")
-
-        results[["Plots"]][[s]] <- p
-      }
-
-      if (s == "Silhouette") {
-        dist <- stats::dist(matrix, method = dist.method)
-
-        sils <- calc_sil(labels = cluster_labels,
-                         dist = dist,
-                         return_mean_for_permtest = FALSE)
-
-        avg_per_group <- sils %>%
-          dplyr::group_by(group) %>%
-          dplyr::summarize(avg_sil_width = mean(sil_width))
-
-        avg_sil <- mean(sils[["sil_width"]])
-
-        CI_intervals <- t.test(sils[["sil_width"]])$conf.int
-
-        p_val <- perm_test(fun = calc_sil,
-                           data = dist,
-                           labels = cluster_labels,
-                           obs = avg_sil,
-                           ntests = ntests,
-                           seed = seed)
-
-        results[["Scores"]][[s]] <- list("samples" = sils,
-                                         "avg_per_group" = avg_per_group,
-                                         "summary" = avg_sil,
-                                         "conf_int" = CI_intervals,
-                                         "n" = nrow(sils),
-                                         "p_value" = p_val)
-
-        p <- plot_silhouette(sil_scores = results[["Scores"]][[s]],
-                             title = "Silhouette plot")
-
-        results[["Plots"]][[s]] <- p
-      }
-
-      if (s == "Modularity") {
-
-        if (length(cluster_labels) >= (modularity.k+1)) {
-          g <- scran::buildKNNGraph(matrix,
-                                    transposed = TRUE,
-                                    k = modularity.k)
-
-          # Calculate modularity score
-          modularity_score <- igraph::modularity(g, membership = as.numeric(factor(cluster_labels)))
-
-          # Plotting the graph
-          g <- igraph::set_vertex_attr(g, "name", value = cluster_labels)
-
-          p_val <- perm_test(fun = calc_modularity,
-                             data = matrix,
-                             labels = cluster_labels,
-                             obs = modularity_score,
-                             ntests = ntests,
-                             seed = seed)
-
-          results[["Scores"]][[s]] <- list("igraph" = g,
-                                           "summary" = modularity_score,
-                                           "n" = length(g),
-                                           "p_value" = p_val)
-
-          # Using ggraph layout = "kk" instead of default "stress",
-          # as "kk" handles disconnected communities much better (showing them separately, instead of fur balling them like "stress")
-          p <- ggraph::ggraph(g, layout = 'kk') +
-            ggraph::geom_edge_link(color = "grey", edge_width = 0.2) +
-            ggraph::geom_node_point(ggplot2::aes(fill = as.factor(names(igraph::V(g)))),
-                                    shape = 21,
-                                    color = "black",
-                                    size = 5) +
-            ggplot2::ggtitle(paste("KNN plot with k = ", modularity.k,
-                                   "\nModularity score = ", round(modularity_score, 3),
-                                   ifelse(!is.null(p_val),
-                                          paste("\np-value:",
-                                                format.pval(p_val, digits = 3)), ""))) +
-            ggplot2::labs(fill = "Groups") +
-            ggplot2::theme(panel.background = element_rect(fill = "white"))
-
-          results[["Plots"]][[s]] <- p
+        if (any(grepl("Silhouette", scores))) {
+          results[["Distance_matrix"]] <- stats::dist(matrix, method = dist.method)
         }
-      }
-    }
+
+        for (s in scores) {
+
+          # Plot PCA ###############################################
+          results[["Plots"]][["PCA"]] <- plot_PCA(matrix,
+                                                  color.cluster.by = cluster_labels,
+                                                  invisible = invisible)
+
+
+          # Calculate scores + plots ###############################################
+          if (s == "Silhouette_isolated") {
+            sils <- calc_sil_onelabel(labels = cluster_labels,
+                                      dist = results[["Distance_matrix"]],
+                                      return_mean_for_permtest = FALSE)
+
+            avg_per_group <- sils %>%
+              dplyr::group_by(group) %>%
+              dplyr::summarize(avg_sil_width = mean(sil_width))
+
+            avg_sil <- mean(sils[["sil_width"]])
+
+            CI_intervals <- stats::t.test(sils[["sil_width"]])$conf.int
+
+            p_val <- perm_test(fun = calc_sil_onelabel,
+                               data = results[["Distance_matrix"]],
+                               labels = cluster_labels,
+                               obs = avg_sil,
+                               ntests = ntests,
+                               seed = seed)
+
+
+            results[["Scores"]][[s]] <- list("samples" = sils,
+                                             "avg_per_group" = avg_per_group,
+                                             "summary" = avg_sil,
+                                             "conf_int" = CI_intervals,
+                                             "n" = nrow(sils),
+                                             "p_value" = p_val)
+
+            p <- plot_silhouette(sil_scores = results[["Scores"]][[s]],
+                                 title = "Silhouette (isolated) plot")
+
+            results[["Plots"]][[s]] <- p
+          }
+
+          if (s == "Silhouette") {
+            sils <- calc_sil(labels = cluster_labels,
+                             dist = results[["Distance_matrix"]],
+                             return_mean_for_permtest = FALSE)
+
+            avg_per_group <- sils %>%
+              dplyr::group_by(group) %>%
+              dplyr::summarize(avg_sil_width = mean(sil_width))
+
+            avg_sil <- mean(sils[["sil_width"]])
+
+            CI_intervals <- t.test(sils[["sil_width"]])$conf.int
+
+            p_val <- perm_test(fun = calc_sil,
+                               data = results[["Distance_matrix"]],
+                               labels = cluster_labels,
+                               obs = avg_sil,
+                               ntests = ntests,
+                               seed = seed)
+
+            results[["Scores"]][[s]] <- list("samples" = sils,
+                                             "avg_per_group" = avg_per_group,
+                                             "summary" = avg_sil,
+                                             "conf_int" = CI_intervals,
+                                             "n" = nrow(sils),
+                                             "p_value" = p_val)
+
+            p <- plot_silhouette(sil_scores = results[["Scores"]][[s]],
+                                 title = "Silhouette plot")
+
+            results[["Plots"]][[s]] <- p
+          }
+
+          if (s == "Modularity") {
+
+            if (length(cluster_labels) >= (modularity.k+1)) {
+              g <- scran::buildKNNGraph(matrix,
+                                        transposed = TRUE,
+                                        k = modularity.k)
+
+              # Calculate modularity score
+              modularity_score <- igraph::modularity(g, membership = as.numeric(factor(cluster_labels)))
+
+              # Plotting the graph
+              g <- igraph::set_vertex_attr(g, "name", value = cluster_labels)
+
+              p_val <- perm_test(fun = calc_modularity,
+                                 data = matrix,
+                                 labels = cluster_labels,
+                                 obs = modularity_score,
+                                 ntests = ntests,
+                                 seed = seed)
+
+              results[["Scores"]][[s]] <- list("igraph" = g,
+                                               "summary" = modularity_score,
+                                               "n" = length(g),
+                                               "p_value" = p_val)
+
+              # Using ggraph layout = "kk" instead of default "stress",
+              # as "kk" handles disconnected communities much better (showing them separately, instead of fur balling them like "stress")
+              p <- ggraph::ggraph(g, layout = 'kk') +
+                ggraph::geom_edge_link(color = "grey", edge_width = 0.2) +
+                ggraph::geom_node_point(ggplot2::aes(fill = as.factor(names(igraph::V(g)))),
+                                        shape = 21,
+                                        color = "black",
+                                        size = 5) +
+                ggplot2::ggtitle(paste("KNN plot with k = ", modularity.k,
+                                       "\nModularity score = ", round(modularity_score, 3),
+                                       ifelse(!is.null(p_val),
+                                              paste("\np-value:",
+                                                    format.pval(p_val, digits = 3)), ""))) +
+                ggplot2::labs(fill = "Groups") +
+                ggplot2::theme(panel.background = element_rect(fill = "white"))
+
+              results[["Plots"]][[s]] <- p
+            }
+          }
+        }
+      })
+    })
 
     # Plot dendrogram  (TODO NEEDS REWORK) ###############################################
     # pc2 <- pc$x[,1:ndim] %>%
