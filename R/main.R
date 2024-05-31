@@ -1795,9 +1795,9 @@ get.cluster.score <- function(hit.object = NULL,
               mat <- preproc_pseudobulk(matrix = mat,
                                         metadata = meta,
                                         cluster.by = cluster_col,
-                                        nVarGenes = 500,
-                                        gene.filter = "HVG",
-                                        black.list = NULL)
+                                        nVarGenes = nVarGenes,
+                                        gene.filter = gene.filter,
+                                        black.list = black.list)
 
               res <- get.scores(matrix = mat,
                                 cluster_labels = cluster_labels,
@@ -1835,9 +1835,9 @@ get.cluster.score <- function(hit.object = NULL,
                     m <- preproc_pseudobulk(matrix = m,
                                             metadata = met,
                                             cluster.by = cluster_col,
-                                            nVarGenes = 500,
-                                            gene.filter = "HVG",
-                                            black.list = NULL)
+                                            nVarGenes = nVarGenes,
+                                            gene.filter = gene.filter,
+                                            black.list = black.list)
 
                     if (nrow(m) > 1) {
                       res[[b_var]][[b]] <-
