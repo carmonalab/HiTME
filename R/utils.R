@@ -740,7 +740,7 @@ plot_PCA <- function(matrix,
     matrix <- matrix[, -constant_columns_indices, drop=FALSE]
   }
 
-  # Otherwise, stats::prcomp would fail with error (if using scale. = TRUE by default)
+  # Otherwise, stats::prcomp would fail with error
 
   # If there are still columns left
   if (ncol(matrix) > 0) {
