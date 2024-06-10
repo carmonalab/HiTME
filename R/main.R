@@ -1914,7 +1914,7 @@ get.cluster.score <- function(hit.object = NULL,
     if (!is.null(comp_layers)) {
       for (layer in comp_layers) {
         cols <- colnames(hit.object@aggregated_profile[[type]][[layer]])
-        signatures <- cols[2:(length(cols) - 1)]
+        signatures <- cols[! cols %in% c("celltype", "hitme.sample")]
 
         results[[cluster_col]][[type]][[layer]] <- BiocParallel::bplapply(
           X = signatures,
