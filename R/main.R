@@ -1264,9 +1264,16 @@ merge.HiTObjects <- function(hit.object = NULL,
     # Per HiTObject from input, get metadata column names which have all the same value.
     # E.g. each HiTObject is from a specific sample, so each HiTObject has metadata column "Sample" which contains all the same value (e.g. "sample1" for sample 1, "sample2" for sample 2, etc.)
     # Other metadata columns, e.g. scGate_multi can be dropped, as the merged HiTObject is a summary per sample, so single-cell metadata columns don't make sense.
-    umc <- lapply(names(hit.object), function (x) {
-      apply(hit.object[[x]]@metadata, 2, function(y) length(unique(y))) == 1
-    })
+    all.names <- list()
+    for (x in names(hit.object)) {
+      all.names[[x]] <- names(hit.object[[x]]@metadata)
+    }
+    all.names_in.all <- Reduce(intersect, all.names)
+
+    umc <- list()
+    for (x in names(hit.object)) {
+      umc[[x]] <- apply(hit.object[[x]]@metadata[all.names_in.all], 2, function(y) length(unique(y))) == 1
+    }
     umc <- umc %>% Reduce("&", .)
     metadata.vars <- names(umc)[umc == TRUE]
   }
