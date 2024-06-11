@@ -2268,7 +2268,7 @@ summarize.cluster.scores <- function(data = NULL,
 
         plot_list[[n]] <- pheatmap::pheatmap(df_pval_invert,
                                              main = n,
-                                             angle_col = 45,
+                                             angle_col = 315,
                                              scale = scale,
                                              display_numbers = round(df, 3),
                                              number_color = "black",
