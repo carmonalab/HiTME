@@ -527,30 +527,12 @@ get.scores <- function(matrix,
 
 
     # Combine plots ###############################################
-    title_row <- cowplot::ggdraw() +
-      cowplot::draw_label(
-        title,
-        fontface = 'bold',
-        x = 0,
-        hjust = 0
-      ) +
-      ggplot2::theme(
-        # add margin on the left of the drawing canvas,
-        # so title is aligned with left edge of first plot
-        plot.margin = margin(0, 0, 0, 7)
-      )
-
-    plots_row <- cowplot::plot_grid(plotlist = results[["Plots"]])
-
-    results[["Plots"]][["Summary_plot"]] <- cowplot::plot_grid(
-      title_row,
-      plots_row,
-      ncol = 1,
-      rel_heights = c(0.1, 1)
-    )
-
-
-
+    results[["Plots"]][["Summary_plot"]] <- patchwork::wrap_plots(results[["Plots"]]) +
+      patchwork::plot_layout(widths = 1) +
+      patchwork::plot_annotation(title,
+                      theme = ggplot2::theme(plot.title = ggplot2::element_text(face = "bold",
+                                                                                hjust = 0,
+                                                                                size = 20)))
     return(results)
 
   } else {
@@ -752,8 +734,8 @@ plot_PCA <- function(matrix,
                                   label = "var",
                                   pointsize = 3,
                                   invisible = invisible) +
-          # aspect ratio = 1, so scale does not get distorted and represents actual distance better
-          coord_equal(1) +
+          # do not rescale x and y-axes, so scale does not get distorted and represents actual distance better
+          coord_equal() +
           # Remove shapes added by fviz_pca
           scale_shape_manual(values = c(rep(19, length(unique(color.cluster.by)))))
       )

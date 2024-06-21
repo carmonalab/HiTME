@@ -1455,7 +1455,7 @@ merge.HiTObjects <- function(hit.object = NULL,
 #' @importFrom BiocParallel MulticoreParam bplapply
 #' @importFrom tibble rownames_to_column column_to_rownames remove_rownames
 #' @importFrom caret nearZeroVar
-#' @importFrom ggplot2 aes geom_point guides theme geom_col labs guide_legend annotate theme_bw ggtitle geom_ribbon
+#' @importFrom ggplot2 aes geom_point guides theme geom_col labs guide_legend annotate theme_bw ggtitle geom_ribbon element_text
 #' @importFrom DESeq2 DESeqDataSetFromMatrix vst estimateSizeFactors
 #' @importFrom MatrixGenerics rowVars rowMins
 #' @importFrom SummarizedExperiment assay
@@ -1466,7 +1466,7 @@ merge.HiTObjects <- function(hit.object = NULL,
 #' @importFrom factoextra fviz_pca
 #' @importFrom scran buildKNNGraph
 #' @importFrom igraph modularity set_vertex_attr layout_nicely V
-#' @importFrom cowplot plot_grid ggdraw
+#' @importFrom patchwork wrap_plots plot_layout plot_annotation
 #' @importFrom ggraph ggraph geom_edge_link geom_node_point
 #' @importFrom metap sumlog sumz
 
@@ -2357,7 +2357,7 @@ nas.per.sample <- function (obj.list = NULL,
 
 #' @importFrom ggplot2 ggplot aes geom_bar theme element_text ggtitle facet_grid
 #' @importFrom stats reformulate
-#' @importFrom cowplot plot_grid
+#' @importFrom patchwork wrap_plots
 
 #' @return Plotting function to show the cell type composition from HiTME object across different samples.
 #' @export composition.barplot
@@ -2441,7 +2441,7 @@ composition.barplot <- function (hit.object = NULL,
       }
 
     }
-    p_list[["arranged_plots"]] <- cowplot::plot_grid(plotlist = p_list[["plot_list"]])
+    p_list[["arranged_plots"]] <- patchwork::wrap_plots(p_list[["plot_list"]])
 
     if (return.plot.to.var) {
       return(p_list)
@@ -2469,7 +2469,7 @@ composition.barplot <- function (hit.object = NULL,
 #' @importFrom ggplot2 ggplot aes geom_boxplot theme element_text ggtitle facet_grid position_jitterdodge
 #' @importFrom ggpubr stat_pwc ggboxplot
 #' @importFrom stats reformulate
-#' @importFrom cowplot plot_grid
+#' @importFrom patchwork wrap_plots
 
 #' @return Plotting function to show the cell type composition from HiTME object across different samples.
 #' @export composition.boxplot
@@ -2618,7 +2618,7 @@ composition.boxplot <- function (hit.object = NULL,
         scale_y_continuous(expand = expansion(mult = c(0.05, 0.1)))
 
     }
-    p_list[["arranged_plots"]] <- cowplot::plot_grid(plotlist = p_list[["plot_list"]])
+    p_list[["arranged_plots"]] <- patchwork::wrap_plots(p_list[["plot_list"]])
 
     if (return.plot.to.var) {
       return(p_list)
