@@ -752,6 +752,8 @@ plot_PCA <- function(matrix,
                                   label = "var",
                                   pointsize = 3,
                                   invisible = invisible) +
+          # aspect ratio = 1, so scale does not get distorted and represents actual distance better
+          coord_equal(1) +
           # Remove shapes added by fviz_pca
           scale_shape_manual(values = c(rep(19, length(unique(color.cluster.by)))))
       )
