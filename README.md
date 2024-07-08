@@ -1,6 +1,6 @@
 # HiTME :dart: :facepunch:
 
-## High-resolution Tumor Micro-Environment cell type classification and compositional analysis for single-cell RNA-seq
+## High-resolution Tumor Micro-Environment cell type classification
 
 HiTME is designed for precise cell type classification within the complex tumor microenvironment (TME), providing high accuracy and interpretability in cell type identification.
 
@@ -87,50 +87,3 @@ annotated.obj <- Run.HiTME(obj,
                             progressbar = TRUE
                             )
 ```
-
-<br>
-
-# Summarized cell annotation
-
-`Run.HiTME` will return the Seurat object or list of them with new metadata indicating cell type annotation.
-
-Annotated Seurat objects can be summarized into **HiT objects** using `get.HiTObject` function. For this function the grouping variable `group.by` resulting from `Run.HiTME` annotation or additional annotations need to be indicated. Compositional cell type distribution and aggregated transcriptomic profile (pseudobulk) are returned for each sample.
-
-``` r
-HiT_summary <- get.HiTObject(annotated.obj ,
-                            group.by = list("layer1" = "scGate_multi",
-                                            "layer2" = "functional.cluster"))
-```
-
-Alternatively, HiT summarizing object can be obtained directly using `Run.HiTME` with parameters `return.Seurat = FALSE`.
-
-``` r
-HiT_summary <- Run.HiTME(object = obj,
-                        scGate.model = models.TME,
-                        ref.maps = ref.maps,
-                        return.Seurat = FALSE)
-```
-
-## Hit Object content
-
-The Hit object summarize the cell type annotation and contain the following slots:
-
-1.  Seurat object metadata (dataframe): `metadata`
-
-2.  Cell type predictions for each cell in the data set (list): `predictions`
-
-3.  Cell type composition for each layer of cell type prediction: `composition`. Including:
-
-
-    3.1. Cell counts
-
-    3.2. Frequency
-
-    3.3. CLR (Centred log ratio)-transformed counts (useful for downstream analyses such as PCA/[Logratio analysis](https://doi.org/10.1146/annurev-statistics-042720-124436) )
-
-
-4.  Aggregated profile of predicted cell types: `aggregated_profile`. Including:
-
-    4.1. Average and aggregated expression per cell type of all genes in the dataset and a subset of them.
-
-    4.2. Mean of [UCell](https://github.com/carmonalab/UCell) scores per cell type, if additional signatures are provided, for example from [SignatuR](https://github.com/carmonalab/SignatuR).
