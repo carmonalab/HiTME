@@ -9,6 +9,7 @@ Find a vignette describing its main functions in [html](https://carmonalab.githu
 ### Installation
 
 ``` r
+# install.packages("remotes")
 remotes::install_github("carmonalab/HiTME")
 ```
 
