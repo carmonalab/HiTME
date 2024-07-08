@@ -376,22 +376,59 @@ get.scores <- function(matrix,
       length(cluster_labels) > 4 &
       nrow(matrix) > length(unique(cluster_labels))) {
 
+    results[["Feature_matrix"]] <- matrix
+    results[["Distance_matrix"]] <- stats::dist(matrix, method = dist.method)
+
+
+    # Plot PCA ###############################################
+    results[["Plots"]][["PCA_feature_space"]] <- plot_PCA(matrix,
+                                                          color.cluster.by = cluster_labels,
+                                                          label = "var",
+                                                          invisible = invisible) +
+      ggplot2::ggtitle("PCA on feature matrix")
+
+    results[["Plots"]][["PCA_sample_space"]] <- plot_PCA(as.matrix(results[["Distance_matrix"]]),
+                                                         scale. = TRUE,
+                                                         color.cluster.by = cluster_labels,
+                                                         invisible = c("var", "quali")) +
+      ggplot2::ggtitle("PCA on sample distance matrix")
+
+    #
+    #     # Clustering ###############################################
+    #
+    #     ## Find number of clusters with silhouette method ###############################################
+    #     n_clust <- factoextra::fviz_nbclust(x = mat,
+    #                                         FUNcluster = cluster::pam,
+    #                                         method = "silhouette",
+    #                                         k.max = 10,
+    #                                         print.summary = TRUE) + theme_minimal() + ggtitle("Optimal number of clusters
+    #                                                                                            - silhouette method")
+    #     print(n_clust)
+    #     n_clust <- n_clust$data
+    #     max_cluster <- as.numeric(n_clust$clusters[which.max(n_clust$y)])
+    #
+    #     ## Plot PCA with clustering ###############################################
+    #     results[["Plots"]][["PCA_feature_space"]] <- plot_PCA(matrix,
+    #                                                           color.cluster.by = cluster_labels,
+    #                                                           label = "var",
+    #                                                           invisible = invisible) +
+    #       ggplot2::ggtitle("PCA on feature matrix")
+    #
+    #     results[["Plots"]][["PCA_sample_space"]] <- plot_PCA(as.matrix(results[["Distance_matrix"]]),
+    #                                                          scale. = TRUE,
+    #                                                          color.cluster.by = cluster_labels,
+    #                                                          invisible = c("var", "quali")) +
+    #       ggplot2::ggtitle("PCA on sample distance matrix")
+
+
+    # Calculate scores + plots ###############################################
+
     suppressMessages({
       suppressWarnings({
 
-        if (any(grepl("Silhouette", scores))) {
-          results[["Distance_matrix"]] <- stats::dist(matrix, method = dist.method)
-        }
-
         for (s in scores) {
 
-          # Plot PCA ###############################################
-          results[["Plots"]][["PCA"]] <- plot_PCA(matrix,
-                                                  color.cluster.by = cluster_labels,
-                                                  invisible = invisible)
-
-
-          # Calculate scores + plots ###############################################
+          ## Silhouette_isolated (new) ###############################################
           if (s == "Silhouette_isolated") {
             sils <- calc_sil_onelabel(labels = cluster_labels,
                                       dist = results[["Distance_matrix"]],
@@ -426,6 +463,7 @@ get.scores <- function(matrix,
             results[["Plots"]][[s]] <- p
           }
 
+          ## Silhouette (original) ###############################################
           if (s == "Silhouette") {
             sils <- calc_sil(labels = cluster_labels,
                              dist = results[["Distance_matrix"]],
@@ -459,6 +497,7 @@ get.scores <- function(matrix,
             results[["Plots"]][[s]] <- p
           }
 
+          ## Modularity ###############################################
           if (s == "Modularity") {
 
             if (length(cluster_labels) >= (modularity.k+1)) {
@@ -527,12 +566,13 @@ get.scores <- function(matrix,
 
 
     # Combine plots ###############################################
-    results[["Plots"]][["Summary_plot"]] <- patchwork::wrap_plots(results[["Plots"]]) +
+    results[["Plots"]][["Summary_plot"]] <- patchwork::wrap_plots(results[["Plots"]],
+                                                                  ncol = 2) +
       patchwork::plot_layout(widths = 1) +
       patchwork::plot_annotation(title,
-                      theme = ggplot2::theme(plot.title = ggplot2::element_text(face = "bold",
-                                                                                hjust = 0,
-                                                                                size = 20)))
+                                 theme = ggplot2::theme(plot.title = ggplot2::element_text(face = "bold",
+                                                                                           hjust = 0,
+                                                                                           size = 20)))
     return(results)
 
   } else {
@@ -676,7 +716,7 @@ perm_test <- function (fun,
         as.numeric()
 
       rand_val <- fun(random_labels, data) %>%
-          mean()
+        mean()
 
       random_values <- c(random_values, rand_val)
     }
@@ -712,7 +752,13 @@ p.val_zscore <- function(obs,
 ### get.scores plot helpers
 
 plot_PCA <- function(matrix,
+                     scale. = FALSE,
+                     label = "all",
                      invisible = c("var", "quali"),
+                     geom.var = c("arrow", "text"),
+                     col.var = "steelblue",
+                     alpha.var = 0.3,
+                     repel = TRUE,
                      color.cluster.by = "none") {
 
   # Remove constant columns with variance = 0
@@ -726,14 +772,18 @@ plot_PCA <- function(matrix,
 
   # If there are still columns left
   if (ncol(matrix) > 0) {
-    res.pca <- stats::prcomp(matrix)
+    res.pca <- stats::prcomp(matrix, scale. = scale.)
     suppressWarnings(
       suppressMessages(
         p <- factoextra::fviz_pca(res.pca,
                                   habillage = color.cluster.by,
-                                  label = "var",
+                                  label = label,
                                   pointsize = 3,
-                                  invisible = invisible) +
+                                  invisible = invisible,
+                                  geom.var = geom.var,
+                                  col.var = col.var,
+                                  alpha.var = alpha.var,
+                                  repel = repel) +
           # do not rescale x and y-axes, so scale does not get distorted and represents actual distance better
           coord_equal() +
           # Remove shapes added by fviz_pca
@@ -811,21 +861,21 @@ combine_pvals <- function(list_pvals_n,
   if (!"p_value" %in% names(list_pvals_n)) {
     return(list_pvals_n)
   } else
-  if (pval.combine.method == "weighted_zmethod") {
-    if (!length(list_pvals_n[["p_value"]]) == length(list_pvals_n[["n"]])) {
-      use_fallback_method <- TRUE
-    } else {
-      list_pvals_n[["p_value"]] <- metap::sumz(p = list_pvals_n[["p_value"]],
-                                               weights = list_pvals_n[["n"]])[["p"]][1,1]
-    }
-  } else
-  if (pval.combine.method == "fisher" |
-      use_fallback_method) {
-    list_pvals_n[["p_value"]] <- metap::sumlog(p = list_pvals_n[["p_value"]])[["p"]]
-  } else {
-    stop("pval.combine.method not recognized.
+    if (pval.combine.method == "weighted_zmethod") {
+      if (!length(list_pvals_n[["p_value"]]) == length(list_pvals_n[["n"]])) {
+        use_fallback_method <- TRUE
+      } else {
+        list_pvals_n[["p_value"]] <- metap::sumz(p = list_pvals_n[["p_value"]],
+                                                 weights = list_pvals_n[["n"]])[["p"]][1,1]
+      }
+    } else
+      if (pval.combine.method == "fisher" |
+          use_fallback_method) {
+        list_pvals_n[["p_value"]] <- metap::sumlog(p = list_pvals_n[["p_value"]])[["p"]]
+      } else {
+        stop("pval.combine.method not recognized.
          Please see documentation for possible methods.")
-  }
+      }
 
   list_pvals_n[["n"]] <- sum(list_pvals_n[["n"]])
 
