@@ -2,65 +2,68 @@
 % Please edit documentation in R/main.R
 \name{Run.HiTME}
 \alias{Run.HiTME}
-\title{Classify cells using scGate and ProjecTILs.}
+\title{Annotate cell types at multiple levels of granularity in a scRNA-seq dataset.}
 \usage{
 Run.HiTME(
   object = NULL,
   scGate.model = "default",
   scGate.model.branch = c("master", "dev"),
   multi.asNA = TRUE,
-  additional.signatures = "default",
+  additional.signatures = NULL,
   ref.maps = NULL,
+  layer3 = "default",
+  layer3.threshold = 0.2,
   split.by = NULL,
   layer1_link = "CellOntology_ID",
-  return.Seurat = TRUE,
-  group.by = list(layer1 = c("scGate_multi"), layer2 = c("functional.cluster")),
-  useNA = FALSE,
   remerge = TRUE,
   species = "human",
   bparam = NULL,
-  ncores = parallelly::availableCores() - 2,
-  progressbar = TRUE
+  ncores = parallel::detectCores() - 2,
+  progressbar = TRUE,
+  verbose = TRUE
 )
 }
 \arguments{
 \item{object}{A seurat object or a list of seurat objects}
 
-\item{scGate.model}{The scGate model to use (use get_scGateDB() to get a list of available models), by default fetch the HiTME models: \code{ scGate::get_scGateDB(branch = scGate.model.branch)[[species]][["HiTME"]]}.}
+\item{scGate.model}{The \link[scGate]{scGate} model to use. Use \link[scGate]{get_scGateDB} to get a list of available models. By default it fetchs the HiTME models: \code{ scGate::get_scGateDB(branch = scGate.model.branch)[[species]][["HiTME"]]}}
 
 \item{scGate.model.branch}{From which branch Run.HiTME fetch the scGate models, by default models are retrieved from \code{master} branch.}
 
 \item{multi.asNA}{How to label cells that are "Pure" for multiple annotations: "Multi" (FALSE) or NA (TRUE)}
 
-\item{additional.signatures}{UCell additional signatures to compute on each cell, by default \code{SignatuR} programs are included.}
+\item{additional.signatures}{Additional signature(s) to compute on each cell using \link[UCell]{UCell}. Multiple signatures should be provided as a list.}
 
-\item{ref.maps}{A named list of the ProjecTILs reference maps to use. They ought to be Seurat objects. It is recommended to add in reference object slost \code{misc} the identifier connecting to layer 1 classification (scGate): \code{ref.map@misc$layer1_link}}
+\item{ref.maps}{A named list of the \link\link{ProjecTILs}{ProjecTILs} reference maps to use. Download default reference maps using \link\href{get.reference.maps}{ProjecTILs}. For custom reference maps, they must be Seurat objects turn into reference with \link\href{make.reference}{ProjecTILs}. It is recommended to add in reference object slost \code{misc} the identifier connecting to layer 1 classification (scGate): \code{ref.map@misc$layer1_link}}
+
+\item{layer3}{Gene signature(s) to define gene programs or cell states on top of layer2 (\link[ProjecTILs]{ProjecTILs} classification). By default \link[SignatuR]{SignatuR} programs for cell cycling, IFN response and HeatShock response are run.}
+
+\item{layer3.threshold}{Minimum value threshold to apply on \link[UCell]{UCell} scores of layer3 signatures to classify cell types.}
 
 \item{split.by}{A Seurat object metadata column to split by (e.g. sample names).}
 
 \item{layer1_link}{Column of metadata linking layer1 prediction (e.g. scGate ~ CellOntology_ID) in order to perform subsetting for second layer classification.}
 
-\item{return.Seurat}{Whether to return a Hit object or add the data into Seurat object metadata}
+\item{remerge}{When setting split.by or providing a list of objects, if \code{remerge = TRUE} one object will be returned (default). If \code{remerge = FALSE} a list of objects will be returned.}
 
-\item{group.by}{If return.Seurat = F, variables to be used to summarize HiTME classification data in HiT object. See \link{get.HiTObject} for more information.}
+\item{species}{Define species to get the default \link[scGate]{scGate} models and \link[SignatuR]{SignatuR} signatures. Currently only human and mouse are supported, if other species are studied, set to \code{NULL}}
 
-\item{useNA}{Whether to include not annotated cells or not (labelled as "NA" in the group.by.composition) when summarizing into HiT object. Can be "no", "ifany", or "always". See \code{?table} and \link{get.celltype.composition} for more information. Default is "ifany".}
-
-\item{remerge}{When setting split.by, if remerge = TRUE one object will be returned. If remerge = FALSE a list of objects will be returned.}
-
-\item{species}{Define species used for to get correct gene signature list with SignatuR}
-
-\item{bparam}{A \code{BiocParallel::bpparam()} object that tells Run.HiTME how to parallelize. If provided, it overrides the \code{ncores} parameter.}
+\item{bparam}{A \link[BiocParallel]{bpparam} object that tells Run.HiTME how to parallelize. If provided, it overrides the \code{ncores} parameter.}
 
 \item{ncores}{The number of cores to use, by default all available cores minus 2 are used.}
 
-\item{progressbar}{Whether to show a progressbar or not}
+\item{progressbar}{Whether to show a progress bar or not}
+
+\item{verbose}{Verbose output, by default output messsage are returned}
 }
 \value{
-Seurat object with additional metadata showing cell type classification, or HiT object summarizing such classification.
+Seurat object with additional metadata showing cell type classification.
 }
 \description{
-Classify cells using scGate and ProjecTILs.
+The function takes as input Seurat objects (or list of them).
+These should be split by sample to avoid batch effects, or split internally in by indicating the parameter \code{split.by}.
+This function firstly runs \link[scGate]{scGate} (easily customizable) marker-based classification, resulting in a coarse-grained cell type classification (CD4T, B cell, Dendritic cell...).
+Next, it runs for each broad cell type \link[ProjecTILs]{ProjecTILs} for a finer cell type classification (CD4+ TFH, Tex CD8+, cDC1...) based on cell mapping onto expert-curated single-cell reference maps.
 }
 \examples{
 library(ProjecTILs)
@@ -77,6 +80,8 @@ ref.maps <- list(CD8 = load.reference.map(file.path(path_ref, "CD8T_human_ref_v1
                  CD4 = load.reference.map(file.path(path_ref, "CD4T_human_ref_v2.rds")),
                  DC = load.reference.map(file.path(path_ref, "DC_human_ref_v1.rds")),
                  MoMac = load.reference.map(file.path(path_ref, "MoMac_human_v1.rds")))
+
+
 Run.HiTME(object = seurat.object,
           scGate.model = models.TME,
           ref.maps = ref.maps,
