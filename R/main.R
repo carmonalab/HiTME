@@ -1,34 +1,40 @@
-#' Classify cells using scGate and ProjecTILs.
+#' Annotate cell types at multiple levels of granularity in a scRNA-seq dataset.
+#'
+#'The function takes as input Seurat objects (or list of them).
+#'These should be split by sample to avoid batch effects, or split internally in by indicating the parameter \code{split.by}.
+
+#'This function firstly runs \link[scGate]{scGate} (easily customizable) marker-based classification, resulting in a coarse-grained cell type classification (CD4T, B cell, Dendritic cell...).
+#'Next, it runs for each broad cell type \link[ProjecTILs]{ProjecTILs} for a finer cell type classification (CD4+ TFH, Tex CD8+, cDC1...) based on cell mapping onto expert-curated single-cell reference maps.
 #'
 #' @param object A seurat object or a list of seurat objects
-#' @param scGate.model The scGate model to use (use get_scGateDB() to get a list of available models), by default fetch the HiTME models: \code{ scGate::get_scGateDB(branch = scGate.model.branch)[[species]][["HiTME"]]}.
+#' @param scGate.model The \link[scGate]{scGate} model to use. Use \link[scGate]{get_scGateDB} to get a list of available models. By default it fetchs the HiTME models: \code{ scGate::get_scGateDB(branch = scGate.model.branch)[[species]][["HiTME"]]}
 #' @param scGate.model.branch From which branch Run.HiTME fetch the scGate models, by default models are retrieved from \code{master} branch.
 #' @param multi.asNA How to label cells that are "Pure" for multiple annotations: "Multi" (FALSE) or NA (TRUE)
-#' @param additional.signatures UCell additional signatures to compute on each cell, by default \code{SignatuR} programs are included.
-#' @param ref.maps A named list of the ProjecTILs reference maps to use. They ought to be Seurat objects. It is recommended to add in reference object slost \code{misc} the identifier connecting to layer 1 classification (scGate): \code{ref.map@misc$layer1_link}
+#' @param additional.signatures Additional signature(s) to compute on each cell using \link[UCell]{UCell}. Multiple signatures should be provided as a list.
+#' @param ref.maps A named list of the \link[ProjecTILs]{ProjecTILs} reference maps to use. Download default reference maps using \link[ProjecTILs](get.reference.maps). For custom reference maps, they must be Seurat objects turn into reference with \link[ProjecTILs](make.reference). It is recommended to add in reference object slost \code{misc} the identifier connecting to layer 1 classification (scGate): \code{ref.map@misc$layer1_link}
+#' @param layer3 Gene signature(s) to define gene programs or cell states on top of layer2 (\link[ProjecTILs]{ProjecTILs} classification). By default \link[SignatuR]{SignatuR} programs for cell cycling, IFN response and HeatShock response are run.
+#' @param layer3.threshold Minimum value threshold to apply on \link[UCell]{UCell} scores of layer3 signatures to classify cell types.
 #' @param split.by A Seurat object metadata column to split by (e.g. sample names).
 #' @param layer1_link Column of metadata linking layer1 prediction (e.g. scGate ~ CellOntology_ID) in order to perform subsetting for second layer classification.
-#' @param return.Seurat Whether to return a Hit object or add the data into Seurat object metadata
-#' @param group.by If return.Seurat = F, variables to be used to summarize HiTME classification data in HiT object. See \link{get.HiTObject} for more information.
-#' @param useNA Whether to include not annotated cells or not (labelled as "NA" in the group.by.composition) when summarizing into HiT object. Can be "no", "ifany", or "always". See \code{?table} and \link{get.celltype.composition} for more information. Default is "ifany".
-#' @param remerge When setting split.by, if remerge = TRUE one object will be returned. If remerge = FALSE a list of objects will be returned.
-#' @param species Define species used for to get correct gene signature list with SignatuR
+#' @param remerge When setting split.by or providing a list of objects, if \code{remerge = TRUE} one object will be returned (default). If \code{remerge = FALSE} a list of objects will be returned.
+#' @param species Define species to get the default \link[scGate]{scGate} models and \link[SignatuR]{SignatuR} signatures. Currently only human and mouse are supported, if other species are studied, set to \code{NULL}
 #' @param ncores The number of cores to use, by default all available cores minus 2 are used.
-#' @param bparam A \code{BiocParallel::bpparam()} object that tells Run.HiTME how to parallelize. If provided, it overrides the `ncores` parameter.
-#' @param progressbar Whether to show a progressbar or not
+#' @param bparam A \link[BiocParallel]{bpparam} object that tells Run.HiTME how to parallelize. If provided, it overrides the `ncores` parameter.
+#' @param progressbar Whether to show a progress bar or not
+#' @param verbose Verbose output, by default output messsage are returned
 #'
 #' @importFrom BiocParallel MulticoreParam bplapply
-#' @importFrom parallelly availableCores
-#' @importFrom dplyr mutate filter %>%
+#' @importFrom parallel detectCores
+#' @importFrom dplyr mutate filter rowwise all_of ungroup across c_across starts_with %>%
 #' @importFrom tibble column_to_rownames rownames_to_column
 #' @importFrom scGate scGate get_scGateDB
 #' @import SignatuR
 #' @import scGate
 #' @import ProjecTILs
-#' @importFrom Seurat SplitObject
+#' @importFrom Seurat SplitObject merge
 #' @importFrom data.table rbindlist setDT
 #'
-#' @return Seurat object with additional metadata showing cell type classification, or HiT object summarizing such classification.
+#' @return Seurat object with additional metadata showing cell type classification.
 #' @export Run.HiTME
 #'
 #' @examples
@@ -46,6 +52,8 @@
 #'                  CD4 = load.reference.map(file.path(path_ref, "CD4T_human_ref_v2.rds")),
 #'                  DC = load.reference.map(file.path(path_ref, "DC_human_ref_v1.rds")),
 #'                  MoMac = load.reference.map(file.path(path_ref, "MoMac_human_v1.rds")))
+#'
+#'
 #' Run.HiTME(object = seurat.object,
 #'           scGate.model = models.TME,
 #'           ref.maps = ref.maps,
@@ -56,81 +64,81 @@ Run.HiTME <- function(object = NULL,
                       scGate.model = "default",
                       scGate.model.branch = c("master", "dev"),
                       multi.asNA = TRUE,
-                      additional.signatures = "default",
+                      additional.signatures = NULL,
                       ref.maps = NULL,
+                      layer3 = "default",
+                      layer3.threshold = 0.2,
                       split.by = NULL,
                       layer1_link = "CellOntology_ID",
-                      return.Seurat = TRUE,
-                      group.by = list("layer1" = c("scGate_multi"),
-                                      "layer2" = c("functional.cluster")
-                      ),
-                      useNA = FALSE,
                       remerge = TRUE,
                       species = "human",
                       bparam = NULL,
-                      ncores = parallelly::availableCores() - 2,
-                      progressbar = TRUE) {
+                      ncores = parallel::detectCores() - 2,
+                      progressbar = TRUE,
+                      verbose = TRUE) {
 
   if (is.null(object)) {
     stop("Please provide a Seurat object or a list of them")
   }
 
-  if (is.list(object) &&
-      !is.null(split.by)) {
-    stop("split.by only supported for a single Seurat object, not a list.\n
-         Merge list before running HiTME")
-  }
+  # check if objects are Seurat objects
+  suppressWarnings(
+    {
+      if (!(inherits(object, "Seurat") ||
+            all(lapply(object, inherits, "Seurat")))) {
+        stop("All or some objects are not Seurat objects, cannot be processed\n")
+      }
+    })
 
   # split object into a list if indicated
   if (!is.null(split.by)) {
     if (is.list(object)) {
-      stop("Split.by argument not supported when providing a list of Seurat objects. Set split.by = NULL or merge list.")
+      stop("split.by only supported for a single Seurat object, not a list.\n
+         Merge list before running HiTME or set split.by = NULL")
     }
     if (!split.by %in%
         names(object@meta.data)) {
-      stop(paste("split.by argument: ", split.by, " is not a metadata column in this Seurat object"))
+      stop(paste("split.by argument: ",
+                 split.by, " is not a metadata column in this Seurat object"))
     }
-    object <- Seurat::SplitObject(object, split.by = split.by)
-
-  } else {
-    # if not applying split.by not merge by default
-    remerge <-  FALSE
-  }
-
-  if (!return.Seurat &&
-      is.null(group.by)) {
-    warning("If setting return Seurat as FALSE, HiT summarized object will be returned. Need to indicate group.by variable indicating cell type classification\n
-         e.g. group.by = list(\"layer1\" = c(\"scGate_multi\"),\"layer2\" = c(\"functional.cluster\"))\n
-            Returning Seurat object, not HiT object.")
-    return.Seurat = TRUE
+    object <- Seurat::SplitObject(object,
+                                  split.by = split.by)
   }
 
   # adapt species
   if (is.null(species)) {
-    stop("Please provide human or mouse as species")
-  }
-  species <- tolower(species)
-  if (!species == "human") {
-    if (grepl("homo|sap|huma", species)) {
-      species <- "human"
-    }
-  } else if (!species == "mouse") {
-    if (grepl("mice|mus", species)) {
-      species <- "mouse"
-    }
+    warning("Not using default scGate models and signatures for supported species (human or mouse).\n
+            Make sure to provide models for scGate.model and additional.signatures for cell type annotation.")
   } else {
-    stop("Only supported species are human and mouse")
+
+    species <- tolower(species)
+    if (!species == "human") {
+      if (grepl("homo|sap|huma", species)) {
+        species <- "human"
+        sig.species <- "Hs"
+      }
+    } else if (!species == "mouse") {
+      if (grepl("mice|mus", species)) {
+        species <- "mouse"
+        sig.species <- "Mm"
+      }
+    } else {
+      stop("Only supported species for default scGate models and SignatuR signatures are human and mouse. \n
+         If other species are studied, set species = NULL and provide models for scGate.model and additional.signatures")
+    }
   }
 
   # if object is unique turn into a list
   if (!is.list(object)) {
+    # not remerge because it is a single object
     remerge <-  FALSE
+    # convert into a length=1 list to run
     object <- list(object)
   }
 
 
   # Warning to reduce number of cores if file is huge
-  if (any(lapply(object, ncol))>=30000) {
+  if (suppressWarnings(any(lapply(object, ncol)>=15000))) {
     warning("Huge Seurat object, consider reducing number of cores to avoid memory issues")
   }
 
@@ -141,146 +149,181 @@ Run.HiTME <- function(object = NULL,
                                progressbar = progressbar)
 
 
-  # Get default additional signatures
-  # based on species get SignatuR signatures
-  if (!is.null(additional.signatures)) {
-    # convert to list if not
-    if (!is.list(additional.signatures)) {
-      additional.signatures <- list(additional.signatures)
-    }
+  # Adapt additional signatures
+  additional.signatures <- adapt_vector(additional.signatures,
+                                        prefix = "Additional_signature_")
 
-    if (length(additional.signatures) == 1 &&
-        tolower(additional.signatures) == "default") {
-      if (species == "human") {
-        sig.species <- "Hs"
-      } else if (species == "mouse") {
-        sig.species <- "Mm"
+
+  # Set up layer3 params
+  if(!is.null(layer3)){
+    if (length(layer3) == 1 &&
+        tolower(layer3) == "default") {
+
+      if(!is.null(species)){
+        layer3 <- SignatuR::GetSignature(SignatuR::SignatuR[[sig.species]][["Programs"]])
+        selected.SignatuR.programs <- c("IFN",
+                                        "HeatShock",
+                                        "cellCycle.G1S",
+                                        "cellCycle.G2M")
+        layer3 <- layer3[selected.SignatuR.programs]
+      } else {
+        layer3 <- NULL
       }
-      additional.signatures <- SignatuR::GetSignature(SignatuR::SignatuR[[sig.species]][["Programs"]])
-      selected.SignatuR.programs <- c("IFN", "HeatShock", "cellCycle.G1S", "cellCycle.G2M")
-      additional.signatures <- additional.signatures[selected.SignatuR.programs]
-      message(" - Adding additional signatures: ", paste(names(additional.signatures), collapse = ", "), "\n")
-    }
-  } else {
-    for (v in seq_along(additional.signatures)) {
-      if (is.null(names(additional.signatures)[[v]]) || is.na(names(additional.signatures)[[v]])) {
-        names(additional.signatures)[[v]] <- paste0("Additional_signature", v)
-      }
+    } else {
+      layer3 <- adapt_vector(layer3,
+                             prefix = "Sig3_")
     }
   }
 
 
+
   # Run scGate, if model is provided
   if (!is.null(scGate.model)) {
-    message("## Running scGate\n")
-
-    if (!is.list(scGate.model)) {
-      scGate.model <- list(scGate.model)
-    }
 
     # Retrieve default scGate models if default
     if (length(scGate.model) == 1 &&
-        tolower(scGate.model) == "default") {
+        tolower(scGate.model) == "default" &&
+        !is.null(species)) {
+
+      if(verbose){message("- Retrieving default HiTME scGate models for ", species, "\n")}
+
       scGate.model.branch <- scGate.model.branch[1]
-      if (species == "human") {
-        scGate.model <- scGate::get_scGateDB(branch = scGate.model.branch,
-                                             force_update = FALSE)[[species]][["HiTME"]]
-      } else if (species == "mouse") {
-        scGate.model <- scGate::get_scGateDB(branch = scGate.model.branch,
-                                             force_update = FALSE)[[species]][["HiTME"]]
-      }
-      message(" - Running scGate model for ", paste(names(scGate.model), collapse = ", "), "\n")
+      scGate.model <- scGate::get_scGateDB(branch = scGate.model.branch,
+                                           verbose = FALSE)[[species]][["HiTME"]]
     }
-
-
+    if(verbose){message("### Running scGate\n")}
 
     ## Run scGate
     object <- lapply(
       X = object,
       function(x) {
-        if (!inherits(x, "Seurat")) {
-          stop("Not Seurat object included, cannot be processed.\n")
-        }
+
         x <- scGate::scGate(x,
                             model=scGate.model,
-                            additional.signatures = additional.signatures,
+                            additional.signatures = c(additional.signatures, layer3),
                             BPPARAM = param,
-                            multi.asNA = multi.asNA)
+                            multi.asNA = multi.asNA,
+                            verbose = verbose)
         return(x)
       }
     )
 
-    message("Finished scGate\n####################################################\n")
+    message("Finished scGate\n#########################\n")
   } else {
     message("Not running coarse cell type classification as no scGate model was indicated.\n")
+    # Add anyway a column with only NA
+    object <- lapply(
+      X = object,
+      function(x) {
+        x@meta.data[["scGate_multi"]] <- NA
+        return(x)
+      }
+    )
   }
 
   # Instance if we want to run additional signatures but not scGate
   if (is.null(scGate.model) &&
       !is.null(additional.signatures)) {
-    message("Running additional Signatures but not Running scGate classification\n")
+
+    if(verbose){message("### Running additional Signatures but not Running scGate classification\n")}
+
     object <- lapply(
       X = object,
       function(x) {
-        if (!inherits(x, "Seurat")) {
-          stop("Not Seurat object included, cannot be processed.\n")
-        }
+
         x <- UCell::AddModuleScore_UCell(x,
-                                         features = additional.signatures,
+                                         features = c(additional.signatures, layer3),
                                          BPPARAM = param)
         return(x)
       }
     )
   }
 
-
+  # adapt reference maps if needed
+  ref.maps <- adapt_vector(ref.maps,
+                           prefix = "ReferenceMap_")
 
   # Run ProjecTILs if ref.maps is provided
   if (!is.null(ref.maps)) {
-    # convert ref.maps to list if not
-    if (!is.list(ref.maps)) {
-      ref.maps <- list(ref.maps)
-    }
-
-    # give name to ref.maps list if not present
-    for (v in seq_along(ref.maps)) {
-      if (is.null(names(ref.maps)[[v]]) || is.na(names(ref.maps)[[v]])) {
-        names(ref.maps)[[v]] <- paste0("Map_", v)
-      }
-    }
 
     # check that all ref maps are Seurat objects
     if (suppressWarnings(!all(lapply(ref.maps, function(x) {inherits(x, "Seurat")})))) {
-      message("Some or all reference maps are not a Seurat object, please provide reference maps as Seurat objects.\nNot running Projectils.")
+      warning("Some or all reference maps are not a Seurat object, please provide reference maps as Seurat objects.\nNot running Projectils.")
     } else {
 
-      message("## Running Projectils\n")
+      if(verbose){message("### Running Projectils\n")}
 
       object <- lapply(
         X = object,
         function(x) {
-          if (!inherits(x, "Seurat")) {
-            stop("Not Seurat object included, cannot be processed.\n")
-          }
+
           x <- ProjecTILs.classifier.multi(x,
                                            ref.maps = ref.maps,
                                            bparam = param,
-                                           layer1_link = layer1_link)
-          # Check if ProjecTIL columns were added
-          # If not, add NA columns
-          ProjecTILs_cols <- c("functional.cluster", "functional.cluster.conf")
-          if (!any(ProjecTILs_cols %in% names(x@meta.data))) {
-            x@meta.data[ProjecTILs_cols[!ProjecTILs_cols %in% names(x@meta.data)]] <- NA
-          }
+                                           layer1_link = layer1_link,
+                                           verbose = verbose)
+
           return(x)
         }
       )
-      message("Finished Projectils\n####################################################\n")
+      if(verbose){message("Finished Projectils\n###########################\n")}
     }
 
   } else {
-    message("Not running reference mapping as no reference maps were indicated.\n")
+    if(verbose){message("Not running reference mapping as no reference maps were indicated.\n")}
   }
+
+
+  # add columns for functional.cluster if not present
+
+  object <- lapply(
+    X = object,
+    function(x) {
+      # Check if ProjecTIL columns were added
+      # If not, add NA columns
+      ProjecTILs_cols <- c("functional.cluster",
+                           "functional.cluster.conf")
+      if (!any(ProjecTILs_cols %in% names(x@meta.data))) {
+        x@meta.data[ProjecTILs_cols[!ProjecTILs_cols %in% names(x@meta.data)]] <- NA
+      }
+      return(x)
+    }
+  )
+
+
+  # Join layer1(scGate) and layer2(ProjecTILs)
+  object <- lapply(
+    X = object,
+    function(x) {
+
+      x@meta.data <- x@meta.data %>%
+        mutate(layer2 = ifelse(is.na(functional.cluster),
+                               scGate_multi, functional.cluster))
+
+      return(x)
+    }
+  )
+
+  # Add layer 3
+  if(!is.null(layer3)){
+
+    if(verbose){message("### Running Layer3 cell types\n")}
+
+    # get signatures for indicated layer3
+    sigs.cols <- paste0(names(layer3), "_UCell")
+
+    object <- BiocParallel::bplapply(X = object,
+                   BPPARAM = param,
+                   function(x){
+
+                     get.layer3(x,
+                                ann.col = "layer2",
+                                sigs.cols = sigs.cols,
+                                layer3.threshold = layer3.threshold)
+
+                   })
+  }
+
 
 
   # Remerge if indicated
@@ -297,7 +340,8 @@ Run.HiTME <- function(object = NULL,
                      # add misc slot, removed when merging
                      x@misc[["layer1_param"]] <- list()
                      x@misc[["layer1_param"]][["scGate_models"]] <- names(scGate.model)
-                     x@misc[["layer1_param"]][["additional.signatures"]] <- names(additional.signatures)
+                     x@misc[["additional.signatures"]] <- names(additional.signatures)
+                     x@misc[["layer3_param"]] <- names(layer3)
 
                      if (!is.null(scGate.model)) {
                        levs <- names(scGate.model)
@@ -332,44 +376,12 @@ Run.HiTME <- function(object = NULL,
                    }
   )
 
-
-  # if group.by parameters are not present in metadata, return Seurat
-  if (!return.Seurat) {
-    if (suppressWarnings(!all(lapply(object, function(x) {any(names(x@meta.data) %in% group.by)})))) {
-      message("None of the 'group.by' variables found, returning Seurat object not HiT object.")
-      return.Seurat <- TRUE
-    } else {
-      message("\nBuilding HiT object\n")
-
-      hit <- BiocParallel::bplapply(
-        X = object,
-        BPPARAM = param,
-        function(x) {
-          x <- get.HiTObject(x,
-                             group.by = group.by,
-                             useNA = useNA
-          )
-        }
-      )
-
-    }
-  }
-
-
   # if list is of 1, return object not list
-
-  if (return.Seurat) {
     if (length(object)==1) {
       object <- object[[1]]
     }
-    return(object)
-  } else {
-    if (length(hit)==1) {
-      hit <- hit[[1]]
-    }
-    return(hit)
-  }
 
+    return(object)
 
 }
 
@@ -465,455 +477,114 @@ get.GOList <- function(GO_accession = NULL,
 
 
 
-
-#' Render plots summarizing celltype proportions and distribution in samples
+#' Build confusion matrix-like or bar plots between different cell type classification approaches
 #'
 #'
-#' @param obj.list List of Seurat objects
-#' @param annot.col Metadata column(s) containing the cell type annotations
-#' @param bottom.mar Adjustable bottom margin for long sample names
-
-#' @importFrom stats setNames
-
-#' @return Get percentage of not annotated cells per sample and plot it.
-#' @export nas.per.sample
-#'
-
-nas.per.sample <- function (obj.list = NULL,
-                            annot.col = c("scGate_multi"),
-                            return.plot = TRUE,
-                            bottom.mar = 10.2) {
-  if (is.null(obj.list) &
-      !is.list(obj.list) &
-      !all(lapply(obj.list, inherits, "Seurat"))) {
-    stop("Please provide a list of seurat objects")
-  }
-
-  na_list <- list()
-
-  for (col in annot.col) {
-    na_perc_per_sample <- c()
-    for (i in names(obj.list)) {
-      if (col %in% names(obj.list[[i]]@meta.data)) {
-        percs <- prop.table(table(obj.list[[i]]@meta.data[[col]], useNA = "ifany"))*100
-        nas_perc <- unname(percs[is.na(names(percs))])
-        na_perc_per_sample <- c(na_perc_per_sample, stats::setNames(nas_perc, i))
-      } else {
-        stop(paste(col, " not found in obj.list item ", i))
-      }
-    }
-    par(mar = c(bottom.mar, 4.1, 4.1, 2.1))
-    if (return.plot) {
-      barplot(na_perc_per_sample,
-              main = col,
-              ylab = "Percentage of NA values",
-              las=2)
-    }
-    na_list[[col]] <- na_perc_per_sample
-  }
-  return(na_list)
-}
-
-
-
-
-#' Render bar plots summarizing celltype proportions and distribution in samples and groups
-#'
-#'
-#' @param hit.object A Hit class object (typically after applying merge.HiTObjects onto a list of HiTObjects)
-#' @param layer Default "layer1" if you have one cell type annotation layer in your hit.object. Alternatively "layer2" etc. if you have multiple layers of annotation depths.
-#' @param return.plot.to.var Optionally, you can save the ggplots to a variable if you would like to further modify and adapt the plots on your own.
-#' @param facet.by This allows you to pass a metadata column name present in your hit.object$metadata to show your samples in facets with ggplot facet_grid, for example by "condition".
-
-#' @importFrom ggplot2 ggplot aes geom_bar theme element_text ggtitle facet_grid
-#' @importFrom stats reformulate
-#' @importFrom patchwork wrap_plots
-
-#' @return Plotting function to show the cell type composition from HiTME object across different samples.
-#' @export composition.barplot
-#'
-
-composition.barplot <- function (hit.object = NULL,
-                                 sample.col = NULL,
-                                 layer = "layer1",
-                                 return.plot.to.var = FALSE,
-                                 facet.by = NULL) {
-
-  # Need to replace special characters
-  colnames(hit.object@metadata) <- make.names(colnames(hit.object@metadata))
-
-  sample.col <- "hitme.sample"
-
-  if (is.null(hit.object)) {
-    stop("Please provide input hit.object")
-  }
-  if (!length(layer) == 1 || !is.character(layer)) {
-    stop("Please provide one character string for layer parameter")
-  }
-  if (!is.null(facet.by)) {
-    if (!is.character(facet.by)) {
-      stop("Please provide a character string or a vector of character strings for the facet.by parameter")
-    }
-    facet.by <- make.names(facet.by)
-    facet.by.in.colnames <- facet.by %in% names(hit.object@metadata)
-    if (!all(facet.by.in.colnames)) {
-      facet.by.not.in.colnames <- facet.by[!facet.by.in.colnames]
-      stop(paste("facet.by ", facet.by.not.in.colnames, " not found in hit.object@metadata column names"))
-    }
-  }
-
-
-  comps <- hit.object@composition[[layer]]
-  meta <- hit.object@metadata
-
-  if (!is.null(facet.by)) {
-    facet.by_reformulate <- reformulate(facet.by)
-  }
-
-  if (is.data.frame(comps)) {
-    comp <- merge(comps, meta[, c(sample.col, facet.by), drop=FALSE], by = sample.col)
-
-    p <- ggplot(comp, aes(x = hitme.sample, y = freq, fill = celltype)) +
-      geom_bar(stat = "identity") +
-      theme(axis.text.x = element_text(angle = 45, hjust=1))
-
-    if (!is.null(facet.by)) {
-
-      p <- p + facet_grid(facet.by_reformulate,
-                          space  = "free",
-                          scales = "free")
-    }
-
-    if (return.plot.to.var) {
-      return(p)
-    } else {
-      print(p)
-    }
-  }
-
-  else {
-    p_list <- list()
-    for (ct in names(comps)) {
-      comp <- hit.object@composition[[layer]][[ct]]
-      comp <- merge(comp, meta[, c(sample.col, facet.by), drop=FALSE], by = sample.col)
-
-      p_list[["plot_list"]][[ct]] <- ggplot(comp, aes(x = hitme.sample, y = freq, fill = celltype)) +
-        geom_bar(stat = "identity") +
-        ggtitle(ct) +
-        theme(axis.text.x = element_text(angle = 45, hjust=1)) +
-        ggtitle(ct)
-
-      if (!is.null(facet.by)) {
-        p_list[["plot_list"]][[ct]] <- p_list[["plot_list"]][[ct]] +
-          facet_grid(facet.by_reformulate,
-                     space  = "free",
-                     scales = "free")
-      }
-
-    }
-    p_list[["arranged_plots"]] <- patchwork::wrap_plots(p_list[["plot_list"]])
-
-    if (return.plot.to.var) {
-      return(p_list)
-    } else {
-      print(p_list[["arranged_plots"]])
-    }
-  }
-}
-
-
-#' Render box plots summarizing celltype proportions and distribution in samples and groups
-#'
-#'
-#' @param hit.object A Hit class object (typically after applying merge.HiTObjects onto a list of HiTObjects)
-#' @param plot.var Column in the hit.object$composition: either "freq" for cell type relative abundance in percent or "clr" (for centered log-ratio transformed). Default: "clr" as it is better suited for statistical analysis and is better able to also show low abundant cell types.
-#' @param layer Default "layer1" if you have one cell type annotation layer in your hit.object. Alternatively "layer2" etc. if you have multiple layers of annotation depths.
-#' @param return.plot.to.var Optionally, you can save the ggplots to a variable if you would like to further modify and adapt the plots on your own.
-#' @param group.by This allows you to pass a metadata column name present in your hit.object$metadata to show your samples in groups, for example by "condition".
-#' @param facet.by This allows you to pass a metadata column name present in your hit.object$metadata to show your samples in facets with ggplot facet_grid, for example by "condition".
-#' @param pval.method Specify method how to calculate the p-value. Wilcoxon test is recommended as compositional data might not fullfill the assumption of a gaussian distribution. For alternatives, see documentation of ggpubr::stat_pwc.
-#' @param p.adjust.method Method for adjusting p-values (see ggpubr::stat_pwc for available methods)
-#' @param palette Choose a palette of your liking. For available palettes, see ggsci package. Default: "lancet"
-#' @param legend.position Where to put the legend. Possible options: "top", "right", "bottom", "left"
-
-#' @importFrom ggplot2 ggplot aes geom_boxplot theme element_text ggtitle facet_grid position_jitterdodge
-#' @importFrom ggpubr stat_pwc ggboxplot
-#' @importFrom stats reformulate
-#' @importFrom patchwork wrap_plots
-
-#' @return Plotting function to show the cell type composition from HiTME object across different samples.
-#' @export composition.boxplot
-#'
-
-composition.boxplot <- function (hit.object = NULL,
-                                 plot.var = "clr",
-                                 layer = "layer1",
-                                 return.plot.to.var = FALSE,
-                                 group.by = NULL,
-                                 facet.by = NULL,
-                                 pval.method = "wilcox.test",
-                                 p.adjust.method = "BH",
-                                 palette = "lancet",
-                                 legend.position = "right") {
-
-  # Need to replace special characters
-  colnames(hit.object@metadata) <- make.names(colnames(hit.object@metadata))
-
-  sample.col <- "hitme.sample"
-
-  if (is.null(hit.object)) {
-    stop("Please provide input hit.object")
-  }
-  if (!length(plot.var) == 1 ||
-      !is.character(plot.var) ||
-      !plot.var %in% c("freq", "clr")) {
-    stop("Please provide one character string for plot.var, either 'freq' or 'clr'")
-  }
-  if (!length(layer) == 1 || !is.character(layer)) {
-    stop("Please provide one character string for layer parameter")
-  }
-  if (!is.null(group.by)) {
-    if (!length(group.by) == 1 || !is.character(group.by)) {
-      stop("Please provide one character string for the group.by parameter")
-    }
-    group.by <- make.names(group.by)
-    group.by.gg <- sym(group.by)
-    nr_of_boxplots <- hit.object@metadata[[group.by]] %>%
-      unique() %>%
-      length() %>%
-      "*"(1.5) %>%
-      round()
-    hit.object@metadata[group.by] <- lapply(hit.object@metadata[group.by], as.factor)
-  }
-  if (!is.null(facet.by)) {
-    if (!is.character(facet.by)) {
-      stop("Please provide a character string or a vector of character strings for the facet.by parameter")
-    }
-    facet.by <- make.names(facet.by)
-
-    facet.by.in.colnames <- facet.by %in% names(hit.object@metadata)
-    if (!all(facet.by.in.colnames)) {
-      facet.by.not.in.colnames <- facet.by[!facet.by.in.colnames]
-      stop(paste("facet.by ", facet.by.not.in.colnames, " not found in hit.object@metadata column names"))
-    }
-  }
-
-  comps <- hit.object@composition[[layer]]
-  meta <- hit.object@metadata
-
-  plot.var.gg <- sym(plot.var)
-
-  if (is.data.frame(comps)) {
-    comp <- merge(comps, meta[, c(sample.col, group.by, facet.by), drop=FALSE], by = sample.col)
-
-    # Need to check if group.by is NULL
-    # Due to a presumed bug, if group.by is passed as variable to ggboxplot, even if it is assigned NULL, it throws an error
-    if (is.null(group.by)) {
-      p <- ggboxplot(comp,
-                     x = "celltype",
-                     y = plot.var,
-                     outlier.shape = NA,
-                     palette = palette,
-                     facet.by = facet.by,
-                     legend = legend.position) +
-        geom_jitter(width = 0.2, size = 1)
-    } else {
-      p <- ggboxplot(comp,
-                     x = "celltype",
-                     y = plot.var,
-                     color = group.by,
-                     outlier.shape = NA,
-                     palette = palette,
-                     facet.by = facet.by,
-                     legend = legend.position) +
-        geom_jitter(mapping = aes(color = !!group.by.gg), position=position_jitterdodge(jitter.width = 1/nr_of_boxplots), size = 1) +
-        stat_pwc(aes(group = !!group.by.gg),
-                 label = "p.signif",
-                 method = pval.method,
-                 p.adjust.method = p.adjust.method,
-                 p.adjust.by = "panel",
-                 tip.length = 0,
-                 hide.ns = TRUE)
-    }
-
-    p <- p +
-      theme(axis.text.x = element_text(angle = 45, hjust=1)) +
-      scale_y_continuous(expand = expansion(mult = c(0.05, 0.1)))
-
-    if (return.plot.to.var) {
-      return(p)
-    } else {
-      print(p)
-    }
-  }
-
-  else {
-    p_list <- list()
-    for (ct in names(comps)) {
-      comp <- hit.object@composition[[layer]][[ct]]
-      comp <- merge(comp, meta[, c(sample.col, group.by, facet.by), drop=FALSE], by = sample.col)
-
-      # Need to check if group.by is NULL
-      # Due to a presumed bug, if group.by is passed as variable to ggboxplot, even if it is assigned NULL, it throws an error
-      if (is.null(group.by)) {
-        p_list[["plot_list"]][[ct]] <- ggboxplot(comp,
-                                                 x = "celltype",
-                                                 y = plot.var,
-                                                 outlier.shape = NA,
-                                                 palette = palette,
-                                                 facet.by = facet.by,
-                                                 legend = legend.position) +
-          geom_jitter(width = 0.2, size = 1)
-      } else {
-        p_list[["plot_list"]][[ct]] <- ggboxplot(comp,
-                                                 x = "celltype",
-                                                 y = plot.var,
-                                                 color = group.by,
-                                                 outlier.shape = NA,
-                                                 palette = palette,
-                                                 facet.by = facet.by,
-                                                 legend = legend.position) +
-          geom_jitter(mapping = aes(color = !!group.by.gg), position=position_jitterdodge(jitter.width = 1/nr_of_boxplots), size = 1) +
-          stat_pwc(aes(group = !!group.by.gg),
-                   label = "p.signif",
-                   method = pval.method,
-                   p.adjust.method = p.adjust.method,
-                   p.adjust.by = "panel",
-                   tip.length = 0,
-                   hide.ns = TRUE)
-      }
-
-      p_list[["plot_list"]][[ct]] <- p_list[["plot_list"]][[ct]] +
-        theme(axis.text.x = element_text(angle = 45, hjust=1)) +
-        scale_y_continuous(expand = expansion(mult = c(0.05, 0.1)))
-
-    }
-    p_list[["arranged_plots"]] <- patchwork::wrap_plots(p_list[["plot_list"]])
-
-    if (return.plot.to.var) {
-      return(p_list)
-    } else {
-      print(p_list[["arranged_plots"]])
-    }
-  }
-}
-
-
-
-#' Build confusion matrix-like plots between different cell type classification approaches
-#'
-#'
-#' @param hit.object List of Hit class object
+#' @param object Seurat object or its metadata with cell type annotation
 #' @param var.1 1st of grouping variables on the x-axis. If using \code{relative = TRUE} proportions will be normalized to this variable.
 #' @param var.2 2nd of grouping variables on the x-axis.
 #' @param relative Whether to show absolute number of cells, or relative number cells out of the 1st variable indicted. Default is FALSE.
 #' @param useNA Whether to include not annotated cells or not (labelled as "NA"). Can be "no", "ifany", or "always". See \code{?table} for more information. Default is "ifany".
 #' @param type Type of plot to render. Either "tile" (default) as a confusion matrices or "barplot".
+#' @param xlab Label for x-axis
+#' @param ylab Label for y-axis
+#' @param plot.title Plot title
 
-#' @importFrom dplyr mutate group_by distinct
-#' @importFrom ggplot2 aes geom_point geom_tile geom_col scale_fill_gradient labs geom_label theme
-#' @importFrom cowplot theme_cowplot
-#' @importFrom data.table rbindlist
+#' @importFrom ggplot2 aes geom_point geom_tile geom_col scale_fill_gradient labs geom_label theme theme_bw element_text
 
 #' @return Plots to evaluate the correspondence between different classification methods.
-#' @export plot.confusion.matrix
+#' @export plot.confusion
 #'
 
-plot.confusion.matrix <- function(hit.object = NULL,
-                                  var.1 = NULL,
-                                  var.2 = NULL,
-                                  relative = FALSE,
-                                  useNA = "ifany",
-                                  type = "tile") {
+plot.confusion <- function(object = NULL,
+                           var.1 = NULL,
+                           var.2 = NULL,
+                           relative = FALSE,
+                           useNA = "ifany",
+                           type = "tile",
+                           xlab = NULL,
+                           ylab = NULL,
+                           plot.title = "") {
 
-  if (is.null(hit.object)) {
-    stop("Please provide a single one or a list of HiT object")
+  if (is.null(object)) {
+    stop("Please provide a Seurat object or its metadata")
   }
 
-  if (!is.list(hit.object)) {
-    hit.object <- list(hit.object)
+  if (inherits(object, "Seurat")) {
+    data <- object@meta.data
+  } else if (is.data.frame(object)) {
+    data <- object
+  } else {
+    stop("Please provide a Seurat object or its metadata")
   }
 
-  if (suppressWarnings(!all(lapply(hit.object, function(x) {inherits(x, "HiT")})))) {
-    stop("Not all components of the list are HiT objects.")
+  legend.title <- "Number of cells"
+  data <- as.data.frame(data)
+
+
+  if(is.null(xlab)){
+    xlab <-  var.1
+  }
+  if(is.null(ylab)){
+    ylab <-  var.2
   }
 
-  #give name to list of hit objects
-  for (v in seq_along(hit.object)) {
-    if (is.null(names(hit.object)[[v]]) ||
-        is.na(names(hit.object)[[v]])) {
-      names(hit.object)[[v]] <- paste0("Sample", v)
-    }
-  }
-
-  # join vars to plot
   vars <- c(var.1, var.2)
-
   if (any(is.null(vars))) {
-    stop("Please provide 2 cell type classification labels common in all elements of the list of Hit objects: var.1 and var.2")
+    stop("Please provide 2 cell type classification columns in metadata as var.1 and var.2")
   }
 
-  if (suppressWarnings(!all(lapply(hit.object,
-                                   function(x) {
-                                     any(vars %in% names(x@metadata))
-                                   })))) {
-    stop("Not all supplied HiT object contain ",
+  if (any(!vars %in% names(data))){
+    stop("Not all classification variables: ",
          paste(vars, collapse = ", "),
-         " group.by elements in their metadata")
+         "were found in metadata")
   }
-
-
-  # build all table
-  data <- lapply(names(hit.object), function(y) {
-    sel <- names(hit.object[[y]]@metadata) %in% vars
-    a <- hit.object[[y]]@metadata[,sel, drop = FALSE] %>%
-      dplyr::mutate(hitme.sample = y)
-    return(a)
-  }) %>%
-    data.table::rbindlist(fill = TRUE) %>%
-    as.data.frame()
 
   # Get counts for every group
   pz <- table(data[[var.1]],
               data[[var.2]],
               useNA = useNA)
-  if (relative) {
-    pz <- pz %>% prop.table(margin = 1)
-    legend <- "Relative counts"
-  } else {
-    legend <- "Absolute counts"
+
+  if(relative){
+    pz <- prop.table(pz, margin = 1) %>%
+      round(digits = 2)
+    legend.title <- "Proportion of cells"
   }
 
 
   if (tolower(type) == "tile") {
-    plot <- pz %>% as.data.frame() %>%
+    plot <- pz %>%
+      as.data.frame() %>%
       ggplot2::ggplot(ggplot2::aes(Var1, Var2,
                                    fill = Freq)) +
       ggplot2::geom_tile() +
-      ggplot2::scale_fill_gradient(name = legend,
+      ggplot2::scale_fill_gradient(name = legend.title,
                                    low = "#FFFFC8",
                                    high = "#7D0025") +
-      ggplot2::labs(x = var.1,
-                    y = var.2) +
+      ggplot2::labs(x = xlab,
+                    y = ylab,
+                    title = plot.title) +
       ggplot2::geom_label(ggplot2::aes(label = ifelse(Freq > 0,
                                                       round(Freq, 1),
                                                       NA)),
                           color = "white",
                           alpha = 0.6,
-                          fill = "black") +
-      cowplot::theme_cowplot()
+                          fill = "black")
+
   } else if (grepl("bar|col", type, ignore.case = TRUE)) {
-    plot <- pz %>% as.data.frame() %>%
+    plot <- pz %>%
+      as.data.frame() %>%
       ggplot2::ggplot(ggplot2::aes(Var1, Freq,
                                    fill = Var2)) +
-      ggplot2::labs(x = var.1,
-                    y = legend,
-                    fill = var.2) +
-      ggplot2::geom_col() +
-      ggplot2::theme_bw()
+      ggplot2::labs(x = xlab,
+                    y = legend.title,
+                    fill = ylab,
+                    title = plot.title) +
+      ggplot2::geom_col()
   }
 
   plot <- plot +
+    theme_bw() +
     ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45,
                                                        hjust = 1,
                                                        vjust = 1))
@@ -937,10 +608,10 @@ plot.confusion.matrix <- function(hit.object = NULL,
 #' @importFrom ggpubr ggarrange annotate_figure
 
 #' @return Plots to evaluate the gene expression of scGate models
-#' @export plot_gene_gating
+#' @export plot.geneGating
 #'
 
-plot_gene_gating <- function(object = NULL,
+plot.geneGating <- function(object = NULL,
                              scGate.model = NULL,
                              group.by = NULL,
                              split.by = NULL) {
@@ -950,8 +621,7 @@ plot_gene_gating <- function(object = NULL,
   }
 
   if (is.list(object) && !is.null(split.by)) {
-    stop("split.by only supported for a single Seurat object, not a list.\n
-         Merge list before running HiTME")
+    stop("split.by only supported for a single Seurat object, not a list.\n")
   }
 
   if (is.null(scGate.model)) {
@@ -960,6 +630,16 @@ plot_gene_gating <- function(object = NULL,
 
   if (!is.list(scGate.model)) {
     scGate.model <- list("scGate_model" = scGate.model)
+  }
+
+  if (!is.null(group.by)) {
+    if (!group.by %in% names(object@meta.data)) {
+      stop(paste("group.by argument: ",
+                 group.by,
+                 " is not a metadata column in this Seurat object"))
+    }
+  } else {
+    group.by <- "orig.ident"
   }
 
   # split object into a list if indicated
@@ -977,15 +657,7 @@ plot_gene_gating <- function(object = NULL,
 
   }
 
-  if (!is.null(group.by)) {
-    if (!group.by %in% names(object@meta.data)) {
-      stop(paste("group.by argument: ",
-                 group.by,
-                 " is not a metadata column in this Seurat object"))
-    }
-  } else {
-    group.by <- "orig.ident"
-  }
+
 
   # if object is unique turn into a list
   if (!is.list(object)) {
@@ -1077,74 +749,3 @@ plot_gene_gating <- function(object = NULL,
 }
 
 
-
-#' Save object list to disk, in parallel
-#'
-#' @param obj.list A list of Seurat objects
-#' @param dir File location
-#' @param ncores Number of CPU cores to use for parallelization
-#' @param progressbar Whether to show a progressbar or not
-#'
-#' @importFrom BiocParallel MulticoreParam bplapply
-#' @importFrom parallelly availableCores
-#' @return A list of Seurat objects saved to disk as separate .rds files
-#' @export save_objs
-#'
-#' @examples
-#' save_objs(obj.list, "./output/samples")
-
-save_objs <- function(obj.list,
-                      dir,
-                      ncores = parallelly::availableCores() - 2,
-                      progressbar = TRUE) {
-
-  BiocParallel::bplapply(
-    X = names(obj.list),
-    BPPARAM =  BiocParallel::MulticoreParam(workers = ncores,
-                                            progressbar = progressbar),
-    function(x) {
-      file_name <- file.path(dir, sprintf("%s.rds", x))
-      saveRDS(obj.list[[x]], file_name)
-    })
-}
-
-
-
-#' Read all .rds files in a directory and return list of Seurat objects, in parallel
-#'
-#' @param dir File location
-#' @param file.list A list of files (with full pathname)
-#' @param ncores Number of CPU cores to use for parallelization
-#' @param progressbar Whether to show a progressbar or not
-#'
-#' @importFrom BiocParallel MulticoreParam bplapply
-#' @importFrom stringr str_remove_all
-#' @importFrom parallelly availableCores
-#' @return A list of Seurat objects read into R
-#' @export read_objs
-#'
-#' @examples
-#' obj.list <- read_objs("./output/samples")
-
-read_objs <- function(dir = NULL,
-                      file.list = NULL,
-                      ncores = parallelly::availableCores() - 2,
-                      progressbar = TRUE) {
-
-  if (!is.null(dir) & is.null(file.list)) {
-    file_names <- list.files(dir)
-    file_paths <- file.path(dir, file_names)
-  } else if (is.null(dir) & !is.null(file.list)) {
-    file_paths <- file.list[endsWith(files, '.rds')]
-    file_names <- gsub("^.*/", "", file_paths)
-  }
-  obj.list <- BiocParallel::bplapply(
-    X = file_paths,
-    BPPARAM =  BiocParallel::MulticoreParam(workers = ncores,
-                                            progressbar = progressbar),
-    function(x) {
-      readRDS(file.path(x))
-    })
-  names(obj.list) <- stringr::str_remove_all(file_names, '.rds')
-  return(obj.list)
-}

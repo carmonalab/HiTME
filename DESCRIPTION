@@ -31,22 +31,18 @@ biocViews:
 Depends: R (>= 4.3.1)
 Imports:
   scGate (>= 1.6.1),
+  UCell (>=2.7.2),
   ProjecTILs (>= 3.3.1),
-  SignatuR (>= 0.1.2),
+  SignatuR (>= 0.2.1),
   Seurat (>= 5.0.0),
   SeuratObject (>= 5.0.0),
   BiocParallel (>= 1.34.2),
-  parallelly (>= 1.36.0),
   dplyr (>= 1.1.4),
   ggplot2 (>= 3.4.4),
-  patchwork (>= 1.2.0),
   tibble (>= 3.2.1),
   data.table (>= 1.14.8),
   biomaRt (>= 2.56.1),
-  stats(>= 4.4.0),
-  ggpubr(>= 0.6.0),
-  cowplot (>= 1.1.1),
-  stringr (>= 1.5.1)
+  ggpubr(>= 0.6.0)
 Suggests: 
     knitr,
     rmarkdown,

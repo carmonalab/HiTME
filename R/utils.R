@@ -3,32 +3,34 @@
 ProjecTILs.classifier.multi <- function(object,
                                         ref.maps,
                                         bparam = NULL,
-                                        layer1_link = "CellOntology_ID") {
+                                        layer1_link = "CellOntology_ID",
+                                        verbose = TRUE) {
 
   # count how many cells are found by scGate for each map reference
   if (layer1_link %in% names(object@meta.data)) {
     filter.cells <- F
-    map.celltypes <- lapply(ref.maps,
-                            function(x) {
-                              ct <- x@misc$layer1_link
-                              nrow(object@meta.data[object@meta.data[[layer1_link]] %in% ct,])
-                            })
+    map.celltypes.count <- lapply(ref.maps,
+                                  function(x) {
+                                    ct <- x@misc$layer1_link
+                                    nrow(object@meta.data[object@meta.data[[layer1_link]] %in% ct,])
+                                  })
 
-    present <- names(ref.maps[map.celltypes > 1])
+    present <- names(ref.maps[map.celltypes.count > 1])
     no.present <- names(ref.maps)[!names(ref.maps) %in% present]
 
     if (length(present) == 0) {
-      message(paste("No cells linked to reference maps found by", layer1_link,
-                    ".\nNot running Projectils"))
+      if(verbose){message(paste("No cells linked to reference maps found by",
+                                layer1_link,
+                                ".\nNot running Projectils"))}
       run <- FALSE
     } else {
       run <- TRUE
-      message("Performing Projectils classification for ",
-              paste(present, collapse = ", "))
+      if(verbose){message("Performing Projectils classification for ",
+                          paste(present, collapse = ", "))}
 
       if (length(ref.maps) != length(present)) {
-        message("Not doing mapping for ",
-                paste(no.present, collapse = ", ") )
+        if(verbose){message("Not doing mapping for ",
+                            paste(no.present, collapse = ", ") )}
         ref.maps <- ref.maps[present]
       }
     }
@@ -36,8 +38,8 @@ ProjecTILs.classifier.multi <- function(object,
   } else {
     filter.cells <- TRUE
 
-    message("Not scGate classification found in this object\n",
-            "Running default scGate (or layer1 classification) filtering within Projectils)")
+    if(verbose){message("Not scGate classification found in this object\n",
+                        "Running default scGate (or layer1 classification) filtering within Projectils)")}
     run <- TRUE
   }
 
@@ -59,7 +61,7 @@ ProjecTILs.classifier.multi <- function(object,
           }
 
           if (ncol(subset.object)>0) {
-            message("\nRunning Projectils for ", m, " reference")
+            if(verbose){message("\nRunning Projectils for ", m, " reference")}
             # it is mandatory to make run in serial (ncores = 1 and BPPARAM SerialParam)
             subset.object.pred <- ProjecTILs:::classifier.singleobject(subset.object,
                                                                        ref = ref.maps[[m]],
@@ -69,8 +71,8 @@ ProjecTILs.classifier.multi <- function(object,
             return(subset.object.pred)
 
           } else {
-            message("Not Running Projectils classifier for reference map",
-                    paste(map.celltype, collapse = ", "), ". No cells found")
+            if(verbose){message("Not Running Projectils classifier for reference map",
+                                paste(map.celltype, collapse = ", "), ". No cells found")}
           }
         }
       )
@@ -160,8 +162,8 @@ set_parallel_params <- function(ncores,
     ncores <- 1
   }
 
-  if (ncores > parallelly::availableCores()) {
-    ncores <- parallelly::availableCores()
+  if (ncores > parallel::detectCores()) {
+    ncores <- parallel::detectCores()
     message("Using more cores available in this computer, reducing number of cores to ", ncores)
   }
 
@@ -171,10 +173,86 @@ set_parallel_params <- function(ncores,
       param <- BiocParallel::MulticoreParam(workers =  ncores,
                                             progressbar = progressbar)
     } else {
-      param <- BiocParallel::SerialParam()
+      param <- BiocParallel::SerialParam(progressbar = progressbar)
     }
   } else {
     param <- bparam
   }
   return(param)
+}
+
+
+# adapt vectors or list for signatures
+adapt_vector <- function(vector,
+                         prefix){
+
+  if (!is.null(vector)) {
+    # convert to list if not
+    if (!is.list(vector)) {
+      vector <- list(vector)
+    }
+
+    # if some elements of list is not named, name it
+    for (v in seq_along(vector)) {
+      if (is.null(names(vector)[[v]]) ||
+          is.na(names(vector)[[v]]) ||
+          names(vector)[[v]] == "") {
+        names(vector)[[v]] <- paste0(prefix, v)
+      }
+    }
+  }
+  return(vector)
+}
+
+
+# combine different tags in different columns for each row
+combine_tags <- function(row,
+                         default = "resting",
+                         collapse = NULL){
+  r <- unique(row)
+  # remove default value, only return if all are default
+  if(length(r)>1){
+    r <- r[r != default]
+  }
+
+  # option to collapse
+  if(!is.null(collapse)){
+    r <- paste(r,
+               collapse = collapse)
+  }
+
+  return(r)
+}
+
+
+# accommodate layer3 classification
+get.layer3 <- function(s,
+                       ann.col = "layer2",
+                       sigs.cols,
+                       layer3.threshold = 0.2,
+                       default.label = "resting"){
+
+  s@meta.data <- s@meta.data %>%
+    tibble::rownames_to_column("cell.id") %>%
+    dplyr::mutate(across(all_of(sigs.cols),
+                         ~ ifelse(. > layer3.threshold,
+                                  gsub("_UCell", "", cur_column()),
+                                  default.label),
+                         .names = "is.pureL3_{col}")
+    ) %>%
+    dplyr::rowwise() %>%
+    dplyr::mutate(
+      layer3_annotation = combine_tags(dplyr::c_across(dplyr::starts_with("is.pureL3_")),
+                                       collapse = "_",
+                                       default = default.label),
+      layer3 = ifelse(!is.na(.data[[ann.col]]),
+                      paste(c(as.character(.data[[ann.col]]),
+                              layer3_annotation),
+                            collapse = "_"),
+                      NA)
+    ) %>%
+    dplyr::ungroup() %>%
+    tibble::column_to_rownames("cell.id")
+
+  return(s)
 }
