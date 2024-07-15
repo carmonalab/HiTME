@@ -62,6 +62,7 @@ Seurat object with additional metadata showing cell type classification.
 \description{
 The function takes as input Seurat objects (or list of them).
 These should be split by sample to avoid batch effects, or split internally in by indicating the parameter \code{split.by}.
+\if{html}{\out{<br>}}
 This function firstly runs \link[scGate]{scGate} (easily customizable) marker-based classification, resulting in a coarse-grained cell type classification (CD4T, B cell, Dendritic cell...).
 Next, it runs for each broad cell type \link[ProjecTILs]{ProjecTILs} for a finer cell type classification (CD4+ TFH, Tex CD8+, cDC1...) based on cell mapping onto expert-curated single-cell reference maps.
 }
