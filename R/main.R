@@ -2,7 +2,7 @@
 #'
 #'The function takes as input Seurat objects (or list of them).
 #'These should be split by sample to avoid batch effects, or split internally in by indicating the parameter \code{split.by}.
-
+#'<br>
 #'This function firstly runs \link[scGate]{scGate} (easily customizable) marker-based classification, resulting in a coarse-grained cell type classification (CD4T, B cell, Dendritic cell...).
 #'Next, it runs for each broad cell type \link[ProjecTILs]{ProjecTILs} for a finer cell type classification (CD4+ TFH, Tex CD8+, cDC1...) based on cell mapping onto expert-curated single-cell reference maps.
 #'
@@ -112,16 +112,13 @@ Run.HiTME <- function(object = NULL,
   } else {
 
     species <- tolower(species)
-    if (!species == "human") {
-      if (grepl("homo|sap|huma", species)) {
-        species <- "human"
-        sig.species <- "Hs"
-      }
-    } else if (!species == "mouse") {
-      if (grepl("mice|mus", species)) {
-        species <- "mouse"
-        sig.species <- "Mm"
-      }
+    if (grepl("homo|sap|huma", species)) {
+      species <- "human"
+      sig.species <- "Hs"
+    }
+    else if (grepl("mice|mus", species)) {
+      species <- "mouse"
+      sig.species <- "Mm"
     } else {
       stop("Only supported species for default scGate models and SignatuR signatures are human and mouse. \n
          If other species are studied, set species = NULL and provide models for scGate.model and additional.signatures")
@@ -223,9 +220,9 @@ Run.HiTME <- function(object = NULL,
 
   # Instance if we want to run additional signatures but not scGate
   if (is.null(scGate.model) &&
-      !is.null(additional.signatures)) {
+      !is.null(c(additional.signatures, layer3))) {
 
-    if(verbose){message("### Running additional Signatures but not Running scGate classification\n")}
+    if(verbose){message("### Running Gene Signatures but not Running scGate classification\n")}
 
     object <- lapply(
       X = object,
@@ -307,6 +304,8 @@ Run.HiTME <- function(object = NULL,
   # Add layer 3
   if(!is.null(layer3)){
 
+
+
     if(verbose){message("### Running Layer3 cell types\n")}
 
     # get signatures for indicated layer3
@@ -322,6 +321,8 @@ Run.HiTME <- function(object = NULL,
                                 layer3.threshold = layer3.threshold)
 
                    })
+  } else {
+    if(verbose){message("Not running Layer3 cell types as no signatures were indicated\n")}
   }
 
 
@@ -537,7 +538,7 @@ plot.confusion <- function(object = NULL,
   if (any(!vars %in% names(data))){
     stop("Not all classification variables: ",
          paste(vars, collapse = ", "),
-         "were found in metadata")
+         " were found in metadata")
   }
 
   # Get counts for every group
