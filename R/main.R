@@ -31,7 +31,7 @@
 #' @import SignatuR
 #' @import scGate
 #' @import ProjecTILs
-#' @importFrom Seurat SplitObject merge
+#' @importFrom Seurat SplitObject
 #' @importFrom data.table rbindlist setDT
 #'
 #' @return Seurat object with additional metadata showing cell type classification.
