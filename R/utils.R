@@ -39,7 +39,7 @@ ProjecTILs.classifier.multi <- function(object,
     filter.cells <- TRUE
 
     if(verbose){message("Not scGate classification found in this object\n",
-                        "Running default scGate (or layer1 classification) filtering within Projectils)")}
+                        "Running default scGate (or layer1 classification) filtering within Projectils for all provided reference maps)")}
     run <- TRUE
   }
 
@@ -234,7 +234,7 @@ get.layer3 <- function(s,
 
   s@meta.data <- s@meta.data %>%
     tibble::rownames_to_column("cell.id") %>%
-    dplyr::mutate(across(all_of(sigs.cols),
+    dplyr::mutate(dplyr::across(dplyr::all_of(sigs.cols),
                          ~ ifelse(. > layer3.threshold,
                                   gsub("_UCell", "", cur_column()),
                                   default.label),
