@@ -68,24 +68,16 @@ Next, it runs for each broad cell type \link[ProjecTILs]{ProjecTILs} for a finer
 }
 \examples{
 library(ProjecTILs)
+library(HiTME)
 
-path_data <- file.path("~", "Dropbox", "CSI", "Standardized_SingleCell_Datasets", "ZhangY_2022_34653365", "output", "test")
+# get reference maps for human
+ref.maps <- get.reference.maps(collection  = "human")
 
-# Define scGate model
-scGate_models_DB <- scGate::get_scGateDB(branch = "master", verbose = TRUE, force_update = TRUE)
-models.TME <- scGate_models_DB$human$TME_HiRes
+# Run HiTME with default settings, specifying the human ref.maps
+# Internally default scGate models and gene programs signatures will be fetched
 
-# Load ProjecTILs reference maps
-path_ref <- "~/Dropbox/CSI/reference_atlases"
-ref.maps <- list(CD8 = load.reference.map(file.path(path_ref, "CD8T_human_ref_v1.rds")),
-                 CD4 = load.reference.map(file.path(path_ref, "CD4T_human_ref_v2.rds")),
-                 DC = load.reference.map(file.path(path_ref, "DC_human_ref_v1.rds")),
-                 MoMac = load.reference.map(file.path(path_ref, "MoMac_human_v1.rds")))
-
-
-Run.HiTME(object = seurat.object,
-          scGate.model = models.TME,
-          ref.maps = ref.maps,
-          ncores = 6)
+ query <- Run.HiTME(object = query,
+                    ref.maps = ref.maps[["human"]]
+                    )
 
 }
