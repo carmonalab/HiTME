@@ -742,3 +742,224 @@ plot.geneGating <- function(object = NULL,
 }
 
 
+
+
+#' Infer the sex of single-cell transcriptomic data based on the expression of X and Y chromosome genes
+#'
+#' This function takes single-cell (Seurat object or count matrix) transcriptomics data and returns the inferred sex of the cells and individuals samples provided.
+#' Given the sparsity of single-cell RNA-seq data inferring of the sex in many cells is not possible (NA are returned), however, sex inference per sample is highly confident based on pseudobulk data.
+#'<br>
+#'Currently only suppoted for human data.
+#'
+#'
+#' @param object Either one or a list of Seurat objects or count matrix (matrix or dcGMatrix)
+#' @param split.by Split by sample based on a variable of metadata, either a metadata columns for Seurat object (category) or a vector indicating the sample procedence for each cell
+#' @param return.Seurat return Seurat object or dataframe summarizing sex imputation. If Seurat object is provided by default Seurat object with additional metadata with infered sex on cell- and sample-wise is returned. If not Seurat object are provided, but matrices, by default dataframe with results are returned
+#' @param ncores The number of cores to use, by default all available cores minus 2 are used.
+#' @param bparam A \link[BiocParallel]{bpparam} object that tells Run.HiTME how to parallelize. If provided, it overrides the `ncores` parameter.
+#' @param progressbar Whether to show a progress bar or not
+#' @param verbose Verbose output, by default output messsage are returned
+
+#' @import scGate
+#' @importFrom Seurat CreateSeuratObject AggregateExpression SplitObject
+#' @importFrom dplyr %>% left_join mutate select everything
+
+#' @return List of genes for each GO accession requested. If named vector is provided, lists output are named as GO:accession.ID_named (e.g. "GO:0004950_cytokine_receptor_activity")
+#' @export infer.Sex
+
+
+infer.Sex <- function(object = NULL,
+                      split.by = NULL,
+                      return.Seurat = TRUE,
+                      ncores = parallel::detectCores() - 2,
+                      bparam = NULL,
+                      progressbar = TRUE,
+                      verbose = TRUE) {
+
+  if (is.null(object)) {
+    stop("Please provide a Seurat object, count matrix or a list of them")
+  }
+
+  # check if objects are Seurat or count matrices
+
+  is_valid_object <- function(obj) {
+    is_valid <- function(x) {
+      inherits(x, "Seurat") || is.matrix(x) || inherits(x, "dgCMatrix")
+    }
+
+    if (is.list(obj)) {
+      return(all(sapply(obj, is_valid)))
+    } else {
+      return(is_valid(obj))
+    }
+  }
+
+  if(suppressWarnings(!is_valid_object(object))){
+    stop("Please provide a Seurat object, count matrix or a list of them")
+  }
+
+
+  if (!is.null(split.by) && is.list(object)) {
+    stop("split.by only supported for a single object, not a list.\n
+         Merge list of objects before running infer.Sex or set split.by = NULL")
+  }
+
+  if(!is.null(split.by)){
+    if(!inherits(object, "Seurat") && ncol(object) != length(split.by)){
+      stop("When providing matrix or dgCMatrix, if willing to split by sample, a vector with the same length of the number of cells (number columns of the matrix) should be provided")
+    }
+
+    if(inherits(object, "Seurat")){
+      if (!split.by %in% names(object@meta.data)) {
+        stop(paste("split.by argument: ",
+                   split.by, " is not a metadata column in this Seurat object"))
+      }
+    }
+  }
+
+
+  # set parallelization parameters
+  param <- set_parallel_params(ncores = ncores,
+                               bparam = bparam,
+                               progressbar = progressbar)
+
+
+  if(!inherits(object, "Seurat") && !is.list(object)){
+    object <- Seurat::CreateSeuratObject(counts = object)
+    object <- Seurat::NormalizeData(object)
+
+    # add metadata if provided
+    if(!is.null(split.by)){
+      object@meta.data[["sex.splitby"]] <- split.by
+      split.by <- "sex.splitby"
+    }
+  }
+
+  if(!is.list(object) && !is.null(split.by)){
+    object <- Seurat::SplitObject(object,
+                                  split.by = split.by)
+  }
+
+
+
+  # if object is unique, turn into Seurat if matrix, and turn into a list
+  if (!is.list(object)) {
+    # convert into a length=1 list to run
+    object <- list(object)
+  }
+
+  # name objects
+  object <- adapt_vector(object,
+                         prefix = "sample_")
+
+  # Load male and female scGate models
+  suppressMessages({
+  models <- scGate::get_scGateDB()
+  })
+  sigs <- list(Male = models$human$generic$Male,
+               Female = models$human$generic$Female)
+
+  if(verbose){message("Computing sex inference per cell...\n")}
+
+  # Run scGate to get inference per cell
+  object <- lapply(object,
+                   function(s){
+                     # avoid overwritting scGate annotations
+                     if("scGate_multi" %in% names(s@meta.data)){
+                       scgate.col <- s@meta.data[["scGate_multi"]]
+                     } else {
+                       scgate.col <- NULL
+                     }
+
+                     s <- scGate::scGate(s,
+                                         model = sigs,
+                                         smooth.decay = 1,
+                                         BPPARAM = param,
+                                         multi.asNA = T,
+                                         verbose = verbose,
+                                         return.CellOntology = F)
+
+                     s@meta.data[["sex.cell"]] <- s@meta.data[["scGate_multi"]]
+                     s@meta.data[["scGate_multi"]] <- scgate.col
+
+                     return(s)
+                   })
+
+
+  if(verbose){message("Computing sex inference per sample...\n")}
+
+  # AggregateExpression requires some group.by
+  # let's add it artificially
+  if(is.null(split.by)){
+    for(a in names(object)){
+      object[[a]]@meta.data[["sex.splitby"]] <- a
+    }
+    split.by <- "sex.splitby"
+  }
+
+
+  # Compute pseudobulk
+  suppressMessages({
+  pseudobulk <- bplapply(names(object),
+                         BPPARAM = param,
+                         function(s){
+
+                           # Compute pseudobulk and get counts
+                           AggregateExpression(object[[s]],
+                                               group.by = split.by)[["RNA"]]
+                         }
+  )
+  })
+
+  names(pseudobulk) <- names(object)
+
+  # infer sex on pseudobulk
+  ps.sex <- bplapply(pseudobulk,
+                     BPPARAM = param,
+                     function(s){
+                       pseudobulk_infer.Sex(s)
+                     })
+
+
+  if(return.Seurat){
+    sex.res <- bplapply(names(object),
+                        BPPARAM = param,
+                        function(s){
+                          seu <- object[[s]]
+                          sex <- as.data.frame(ps.sex[[s]])
+                          sex[[split.by]] <- s
+
+                          seu@meta.data <- seu@meta.data %>%
+                            left_join(., sex, by = split.by)
+
+                          # remove extra column added for linking
+                          seu@meta.data[["sex.splitby"]] <- NULL
+
+                          return(seu)
+
+                        })
+    names(sex.res) <- names(object)
+
+    #if list of length 1, do not return list
+    if(length(sex.res) == 1){
+      sex.res <- sex.res[[1]]
+    }
+
+
+  } else {
+    sex.res <- bplapply(names(ps.sex),
+                        BPPARAM = param,
+                        function(s){
+                          sex <-  as.data.frame(ps.sex[[s]]) %>%
+                            dplyr::mutate(Sample = s) %>%
+                            dplyr::select(Sample, dplyr::everything())
+                        }
+    )  %>%
+      data.table::rbindlist() %>%
+      as.data.frame()
+  }
+
+    return(sex.res)
+}
+
+
