@@ -154,9 +154,9 @@ StandardizeCellNames <- function(cell.names, dictionary = NULL) {
 
 
 
-set_parallel_params <- function(ncores,
-                                bparam,
-                                progressbar)
+set_parallel_params <- function(ncores = NULL,
+                                bparam = NULL,
+                                progressbar = TRUE)
 {
   if (is.null(ncores)) {
     ncores <- 1
@@ -164,14 +164,20 @@ set_parallel_params <- function(ncores,
 
   if (ncores > parallel::detectCores()) {
     ncores <- parallel::detectCores()
-    message("Using more cores available in this computer, reducing number of cores to ", ncores)
+    message("Using more cores available in this computer, reducing number of cores to ",
+            ncores)
   }
 
   # set parallelization parameters
   if (is.null(bparam)) {
     if (ncores > 1) {
-      param <- BiocParallel::MulticoreParam(workers =  ncores,
-                                            progressbar = progressbar)
+      if(.Platform$OS.type == "windows"){
+        param <- BiocParallel::SnowParam(workers=ncores,
+                                         progressbar = progressbar)
+      } else {
+        param <- BiocParallel::MulticoreParam(workers =  ncores,
+                                              progressbar = progressbar)
+      }
     } else {
       param <- BiocParallel::SerialParam(progressbar = progressbar)
     }
