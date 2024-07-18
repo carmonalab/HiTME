@@ -262,3 +262,44 @@ get.layer3 <- function(s,
 
   return(s)
 }
+
+
+# takes pseudobulk or bulk matrix and make ratios of sex genes
+pseudobulk_infer.Sex <- function(matrix,
+                                 male.gene = "RPS4Y1",
+                                 female.gene = "XIST",
+                                 log2.threshold = 1){
+  female.counts <- 1
+  male.counts <- 1
+
+  # add 1 to mantain ratio in case not found
+  try({
+    female.counts <- matrix[female.gene,] + 1
+  })
+  try({
+    male.counts <- matrix[male.gene,] + 1
+  })
+
+  marker_ratio <- log2(female.counts/male.counts)
+
+  sample.sex <- ifelse(abs(marker_ratio) < log2.threshold,
+                       NA,
+                       ifelse(marker_ratio > 0,
+                              "female",
+                              "male"
+                       )
+  )
+
+  ret <- list("A" = male.counts,
+              "B" = female.counts,
+              log2_female.male_ratio = marker_ratio,
+              sample.sex = sample.sex)
+
+  names(ret)[1:2] <- c(paste(male.gene, "pseudocounts"),
+                  paste(female.gene, "pseudocounts"))
+
+  return(ret)
+
+}
+
+
