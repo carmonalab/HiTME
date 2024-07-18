@@ -268,7 +268,7 @@ get.layer3 <- function(s,
 pseudobulk_infer.Sex <- function(matrix,
                                  male.gene = "RPS4Y1",
                                  female.gene = "XIST",
-                                 log2.threshold = 1){
+                                 log2.threshold = 3){
   female.counts <- 1
   male.counts <- 1
 
