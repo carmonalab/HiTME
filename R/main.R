@@ -304,15 +304,15 @@ Run.HiTME <- function(object = NULL,
     sigs.cols <- paste0(names(layer3), "_UCell")
 
     object <- BiocParallel::bplapply(X = object,
-                   BPPARAM = param,
-                   function(x){
+                                     BPPARAM = param,
+                                     function(x){
 
-                     get.layer3(x,
-                                ann.col = "layer2",
-                                sigs.cols = sigs.cols,
-                                layer3.threshold = layer3.threshold)
+                                       get.layer3(x,
+                                                  ann.col = "layer2",
+                                                  sigs.cols = sigs.cols,
+                                                  layer3.threshold = layer3.threshold)
 
-                   })
+                                     })
   } else {
     if(verbose){message("Not running Layer3 cell types as no signatures were indicated\n")}
   }
@@ -370,11 +370,11 @@ Run.HiTME <- function(object = NULL,
   )
 
   # if list is of 1, return object not list
-    if (length(object)==1) {
-      object <- object[[1]]
-    }
+  if (length(object)==1) {
+    object <- object[[1]]
+  }
 
-    return(object)
+  return(object)
 
 }
 
@@ -605,9 +605,9 @@ plot.confusion <- function(object = NULL,
 #'
 
 plot.geneGating <- function(object = NULL,
-                             scGate.model = NULL,
-                             group.by = NULL,
-                             split.by = NULL) {
+                            scGate.model = NULL,
+                            group.by = NULL,
+                            split.by = NULL) {
 
   if (is.null(object)) {
     stop("Please provide a Seurat object or a list of them")
@@ -854,37 +854,38 @@ infer.Sex <- function(object = NULL,
 
   # Load male and female scGate models
   suppressMessages({
-  models <- scGate::get_scGateDB()
+    models <- scGate::get_scGateDB()
   })
   sigs <- list(Male = models$human$generic$Male,
                Female = models$human$generic$Female)
 
-  if(verbose){message("Computing sex inference per cell...\n")}
+  if(return.Seurat){
+    if(verbose){message("Computing sex inference per cell...\n")}
 
-  # Run scGate to get inference per cell
-  object <- lapply(object,
-                   function(s){
-                     # avoid overwritting scGate annotations
-                     if("scGate_multi" %in% names(s@meta.data)){
-                       scgate.col <- s@meta.data[["scGate_multi"]]
-                     } else {
-                       scgate.col <- NULL
-                     }
+    # Run scGate to get inference per cell
+    object <- lapply(object,
+                     function(s){
+                       # avoid overwritting scGate annotations
+                       if("scGate_multi" %in% names(s@meta.data)){
+                         scgate.col <- s@meta.data[["scGate_multi"]]
+                       } else {
+                         scgate.col <- NULL
+                       }
 
-                     s <- scGate::scGate(s,
-                                         model = sigs,
-                                         smooth.decay = 1,
-                                         BPPARAM = param,
-                                         multi.asNA = T,
-                                         verbose = verbose,
-                                         return.CellOntology = F)
+                       s <- scGate::scGate(s,
+                                           model = sigs,
+                                           smooth.decay = 1,
+                                           BPPARAM = param,
+                                           multi.asNA = T,
+                                           verbose = verbose,
+                                           return.CellOntology = F)
 
-                     s@meta.data[["sex.cell"]] <- s@meta.data[["scGate_multi"]]
-                     s@meta.data[["scGate_multi"]] <- scgate.col
+                       s@meta.data[["sex.cell"]] <- s@meta.data[["scGate_multi"]]
+                       s@meta.data[["scGate_multi"]] <- scgate.col
 
-                     return(s)
-                   })
-
+                       return(s)
+                     })
+  }
 
   if(verbose){message("Computing sex inference per sample...\n")}
 
@@ -900,15 +901,15 @@ infer.Sex <- function(object = NULL,
 
   # Compute pseudobulk
   suppressMessages({
-  pseudobulk <- bplapply(names(object),
-                         BPPARAM = param,
-                         function(s){
+    pseudobulk <- bplapply(names(object),
+                           BPPARAM = param,
+                           function(s){
 
-                           # Compute pseudobulk and get counts
-                           AggregateExpression(object[[s]],
-                                               group.by = split.by)[["RNA"]]
-                         }
-  )
+                             # Compute pseudobulk and get counts
+                             AggregateExpression(object[[s]],
+                                                 group.by = split.by)[["RNA"]]
+                           }
+    )
   })
 
   names(pseudobulk) <- names(object)
@@ -959,7 +960,7 @@ infer.Sex <- function(object = NULL,
       as.data.frame()
   }
 
-    return(sex.res)
+  return(sex.res)
 }
 
 
