@@ -753,6 +753,8 @@ plot.geneGating <- function(object = NULL,
 #'
 #'
 #' @param object Either one or a list of Seurat objects or count matrix (matrix or dcGMatrix)
+#' @param infer_per_cell Whether to infer sex for each cell or not.
+#' @param infer_per_sample Whether to infer sex for each sample or not.
 #' @param split.by Split by sample based on a variable of metadata, either a metadata columns for Seurat object (category) or a vector indicating the sample procedence for each cell
 #' @param return.Seurat return Seurat object or dataframe summarizing sex imputation. If Seurat object is provided by default Seurat object with additional metadata with infered sex on cell- and sample-wise is returned. If not Seurat object are provided, but matrices, by default dataframe with results are returned
 #' @param ncores The number of cores to use, by default all available cores minus 2 are used.
@@ -771,6 +773,8 @@ plot.geneGating <- function(object = NULL,
 
 
 infer.Sex <- function(object = NULL,
+                      infer_per_cell = TRUE,
+                      infer_per_sample = TRUE,
                       split.by = NULL,
                       return.Seurat = TRUE,
                       ncores = parallel::detectCores() - 2,
@@ -861,69 +865,74 @@ infer.Sex <- function(object = NULL,
   sigs <- list(Male = models$human$generic$Male,
                Female = models$human$generic$Female)
 
-  if(return.Seurat){
-    if(verbose){message("Computing sex inference per cell...\n")}
+  if (infer_per_cell) {
+    if(return.Seurat){
+      if(verbose){message("Computing sex inference per cell...\n")}
 
-    # Run scGate to get inference per cell
-    object <- lapply(object,
-                     function(s){
-                       # avoid overwritting scGate annotations
-                       if("scGate_multi" %in% names(s@meta.data)){
-                         scgate.col <- s@meta.data[["scGate_multi"]]
-                       } else {
-                         scgate.col <- NULL
-                       }
+      # Run scGate to get inference per cell
+      object <- lapply(object,
+                       function(s){
+                         # avoid overwritting scGate annotations
+                         if("scGate_multi" %in% names(s@meta.data)){
+                           scgate.col <- s@meta.data[["scGate_multi"]]
+                         } else {
+                           scgate.col <- NULL
+                         }
 
-                       s <- scGate::scGate(s,
-                                           model = sigs,
-                                           smooth.decay = 1,
-                                           pos.thr = 0.2,
-                                           maxRank = 5000,
-                                           BPPARAM = param,
-                                           multi.asNA = T,
-                                           verbose = verbose,
-                                           return.CellOntology = F)
+                         s <- scGate::scGate(s,
+                                             model = sigs,
+                                             smooth.decay = 1,
+                                             pos.thr = 0.2,
+                                             maxRank = 5000,
+                                             BPPARAM = param,
+                                             multi.asNA = T,
+                                             verbose = verbose,
+                                             return.CellOntology = F)
 
-                       s@meta.data[["sex.cell"]] <- s@meta.data[["scGate_multi"]]
-                       s@meta.data[["scGate_multi"]] <- scgate.col
+                         s@meta.data[["sex.cell"]] <- s@meta.data[["scGate_multi"]]
+                         s@meta.data[["scGate_multi"]] <- scgate.col
 
-                       return(s)
-                     })
-  }
-
-  if(verbose){message("Computing sex inference per sample...\n")}
-
-  # AggregateExpression requires some group.by
-  # let's add it artificially
-  if(is.null(split.by)){
-    for(a in names(object)){
-      object[[a]]@meta.data[["sex.splitby"]] <- a
+                         return(s)
+                       })
     }
-    split.by <- "sex.splitby"
   }
 
 
-  # Compute pseudobulk
-  suppressMessages({
-    pseudobulk <- bplapply(names(object),
-                           BPPARAM = param,
-                           function(s){
+  if (infer_per_sample) {
+    if(verbose){message("Computing sex inference per sample...\n")}
 
-                             # Compute pseudobulk and get counts
-                             AggregateExpression(object[[s]],
-                                                 group.by = split.by)[["RNA"]]
-                           }
-    )
-  })
+    # AggregateExpression requires some group.by
+    # let's add it artificially
+    if(is.null(split.by)){
+      for(a in names(object)){
+        object[[a]]@meta.data[["sex.splitby"]] <- a
+      }
+      split.by <- "sex.splitby"
+    }
 
-  names(pseudobulk) <- names(object)
 
-  # infer sex on pseudobulk
-  ps.sex <- bplapply(pseudobulk,
-                     BPPARAM = param,
-                     function(s){
-                       pseudobulk_infer.Sex(s)
-                     })
+    # Compute pseudobulk
+    suppressMessages({
+      pseudobulk <- bplapply(names(object),
+                             BPPARAM = param,
+                             function(s){
+
+                               # Compute pseudobulk and get counts
+                               AggregateExpression(object[[s]],
+                                                   group.by = split.by)[["RNA"]]
+                             }
+      )
+    })
+
+    names(pseudobulk) <- names(object)
+
+    # infer sex on pseudobulk
+    ps.sex <- bplapply(pseudobulk,
+                       BPPARAM = param,
+                       function(s){
+                         pseudobulk_infer.Sex(s)
+                       })
+  }
 
 
   if(return.Seurat){

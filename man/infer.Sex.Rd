@@ -6,6 +6,8 @@
 \usage{
 infer.Sex(
   object = NULL,
+  infer_per_cell = TRUE,
+  infer_per_sample = TRUE,
   split.by = NULL,
   return.Seurat = TRUE,
   ncores = parallel::detectCores() - 2,
@@ -16,6 +18,10 @@ infer.Sex(
 }
 \arguments{
 \item{object}{Either one or a list of Seurat objects or count matrix (matrix or dcGMatrix)}
+
+\item{infer_per_cell}{Whether to infer sex for each cell or not.}
+
+\item{infer_per_sample}{Whether to infer sex for each sample or not.}
 
 \item{split.by}{Split by sample based on a variable of metadata, either a metadata columns for Seurat object (category) or a vector indicating the sample procedence for each cell}
 
