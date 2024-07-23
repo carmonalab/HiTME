@@ -927,33 +927,31 @@ infer.Sex <- function(object = NULL,
     names(pseudobulk) <- names(object)
 
     # infer sex on pseudobulk
-    ps.sex <- bplapply(pseudobulk,
-                       BPPARAM = param,
-                       function(s){
-                         pseudobulk_infer.Sex(s)
-                       })
+    ps.sex <- lapply(pseudobulk,
+                     function(s){
+                       pseudobulk_infer.Sex(s)
+                     })
   }
 
 
   if(return.Seurat){
-    sex.res <- bplapply(names(object),
-                        BPPARAM = param,
-                        function(s){
-                          seu <- object[[s]]
-                          sex <- as.data.frame(ps.sex[[s]])
-                          sex[[split.by]] <- s
+    sex.res <- lapply(names(object),
+                      function(s){
+                        seu <- object[[s]]
+                        sex <- as.data.frame(ps.sex[[s]])
+                        sex[[split.by]] <- s
 
-                          seu@meta.data <- seu@meta.data %>%
-                            tibble::rownames_to_column("rn") %>%
-                            left_join(., sex, by = split.by) %>%
-                            tibble::column_to_rownames("rn")
+                        seu@meta.data <- seu@meta.data %>%
+                          tibble::rownames_to_column("rn") %>%
+                          left_join(., sex, by = split.by) %>%
+                          tibble::column_to_rownames("rn")
 
-                          # remove extra column added for linking
-                          seu@meta.data[["sex.splitby"]] <- NULL
+                        # remove extra column added for linking
+                        seu@meta.data[["sex.splitby"]] <- NULL
 
-                          return(seu)
+                        return(seu)
 
-                        })
+                      })
     names(sex.res) <- names(object)
 
     #if list of length 1, do not return list
@@ -963,13 +961,12 @@ infer.Sex <- function(object = NULL,
 
 
   } else {
-    sex.res <- bplapply(names(ps.sex),
-                        BPPARAM = param,
-                        function(s){
-                          sex <-  as.data.frame(ps.sex[[s]]) %>%
-                            dplyr::mutate(Sample = s) %>%
-                            dplyr::select(Sample, dplyr::everything())
-                        }
+    sex.res <- lapply(names(ps.sex),
+                      function(s){
+                        sex <-  as.data.frame(ps.sex[[s]]) %>%
+                          dplyr::mutate(Sample = s) %>%
+                          dplyr::select(Sample, dplyr::everything())
+                      }
     )  %>%
       data.table::rbindlist() %>%
       as.data.frame()
