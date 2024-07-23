@@ -785,7 +785,7 @@ infer.Sex <- function(object = NULL,
   }
 
   if (!is.character(infer.level) ||
-      tolower(infer.level[1]) %in% c("sample", "cell", "both")) {
+      !tolower(infer.level[1]) %in% c("sample", "cell", "both")) {
     stop("Please check infer.level parameter.")
   }
   infer.level <- tolower(infer.level[1])
