@@ -144,11 +144,11 @@ Run.HiTME <- function(object = NULL,
 
 
   # Set up layer3 params
-  if(!is.null(layer3)){
+  if (!is.null(layer3)) {
     if (length(layer3) == 1 &&
         tolower(layer3) == "default") {
 
-      if(!is.null(species)){
+      if (!is.null(species)) {
         layer3 <- SignatuR::GetSignature(SignatuR::SignatuR[[sig.species]][["Programs"]])
         selected.SignatuR.programs <- c("IFN",
                                         "HeatShock",
@@ -174,13 +174,13 @@ Run.HiTME <- function(object = NULL,
         tolower(scGate.model) == "default" &&
         !is.null(species)) {
 
-      if(verbose){message("- Retrieving default HiTME scGate models for ", species, "\n")}
+      if (verbose) {message("- Retrieving default HiTME scGate models for ", species, "\n")}
 
       scGate.model.branch <- scGate.model.branch[1]
       scGate.model <- scGate::get_scGateDB(branch = scGate.model.branch,
                                            verbose = FALSE)[[species]][["HiTME"]]
     }
-    if(verbose){message("### Running scGate\n")}
+    if (verbose) {message("### Running scGate\n")}
 
     ## Run scGate
     object <- lapply(
@@ -214,7 +214,7 @@ Run.HiTME <- function(object = NULL,
   if (is.null(scGate.model) &&
       !is.null(c(additional.signatures, layer3))) {
 
-    if(verbose){message("### Running Gene Signatures but not Running scGate classification\n")}
+    if (verbose) {message("### Running Gene Signatures but not Running scGate classification\n")}
 
     object <- lapply(
       X = object,
@@ -240,7 +240,7 @@ Run.HiTME <- function(object = NULL,
       warning("Some or all reference maps are not a Seurat object, please provide reference maps as Seurat objects.\nNot running Projectils.")
     } else {
 
-      if(verbose){message("### Running Projectils\n")}
+      if (verbose) {message("### Running Projectils\n")}
 
       object <- lapply(
         X = object,
@@ -255,11 +255,11 @@ Run.HiTME <- function(object = NULL,
           return(x)
         }
       )
-      if(verbose){message("Finished Projectils\n###########################\n")}
+      if (verbose) {message("Finished Projectils\n###########################\n")}
     }
 
   } else {
-    if(verbose){message("Not running reference mapping as no reference maps were indicated.\n")}
+    if (verbose) {message("Not running reference mapping as no reference maps were indicated.\n")}
   }
 
 
@@ -294,18 +294,18 @@ Run.HiTME <- function(object = NULL,
   )
 
   # Add layer 3
-  if(!is.null(layer3)){
+  if (!is.null(layer3)) {
 
 
 
-    if(verbose){message("### Running Layer3 cell types\n")}
+    if (verbose) {message("### Running Layer3 cell types\n")}
 
     # get signatures for indicated layer3
     sigs.cols <- paste0(names(layer3), "_UCell")
 
     object <- BiocParallel::bplapply(X = object,
                                      BPPARAM = param,
-                                     function(x){
+                                     function(x) {
 
                                        get.layer3(x,
                                                   ann.col = "layer2",
@@ -314,7 +314,7 @@ Run.HiTME <- function(object = NULL,
 
                                      })
   } else {
-    if(verbose){message("Not running Layer3 cell types as no signatures were indicated\n")}
+    if (verbose) {message("Not running Layer3 cell types as no signatures were indicated\n")}
   }
 
 
@@ -515,10 +515,10 @@ plot.confusion <- function(object = NULL,
   data <- as.data.frame(data)
 
 
-  if(is.null(xlab)){
+  if (is.null(xlab)) {
     xlab <-  var.1
   }
-  if(is.null(ylab)){
+  if (is.null(ylab)) {
     ylab <-  var.2
   }
 
@@ -527,7 +527,7 @@ plot.confusion <- function(object = NULL,
     stop("Please provide 2 cell type classification columns in metadata as var.1 and var.2")
   }
 
-  if (any(!vars %in% names(data))){
+  if (any(!vars %in% names(data))) {
     stop("Not all classification variables: ",
          paste(vars, collapse = ", "),
          " were found in metadata")
@@ -538,7 +538,7 @@ plot.confusion <- function(object = NULL,
               data[[var.2]],
               useNA = useNA)
 
-  if(relative){
+  if (relative) {
     pz <- prop.table(pz, margin = 1) %>%
       round(digits = 2)
     legend.title <- "Proportion of cells"
@@ -753,8 +753,7 @@ plot.geneGating <- function(object = NULL,
 #'
 #'
 #' @param object Either one or a list of Seurat objects or count matrix (matrix or dcGMatrix)
-#' @param infer_per_cell Whether to infer sex for each cell or not.
-#' @param infer_per_sample Whether to infer sex for each sample or not.
+#' @param infer.level Whether to infer sex for cells, samples or both.
 #' @param split.by Split by sample based on a variable of metadata, either a metadata columns for Seurat object (category) or a vector indicating the sample procedence for each cell
 #' @param return.Seurat return Seurat object or dataframe summarizing sex imputation. If Seurat object is provided by default Seurat object with additional metadata with infered sex on cell- and sample-wise is returned. If not Seurat object are provided, but matrices, by default dataframe with results are returned
 #' @param ncores The number of cores to use, by default all available cores minus 2 are used.
@@ -773,8 +772,7 @@ plot.geneGating <- function(object = NULL,
 
 
 infer.Sex <- function(object = NULL,
-                      infer_per_cell = TRUE,
-                      infer_per_sample = TRUE,
+                      infer.level = c("sample", "cell", "both"),
                       split.by = NULL,
                       return.Seurat = TRUE,
                       ncores = parallel::detectCores() - 2,
@@ -785,6 +783,12 @@ infer.Sex <- function(object = NULL,
   if (is.null(object)) {
     stop("Please provide a Seurat object, count matrix or a list of them")
   }
+
+  if (!is.character(infer.level) ||
+      tolower(infer.level[1]) %in% c("sample", "cell", "both")) {
+    stop("Please check infer.level parameter.")
+  }
+  infer.level <- tolower(infer.level[1])
 
   # check if objects are Seurat or count matrices
 
@@ -800,7 +804,7 @@ infer.Sex <- function(object = NULL,
     }
   }
 
-  if(suppressWarnings(!is_valid_object(object))){
+  if (suppressWarnings(!is_valid_object(object))) {
     stop("Please provide a Seurat object, count matrix or a list of them")
   }
 
@@ -810,12 +814,12 @@ infer.Sex <- function(object = NULL,
          Merge list of objects before running infer.Sex or set split.by = NULL")
   }
 
-  if(!is.null(split.by)){
-    if(!inherits(object, "Seurat") && ncol(object) != length(split.by)){
+  if (!is.null(split.by)) {
+    if (!inherits(object, "Seurat") && ncol(object) != length(split.by)) {
       stop("When providing matrix or dgCMatrix, if willing to split by sample, a vector with the same length of the number of cells (number columns of the matrix) should be provided")
     }
 
-    if(inherits(object, "Seurat")){
+    if (inherits(object, "Seurat")) {
       if (!split.by %in% names(object@meta.data)) {
         stop(paste("split.by argument: ",
                    split.by, " is not a metadata column in this Seurat object"))
@@ -830,18 +834,18 @@ infer.Sex <- function(object = NULL,
                                progressbar = progressbar)
 
 
-  if(!inherits(object, "Seurat") && !is.list(object)){
+  if (!inherits(object, "Seurat") && !is.list(object)) {
     object <- Seurat::CreateSeuratObject(counts = object)
     object <- Seurat::NormalizeData(object)
 
     # add metadata if provided
-    if(!is.null(split.by)){
+    if (!is.null(split.by)) {
       object@meta.data[["sex.splitby"]] <- split.by
       split.by <- "sex.splitby"
     }
   }
 
-  if(!is.list(object) && !is.null(split.by)){
+  if (!is.list(object) && !is.null(split.by)) {
     object <- Seurat::SplitObject(object,
                                   split.by = split.by)
   }
@@ -865,15 +869,15 @@ infer.Sex <- function(object = NULL,
   sigs <- list(Male = models$human$generic$Male,
                Female = models$human$generic$Female)
 
-  if (infer_per_cell) {
-    if(return.Seurat){
-      if(verbose){message("Computing sex inference per cell...\n")}
+  if (infer.level == "cell" | infer.level == "both") {
+    if (return.Seurat) {
+      if (verbose) {message("Computing sex inference per cell...\n")}
 
       # Run scGate to get inference per cell
       object <- lapply(object,
-                       function(s){
+                       function(s) {
                          # avoid overwritting scGate annotations
-                         if("scGate_multi" %in% names(s@meta.data)){
+                         if ("scGate_multi" %in% names(s@meta.data)) {
                            scgate.col <- s@meta.data[["scGate_multi"]]
                          } else {
                            scgate.col <- NULL
@@ -898,13 +902,13 @@ infer.Sex <- function(object = NULL,
   }
 
 
-  if (infer_per_sample) {
-    if(verbose){message("Computing sex inference per sample...\n")}
+  if (infer.level == "sample" | infer.level == "both") {
+    if (verbose) {message("Computing sex inference per sample...\n")}
 
     # AggregateExpression requires some group.by
     # let's add it artificially
-    if(is.null(split.by)){
-      for(a in names(object)){
+    if (is.null(split.by)) {
+      for(a in names(object)) {
         object[[a]]@meta.data[["sex.splitby"]] <- a
       }
       split.by <- "sex.splitby"
@@ -914,7 +918,7 @@ infer.Sex <- function(object = NULL,
     # Compute pseudobulk
     suppressMessages({
       pseudobulk <- lapply(names(object),
-                           function(s){
+                           function(s) {
 
                              # Compute pseudobulk and get counts
                              AggregateExpression(object[[s]],
@@ -927,15 +931,15 @@ infer.Sex <- function(object = NULL,
 
     # infer sex on pseudobulk
     ps.sex <- lapply(pseudobulk,
-                     function(s){
+                     function(s) {
                        pseudobulk_infer.Sex(s)
                      })
   }
 
 
-  if(return.Seurat){
+  if (return.Seurat) {
     sex.res <- lapply(names(object),
-                      function(s){
+                      function(s) {
                         seu <- object[[s]]
                         sex <- as.data.frame(ps.sex[[s]])
                         sex[[split.by]] <- s
@@ -954,14 +958,14 @@ infer.Sex <- function(object = NULL,
     names(sex.res) <- names(object)
 
     #if list of length 1, do not return list
-    if(length(sex.res) == 1){
+    if (length(sex.res) == 1) {
       sex.res <- sex.res[[1]]
     }
 
 
   } else {
     sex.res <- lapply(names(ps.sex),
-                      function(s){
+                      function(s) {
                         sex <-  as.data.frame(ps.sex[[s]]) %>%
                           dplyr::mutate(Sample = s) %>%
                           dplyr::select(Sample, dplyr::everything())
