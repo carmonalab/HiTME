@@ -913,14 +913,13 @@ infer.Sex <- function(object = NULL,
 
     # Compute pseudobulk
     suppressMessages({
-      pseudobulk <- bplapply(names(object),
-                             BPPARAM = param,
-                             function(s){
+      pseudobulk <- lapply(names(object),
+                           function(s){
 
-                               # Compute pseudobulk and get counts
-                               AggregateExpression(object[[s]],
-                                                   group.by = split.by)[["RNA"]]
-                             }
+                             # Compute pseudobulk and get counts
+                             AggregateExpression(object[[s]],
+                                                 group.by = split.by)[["RNA"]]
+                           }
       )
     })
 
