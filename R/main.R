@@ -763,6 +763,8 @@ plot.geneGating <- function(object = NULL,
 #' @import scGate
 #' @importFrom Seurat CreateSeuratObject AggregateExpression SplitObject
 #' @importFrom dplyr %>% left_join mutate select everything
+#' @importFrom tibble column_to_rownames rownames_to_column
+#' @importFrom scGate scGate get_scGateDB
 
 #' @return List of genes for each GO accession requested. If named vector is provided, lists output are named as GO:accession.ID_named (e.g. "GO:0004950_cytokine_receptor_activity")
 #' @export infer.Sex
@@ -875,6 +877,8 @@ infer.Sex <- function(object = NULL,
                        s <- scGate::scGate(s,
                                            model = sigs,
                                            smooth.decay = 1,
+                                           pos.thr = 0.2,
+                                           maxRank = 5000,
                                            BPPARAM = param,
                                            multi.asNA = T,
                                            verbose = verbose,
@@ -931,7 +935,9 @@ infer.Sex <- function(object = NULL,
                           sex[[split.by]] <- s
 
                           seu@meta.data <- seu@meta.data %>%
-                            left_join(., sex, by = split.by)
+                            tibble::rownames_to_column("rn") %>%
+                            left_join(., sex, by = split.by) %>%
+                            tibble::column_to_rownames("rn")
 
                           # remove extra column added for linking
                           seu@meta.data[["sex.splitby"]] <- NULL
