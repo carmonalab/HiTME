@@ -22,7 +22,7 @@ infer.Sex(
 
 \item{split.by}{Split by sample based on a variable of metadata, either a metadata columns for Seurat object (category) or a vector indicating the sample procedence for each cell}
 
-\item{return.Seurat}{return Seurat object or dataframe summarizing sex imputation. If Seurat object is provided by default Seurat object with additional metadata with infered sex on cell- and sample-wise is returned. If not Seurat object are provided, but matrices, by default dataframe with results are returned}
+\item{return.Seurat}{Whether to return Seurat object with additional metadata or dataframe summarizing sex imputation, the latter only is applied if \code{infer.level = "sample"} is indicated.}
 
 \item{ncores}{The number of cores to use, by default all available cores minus 2 are used.}
 
@@ -33,7 +33,7 @@ infer.Sex(
 \item{verbose}{Verbose output, by default output messsage are returned}
 }
 \value{
-List of genes for each GO accession requested. If named vector is provided, lists output are named as GO:accession.ID_named (e.g. "GO:0004950_cytokine_receptor_activity")
+Sample or cell sex inference, returned as extra metadata in Seurat object or as a dataframe with infered sex per sample.
 }
 \description{
 This function takes single-cell (Seurat object or count matrix) transcriptomics data and returns the inferred sex of the cells and individuals samples provided.

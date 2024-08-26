@@ -16,7 +16,7 @@
 \item{split.by}{Whether to generate one plot for each grouping variable provided}
 }
 \value{
-Plots to evaluate the gene expression of scGate models
+Violin plots to evaluate the gene expression of scGate models gating genes.
 }
 \description{
 Plot gene expression along scGate model
