@@ -30,9 +30,9 @@ LazyData: true
 biocViews:
 Depends: R (>= 4.3.1)
 Imports:
-  scGate (>= 1.6.1),
+  scGate (>= 1.6.2),
   UCell (>= 2.7.2),
-  ProjecTILs (>= 3.3.1),
+  ProjecTILs (>= 3.4.2),
   SignatuR (>= 0.2.1),
   Seurat (>= 5.0.0),
   SeuratObject (>= 5.0.0),
