@@ -42,7 +42,7 @@ Imports:
   biomaRt (>= 2.56.1),
   ggpubr(>= 0.6.0)
 Remotes:
-  github::carmonalab/SignatuR
+  github::carmonalab/SignatuR,
   github::carmonalab/STACAS,
   github::carmonalab/ProjecTILs,
 Suggests: 
