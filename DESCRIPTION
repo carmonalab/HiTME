@@ -30,6 +30,7 @@ LazyData: true
 biocViews:
 Depends: R (>= 4.3.1)
 Imports:
+  Matrix(>= 1.6.4),
   scGate (>= 1.6.2),
   Seurat (>= 5.0.0),
   SeuratObject (>= 5.0.0),
@@ -41,9 +42,9 @@ Imports:
   biomaRt (>= 2.56.1),
   ggpubr(>= 0.6.0)
 Remotes:
-  github::carmonalab/ProjecTILs,
-  github::carmonalab/STACAS,
   github::carmonalab/SignatuR
+  github::carmonalab/STACAS,
+  github::carmonalab/ProjecTILs,
 Suggests: 
     knitr,
     rmarkdown,
