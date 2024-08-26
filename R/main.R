@@ -598,9 +598,10 @@ plot.confusion <- function(object = NULL,
 #' @import scGate
 #' @importFrom Seurat VlnPlot
 #' @importFrom ggplot2 ylab ggtitle ggplot theme_void
+#' @importFrom Matrix rowSums
 #' @importFrom ggpubr ggarrange annotate_figure
 
-#' @return Plots to evaluate the gene expression of scGate models
+#' @return Violin plots to evaluate the gene expression of scGate models gating genes.
 #' @export plot.geneGating
 #'
 
@@ -668,7 +669,7 @@ plot.geneGating <- function(object = NULL,
       }
 
       # keep only genes expressed
-      sc_names <- row.names(object[[ob]])[rowSums(object[[ob]]) > 0]
+      sc_names <- row.names(object[[ob]])[Matrix::rowSums(object[[ob]]) > 0]
       # make plot list for each level
       pl.list <- list()
 
@@ -755,7 +756,7 @@ plot.geneGating <- function(object = NULL,
 #' @param object Either one or a list of Seurat objects or count matrix (matrix or dcGMatrix)
 #' @param infer.level Whether to infer sex for cells, samples or both.
 #' @param split.by Split by sample based on a variable of metadata, either a metadata columns for Seurat object (category) or a vector indicating the sample procedence for each cell
-#' @param return.Seurat return Seurat object or dataframe summarizing sex imputation. If Seurat object is provided by default Seurat object with additional metadata with infered sex on cell- and sample-wise is returned. If not Seurat object are provided, but matrices, by default dataframe with results are returned
+#' @param return.Seurat Whether to return Seurat object with additional metadata or dataframe summarizing sex imputation, the latter only is applied if `infer.level = "sample"` is indicated.
 #' @param ncores The number of cores to use, by default all available cores minus 2 are used.
 #' @param bparam A \link[BiocParallel]{bpparam} object that tells Run.HiTME how to parallelize. If provided, it overrides the `ncores` parameter.
 #' @param progressbar Whether to show a progress bar or not
@@ -767,7 +768,7 @@ plot.geneGating <- function(object = NULL,
 #' @importFrom tibble column_to_rownames rownames_to_column
 #' @importFrom scGate scGate get_scGateDB
 
-#' @return List of genes for each GO accession requested. If named vector is provided, lists output are named as GO:accession.ID_named (e.g. "GO:0004950_cytokine_receptor_activity")
+#' @return Sample or cell sex inference, returned as extra metadata in Seurat object or as a dataframe with infered sex per sample.
 #' @export infer.Sex
 
 
@@ -786,9 +787,16 @@ infer.Sex <- function(object = NULL,
 
   if (!is.character(infer.level) ||
       !tolower(infer.level[1]) %in% c("sample", "cell", "both")) {
-    stop("Please check infer.level parameter.")
+    stop("Please check infer.level parameter. It must indicate to return sex inference at sample (`sample`), cell ('cell'), or both (`both`) levels.")
   }
+
   infer.level <- tolower(infer.level[1])
+  # if infer.level is at the sample level, return Seurat by default
+  if(infer.level != "sample"){
+    warning("infer.level includes cell-level classification: ", infer.level,
+            ".\nReturning Seurat object with infered sex in metadata.\n")
+    return.Seurat <- TRUE
+  }
 
   # check if objects are Seurat or count matrices
 
@@ -869,7 +877,7 @@ infer.Sex <- function(object = NULL,
   sigs <- list(Male = models$human$generic$Male,
                Female = models$human$generic$Female)
 
-  if (infer.level == "cell" | infer.level == "both") {
+  if (infer.level %in% c("cell", "both")) {
     if (return.Seurat) {
       if (verbose) {message("Computing sex inference per cell...\n")}
 
@@ -893,7 +901,7 @@ infer.Sex <- function(object = NULL,
                                              verbose = verbose,
                                              return.CellOntology = F)
 
-                         s@meta.data[["sex.cell"]] <- s@meta.data[["scGate_multi"]]
+                         s@meta.data[["cell.sex"]] <- s@meta.data[["scGate_multi"]]
                          s@meta.data[["scGate_multi"]] <- scgate.col
 
                          return(s)
@@ -902,7 +910,7 @@ infer.Sex <- function(object = NULL,
   }
 
 
-  if (infer.level == "sample" | infer.level == "both") {
+  if (infer.level %in% c("sample", "both")) {
     if (verbose) {message("Computing sex inference per sample...\n")}
 
     # AggregateExpression requires some group.by
@@ -921,7 +929,7 @@ infer.Sex <- function(object = NULL,
                            function(s) {
 
                              # Compute pseudobulk and get counts
-                             AggregateExpression(object[[s]],
+                             Seurat::AggregateExpression(object[[s]],
                                                  group.by = split.by)[["RNA"]]
                            }
       )
@@ -937,7 +945,7 @@ infer.Sex <- function(object = NULL,
   }
 
 
-  if (return.Seurat) {
+  if (return.Seurat && infer.level %in% c("sample", "both")) {
     sex.res <- lapply(names(object),
                       function(s) {
                         seu <- object[[s]]
@@ -957,13 +965,10 @@ infer.Sex <- function(object = NULL,
                       })
     names(sex.res) <- names(object)
 
-    #if list of length 1, do not return list
-    if (length(sex.res) == 1) {
-      sex.res <- sex.res[[1]]
-    }
 
 
-  } else {
+
+  } else if (!return.Seurat) {
     sex.res <- lapply(names(ps.sex),
                       function(s) {
                         sex <-  as.data.frame(ps.sex[[s]]) %>%
@@ -973,6 +978,13 @@ infer.Sex <- function(object = NULL,
     )  %>%
       data.table::rbindlist() %>%
       as.data.frame()
+  } else {
+    sex.res <- object
+  }
+
+  #if list of length 1, do not return list
+  if (length(sex.res) == 1) {
+    sex.res <- sex.res[[1]]
   }
 
   return(sex.res)
