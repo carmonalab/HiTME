@@ -242,7 +242,7 @@ get.layer3 <- function(s,
     tibble::rownames_to_column("cell.id") %>%
     dplyr::mutate(dplyr::across(dplyr::all_of(sigs.cols),
                          ~ ifelse(. > layer3.threshold,
-                                  gsub("_UCell", "", cur_column()),
+                                  gsub("_UCell", "", dplyr::cur_column()),
                                   default.label),
                          .names = "is.pureL3_{col}")
     ) %>%

@@ -25,7 +25,7 @@
 #'
 #' @importFrom BiocParallel MulticoreParam bplapply
 #' @importFrom parallel detectCores
-#' @importFrom dplyr mutate filter rowwise all_of ungroup across c_across starts_with %>%
+#' @importFrom dplyr mutate filter rowwise all_of ungroup across c_across cur_column starts_with %>%
 #' @importFrom tibble column_to_rownames rownames_to_column
 #' @importFrom scGate scGate get_scGateDB
 #' @import SignatuR
