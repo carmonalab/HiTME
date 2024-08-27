@@ -1,6 +1,6 @@
 Package: HiTME
 Title: Classify Cell Types in the Tumor Microenvironment
-Version: 1.1.0
+Version: 2.0.0
 Authors@R: c(
   person(given = 'Josep', family = 'Garnica',
     email = 'josep.garnica@unil.ch',
@@ -21,36 +21,32 @@ Authors@R: c(
 Description: HiTME enables cell type prediction on single-cell RNA-seq datasets from Tumor microenvirontment samples. HiTME's classification exploits [scGate](https://github.com/carmonalab/scGate) for coarse cell type classification, later when reference map for those coarse cell type is available uses [ProjecTILs](https://github.com/carmonalab/ProjecTILs) to define cell type at finer level. Additionally, HiTME package is envisioned to compare cell type classification in multiple samples of different type and source, hence it offers tool to evaluate predictions consistency across samples and comparison between different classification methods.
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.2.3
+RoxygenNote: 7.3.1
 VignetteBuilder: knitr
 URL: https://github.com/carmonalab/HiTME
 BugReports: https://github.com/carmonalab/HiTME/issues
-License: 
+License:
 LazyData: true
 biocViews:
 Depends: R (>= 4.3.1)
 Imports:
-  BiocParallel (>= 1.34.2),
-  biomaRt (>= 2.56.1),
-  DESeq2 (>= 1.40.2),
-  SummarizedExperiment (>= 1.30.2),
-  Hotelling (>= 1.0-8),
-  MatrixGenerics (>= 1.12.3),
-  parallelly (>= 1.36.0),
-  scGate (>= 1.6.0),
-  ProjecTILs (>= 3.2.1),
-  SignatuR (>= 0.1.2),
-  dplyr (>= 1.1.4),
-  ggplot2 (>= 3.4.4),
-  cowplot (>= 1.1.1),
+  scGate (>= 1.6.2),
+  ProjecTILs (>= 3.4.2),
   Seurat (>= 5.0.0),
   SeuratObject (>= 5.0.0),
-  stringr (>= 1.5.1),
-  caret (>= 6.0-94),
+  BiocParallel (>= 1.34.2),
+  dplyr (>= 1.1.4),
+  ggplot2 (>= 3.4.4),
+  tibble (>= 3.2.1),
   data.table (>= 1.14.8),
-  ggdendro (>= 0.1.23),
-  methods (>= 4.3.1),
-  tibble (>= 3.2.1)
+  biomaRt (>= 2.56.1),
+  ggpubr(>= 0.6.0)
+Remotes:
+  github::carmonalab/SignatuR,
+  github::carmonalab/STACAS,
+  github::carmonalab/ProjecTILs,
 Suggests: 
-  knitr,
-  rmarkdown
+    knitr,
+    rmarkdown,
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3

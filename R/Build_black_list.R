@@ -11,9 +11,14 @@ block.list.members <- c("cellCycle.G1S","cellCycle.G2M",
                 )
 
 # load all signatures from SignatuR
-sigs <- GetSignature(SignatuR$Hs$Programs)
+sigs <- GetSignature(SignatuR$Hs$Compartments)
+
+# Remove from TCR block list alpha or gamma genes with D, these are not TCR genes
+sigs$TCR <- grep("[AG]D", sigs$TCR, value = T,
+                 ignore.case = T, invert = T)
+
 sigs <- c(sigs, GetSignature(SignatuR$Hs$Blocklists))
-sigs <- c(sigs, GetSignature(SignatuR$Hs$Compartments))
+sigs <- c(sigs, GetSignature(SignatuR$Hs$Programs))
 
 # filter the indicated
 sigs <- sigs[names(sigs) %in% block.list.members]
