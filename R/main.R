@@ -193,6 +193,10 @@ Run.HiTME <- function(object = NULL,
                             BPPARAM = param,
                             multi.asNA = multi.asNA,
                             verbose = verbose)
+
+        # change names of scGate_multi
+        names(x@meta.data)[names(x@meta.data) == "scGate_multi"] <- "layer1"
+
         return(x)
       }
     )
@@ -204,7 +208,7 @@ Run.HiTME <- function(object = NULL,
     object <- lapply(
       X = object,
       function(x) {
-        x@meta.data[["scGate_multi"]] <- NA
+        x@meta.data[["layer1"]] <- NA
         return(x)
       }
     )
@@ -286,8 +290,8 @@ Run.HiTME <- function(object = NULL,
     function(x) {
 
       x@meta.data <- x@meta.data %>%
-        mutate(layer2 = ifelse(is.na(functional.cluster),
-                               scGate_multi, functional.cluster))
+        dplyr::mutate(layer2 = ifelse(is.na(functional.cluster),
+                               layer1, functional.cluster))
 
       return(x)
     }
@@ -341,8 +345,8 @@ Run.HiTME <- function(object = NULL,
                        if (!multi.asNA) {
                          levs <- c(levs, "Multi")
                        }
-                       x$scGate_multi <- factor(x$scGate_multi,
-                                                levels = levs)
+                       x$layer1 <- factor(x$layer1,
+                                          levels = levs)
                      }
 
                      if (!is.null(ref.maps)) {
