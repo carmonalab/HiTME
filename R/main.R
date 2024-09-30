@@ -422,7 +422,7 @@ get.GOList <- function(GO_accession = NULL,
   species <- tolower(species)
   if (grepl("homo|sapi|huma", species)) {
     dataset <- "hsapiens_gene_ensembl"
-  } else if (grepl("mice|mus", species)) {
+  } else if (grepl("mice|mus|mouse", species)) {
     dataset <- "mmusculus_gene_ensembl"
   } else {
     stop("Only supported species are human and mouse")
