@@ -108,7 +108,7 @@ Run.HiTME <- function(object = NULL,
       species <- "human"
       sig.species <- "Hs"
     }
-    else if (grepl("mice|mus", species)) {
+    else if (grepl("mice|mus|mouse", species)) {
       species <- "mouse"
       sig.species <- "Mm"
     } else {
