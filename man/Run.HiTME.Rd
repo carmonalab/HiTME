@@ -75,9 +75,11 @@ ref.maps <- get.reference.maps(collection  = "human")
 
 # Run HiTME with default settings, specifying the human ref.maps
 # Internally default scGate models and gene programs signatures will be fetched
+# Specify the species of origin of the dataset
 
  query <- Run.HiTME(object = query,
-                    ref.maps = ref.maps[["human"]]
+                    ref.maps = ref.maps[["human"]],
+                    species = "human"
                     )
 
 }
