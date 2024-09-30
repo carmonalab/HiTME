@@ -11,7 +11,7 @@
 #' @param scGate.model.branch From which branch Run.HiTME fetch the scGate models, by default models are retrieved from \code{master} branch.
 #' @param multi.asNA How to label cells that are "Pure" for multiple annotations: "Multi" (FALSE) or NA (TRUE)
 #' @param additional.signatures Additional signature(s) to compute on each cell using \link[UCell]{UCell}. Multiple signatures should be provided as a list.
-#' @param ref.maps A named list of the \link[ProjecTILs]{ProjecTILs} reference maps to use. Download default reference maps using \link[ProjecTILs](get.reference.maps). For custom reference maps, they must be Seurat objects turn into reference with \link[ProjecTILs](make.reference). It is recommended to add in reference object slost \code{misc} the identifier connecting to layer 1 classification (scGate): \code{ref.map@misc$layer1_link}
+#' @param ref.maps A named list of the \link[ProjecTILs]{ProjecTILs} reference maps to use. Download default reference maps using \link[ProjecTILs]{get.reference.maps}. For custom reference maps, they must be Seurat objects turn into reference with \link[ProjecTILs]{make.reference}. It is recommended to add in reference object slot \code{misc} the identifier connecting to layer 1 classification (scGate): \code{ref.map@misc$layer1_link}
 #' @param layer3 Gene signature(s) to define gene programs or cell states on top of layer2 (\link[ProjecTILs]{ProjecTILs} classification). By default \link[SignatuR]{SignatuR} programs for cell cycling, IFN response and HeatShock response are run.
 #' @param layer3.threshold Minimum value threshold to apply on \link[UCell]{UCell} scores of layer3 signatures to classify cell types.
 #' @param split.by A Seurat object metadata column to split by (e.g. sample names).

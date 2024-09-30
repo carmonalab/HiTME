@@ -34,7 +34,7 @@ Run.HiTME(
 
 \item{additional.signatures}{Additional signature(s) to compute on each cell using \link[UCell]{UCell}. Multiple signatures should be provided as a list.}
 
-\item{ref.maps}{A named list of the \link\link{ProjecTILs}{ProjecTILs} reference maps to use. Download default reference maps using \link\href{get.reference.maps}{ProjecTILs}. For custom reference maps, they must be Seurat objects turn into reference with \link\href{make.reference}{ProjecTILs}. It is recommended to add in reference object slost \code{misc} the identifier connecting to layer 1 classification (scGate): \code{ref.map@misc$layer1_link}}
+\item{ref.maps}{A named list of the \link[ProjecTILs]{ProjecTILs} reference maps to use. Download default reference maps using \link[ProjecTILs]{get.reference.maps}. For custom reference maps, they must be Seurat objects turn into reference with \link[ProjecTILs]{make.reference}. It is recommended to add in reference object slot \code{misc} the identifier connecting to layer 1 classification (scGate): \code{ref.map@misc$layer1_link}}
 
 \item{layer3}{Gene signature(s) to define gene programs or cell states on top of layer2 (\link[ProjecTILs]{ProjecTILs} classification). By default \link[SignatuR]{SignatuR} programs for cell cycling, IFN response and HeatShock response are run.}
 
