@@ -45,6 +45,10 @@ ProjecTILs.classifier.multi <- function(object,
 
   if (run) {
     suppressWarnings(require(ProjecTILs))
+    # load here ortholog table to avoid problems with SnowParam
+    data("Hs2Mm.convert.table")
+    ortholog_table <- Hs2Mm.convert.table
+
 
     functional.clusters <-
       BiocParallel::bplapply(
@@ -66,7 +70,8 @@ ProjecTILs.classifier.multi <- function(object,
             subset.object.pred <- ProjecTILs:::classifier.singleobject(subset.object,
                                                                        ref = ref.maps[[m]],
                                                                        filter.cells = filter.cells,
-                                                                       ncores = 1)
+                                                                       ncores = 1,
+                                                                       ortholog_table = ortholog_table)
 
             return(subset.object.pred)
 
