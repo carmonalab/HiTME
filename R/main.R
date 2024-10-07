@@ -312,6 +312,8 @@ Run.HiTME <- function(object = NULL,
     object <- BiocParallel::bplapply(X = object,
                                      BPPARAM = param,
                                      function(x) {
+                                       # require dplyr, need if running SOCK paralel
+                                       suppressWarnings(require(dplyr))
 
                                        get.layer3(x,
                                                   ann.col = "layer2",
