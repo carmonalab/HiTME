@@ -45,6 +45,10 @@ ProjecTILs.classifier.multi <- function(object,
 
   if (run) {
     suppressWarnings(require(ProjecTILs))
+    # load here ortholog table to avoid problems with SnowParam
+    data("Hs2Mm.convert.table")
+    ortholog_table <- Hs2Mm.convert.table
+
 
     functional.clusters <-
       BiocParallel::bplapply(
@@ -66,7 +70,8 @@ ProjecTILs.classifier.multi <- function(object,
             subset.object.pred <- ProjecTILs:::classifier.singleobject(subset.object,
                                                                        ref = ref.maps[[m]],
                                                                        filter.cells = filter.cells,
-                                                                       ncores = 1)
+                                                                       ncores = 1,
+                                                                       ortholog_table = ortholog_table)
 
             return(subset.object.pred)
 
@@ -248,9 +253,9 @@ get.layer3 <- function(s,
     ) %>%
     dplyr::rowwise() %>%
     dplyr::mutate(
-      layer3_annotation = combine_tags(dplyr::c_across(dplyr::starts_with("is.pureL3_")),
-                                       collapse = "_",
-                                       default = default.label),
+      layer3_annotation = HiTME:::combine_tags(dplyr::c_across(dplyr::starts_with("is.pureL3_")),
+                                               collapse = "_",
+                                               default = default.label),
       layer3 = ifelse(!is.na(.data[[ann.col]]),
                       paste(c(as.character(.data[[ann.col]]),
                               layer3_annotation),
