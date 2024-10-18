@@ -44,7 +44,9 @@ ref.maps <- get.reference.maps(collection = "human")
 
 # Cell type classification on a Seurat object
 query <- Run.HiTME(query,
-                   ref.maps = ref.maps[["human"]])
+                   ref.maps = ref.maps[["human"]],
+                   species = "human" # for mouse data set to "mouse"
+                   )
 
 # Seurat object metadata has been updated with cell type classification at
 # different granularity levels

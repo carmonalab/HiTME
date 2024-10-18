@@ -17,7 +17,7 @@
 #' @param split.by A Seurat object metadata column to split by (e.g. sample names).
 #' @param layer1_link Column of metadata linking layer1 prediction (e.g. scGate ~ CellOntology_ID) in order to perform subsetting for second layer classification.
 #' @param remerge When setting split.by or providing a list of objects, if \code{remerge = TRUE} one object will be returned (default). If \code{remerge = FALSE} a list of objects will be returned.
-#' @param species Define species to get the default \link[scGate]{scGate} models and \link[SignatuR]{SignatuR} signatures. Currently only human and mouse are supported, if other species are studied, set to \code{NULL}
+#' @param species Define species to get the default \link[scGate]{scGate} models and \link[SignatuR]{SignatuR} signatures. Currently only 'human' and 'mouse' are supported, if other species are studied, set to \code{NULL}
 #' @param ncores The number of cores to use, by default all available cores minus 2 are used.
 #' @param bparam A \link[BiocParallel]{bpparam} object that tells Run.HiTME how to parallelize. If provided, it overrides the `ncores` parameter.
 #' @param progressbar Whether to show a progress bar or not

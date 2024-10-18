@@ -46,7 +46,7 @@ Run.HiTME(
 
 \item{remerge}{When setting split.by or providing a list of objects, if \code{remerge = TRUE} one object will be returned (default). If \code{remerge = FALSE} a list of objects will be returned.}
 
-\item{species}{Define species to get the default \link[scGate]{scGate} models and \link[SignatuR]{SignatuR} signatures. Currently only human and mouse are supported, if other species are studied, set to \code{NULL}}
+\item{species}{Define species to get the default \link[scGate]{scGate} models and \link[SignatuR]{SignatuR} signatures. Currently only 'human' and 'mouse' are supported, if other species are studied, set to \code{NULL}}
 
 \item{bparam}{A \link[BiocParallel]{bpparam} object that tells Run.HiTME how to parallelize. If provided, it overrides the \code{ncores} parameter.}
 
