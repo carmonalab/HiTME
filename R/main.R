@@ -999,3 +999,102 @@ infer.Sex <- function(object = NULL,
 }
 
 
+
+# functions for malignant cell classification
+# developed by YaldaYaghooti, reviewed by JGarnica22
+
+#' Classify cells as malignant or normal given a scRNA-seq dataset
+#' This function takes as input a seurat object.
+#' First, the function calculates both pathway activities and transcription factor activities using decouplRq and adds them to the seurat object. Then, adds the normalized expression values of cancer-related genes (oncogenes and tumor suppressors) from the OncoKB database.
+#' The function then uses the BoosTME model and adds the model's predictions to the seurat object.
+#' BoosTME is an XGBClassifier trained on transcription factor activities, pathway activities, and cancer gene expressions of multiple datasets for the binary classification task of classifying cells as either malignant or normal.
+#'
+#' @param seurat_obj a seurat object
+#'
+#'
+#' @importFrom Seurat NormalizeData FindVariableFeatures ScaleData RunPCA DefaultAssay VariableFeatures
+#' @importFrom SeuratObject Layers
+#' @importFrom decoupleR run_ulm run_mlm get_collectri get_progeny
+#' @import OmnipathR
+#' @import reticulate
+#' @import dplyr
+#' @importFrom tidyr pivot_wider
+#' @importFrom LISI compute_lisi
+#'
+#' @return a seurat object containing the malignant/normal classifications in the BoosTME_predictions metadata
+#' @export Run.BoosTME
+#'
+#' @examples
+#'
+#' library(Seurat)
+#' library(OmnipathR)
+#' library(decoupleR)
+#' library(reticulate)
+#' library(dplyr)
+#'
+#' new.seurat <- Run.BoosTME(seurat.object)
+
+Run.BoosTME <- function(seurat_obj){
+
+  #Get pathways and transcription factor-target genes data
+  path_net <- decoupleR::get_progeny(organism = 'human',
+                                     top = 500)
+  tf_net <- decoupleR::get_collectri(organism = 'human',
+                                     split_complexes=FALSE)
+
+  #load list of cancer-related genes obtained from the OncoKB database
+  cancer_genes <- read_CancerGeneList()
+  cancer_genes <- as.data.frame(cancer_genes$Hugo.Symbol)
+
+  #run normalization, pca, and umap
+  seurat_obj <- seurat_obj %>%
+    NormalizeData() %>%
+    FindVariableFeatures() %>%
+    ScaleData()
+
+  #Add transcription factor and pathway activities to the seurat object
+  seurat_obj <- tf_path_activities(seurat_obj, tf_net, path_net)
+
+  #Add expression values of cancer-related genes
+  seurat_obj <- get.gene_matrix(seurat_obj, cancer_genes)
+
+  #create input to the XGBoost model by concatenating transcription factor and pathway activities     #and cancer-related gene expression values
+  X <- cbind(seurat_obj@meta.data$activities, seurat_obj@meta.data$cancer_gene_expression)
+
+  #sort columns
+  X <- X[, order(names(X))]
+
+  #setup python environment
+  library(reticulate)
+
+  #create a conda environment using miniconda
+  miniconda_dir <- getwd()
+  install_miniconda(path = miniconda_dir, update = T)
+  conda_list(conda = sprintf("%s/_conda.exe", miniconda_dir))
+  conda_create(envname = "BoosTME", conda = sprintf("%s/_conda.exe", miniconda_dir))
+
+  #install required packages in the miniconda environment
+  py_install(packages = c("pandas", "numpy", "scikit-learn", "xgboost"))
+
+  #load BoosTME and list of the model's features
+  model <- load_BoosTME()
+  model_features <- load_BoosTME_features()
+
+  #filter features that the model was trained on and fill non-existing features with 0
+  common_features <- intersect(colnames(X), model_features)
+  absent_features <- model_features[!(model_features %in% common_features)]
+  X[,absent_features] <- 0
+  X <- X[, model_features]
+  X <- X[, order(names(X))]
+
+  #predict the probability of cells being malignant
+  y_pred <- model$predict_proba(X)
+
+  #save predictions in seurat object
+  seurat_obj@meta.data$BoosTME_predictions <- y_pred
+
+  #return seurat object with BoosTME predictions
+  return(seurat_obj)
+
+}
+
