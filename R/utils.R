@@ -365,7 +365,6 @@ calculate_lisi <- function (seurat_obj,
                             nn_eps = 0,
                             assay = "RNA",
                             nfeatures = 2000,
-                            npca = 30,
                             recalculate_PCA = TRUE,
                             verbose = FALSE
 ){
