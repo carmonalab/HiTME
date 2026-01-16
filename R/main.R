@@ -194,7 +194,8 @@ Run.HiTME <- function(object = NULL,
                             additional.signatures = c(additional.signatures, layer3),
                             BPPARAM = param,
                             multi.asNA = multi.asNA,
-                            verbose = verbose)
+                            verbose = verbose,
+                            progressbar = progressbar)
 
         # change names of scGate_multi
         names(x@meta.data)[names(x@meta.data) == "scGate_multi"] <- "layer1"
