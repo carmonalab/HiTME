@@ -73,6 +73,17 @@ sex_genes <- lapply(models_sex, scGate:::table.to.model) %>%
   gsub("-", "", .) %>%
   unique()
 
+# get genes from references
+
+ref.maps <- ProjecTILs::get.reference.maps(collection = "human",
+                                           as.list = F)
+
+ref_maps_genes <- lapply(ref.maps, function(x){
+  rownames(x@assays$integrated@data)
+}) %>%
+  unlist() %>%
+  unique()
+
 slim.genes <- lapply(slim, function(x){
 
   # Ensure we work with RNA assay
@@ -82,12 +93,12 @@ slim.genes <- lapply(slim, function(x){
   x <- FindVariableFeatures(
     x,
     selection.method = "vst",
-    nfeatures = 400,
+    nfeatures = 300,
     verbose = FALSE
   )
 
   hvg <- VariableFeatures(x)
-  genes <- c(hvg, gate_genes, sex_genes) %>%
+  genes <- c(hvg, gate_genes, sex_genes, ref_maps_genes) %>%
     unique()
 
   # 2. Subset to HVGs only
