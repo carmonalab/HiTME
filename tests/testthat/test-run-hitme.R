@@ -230,6 +230,54 @@ test_that("Run.HiTME handles ncores > 1", {
   expect_s4_class(result, "Seurat")
 })
 
+test_that("Run.HiTME accepts bparam SnowParam overriding ncores", {
+  skip_if_not(file.exists(test_data_path), "Test data not available")
+  skip_on_os("windows")
+
+  obj <- readRDS(test_data_path)
+  obj <- Seurat::NormalizeData(obj)
+
+  snow_param <- BiocParallel::SnowParam(workers = 2, progressbar = FALSE)
+
+  result <- Run.HiTME(
+    object = obj[, 1:40],
+    ncores = 1, # should be ignored in favor of bparam
+    bparam = snow_param,
+    scGate.model = "default",
+    species = "human",
+    ref.maps = NULL,
+    layer3 = NULL,
+    verbose = FALSE
+  )
+
+  expect_s4_class(result, "Seurat")
+})
+
+test_that("Run.HiTME accepts provided BiocParallel params for layer3 scoring", {
+  skip_if_not(file.exists(test_data_path), "Test data not available")
+  skip_on_os("windows")
+
+  obj <- readRDS(test_data_path)
+  obj <- Seurat::NormalizeData(obj)
+
+  # Use a simple SnowParam to ensure BPPARAM is honored when scGate is disabled
+  snow_param <- BiocParallel::SnowParam(workers = 2, progressbar = FALSE)
+
+  result <- Run.HiTME(
+    object = obj[, 1:40],
+    ncores = 1,
+    bparam = snow_param,
+    scGate.model = NULL,
+    layer3 = list(Sig3_test = rownames(obj)[1:10]),
+    species = "human",
+    ref.maps = NULL,
+    verbose = FALSE
+  )
+
+  expect_s4_class(result, "Seurat")
+  expect_true("layer3" %in% names(result@meta.data))
+})
+
 test_that("Run.HiTME respects remerge parameter with lists", {
   skip_if_not(file.exists(test_data_path), "Test data not available")
 
@@ -344,3 +392,109 @@ test_that("Run.HiTME handles multi.asNA parameter", {
 })
 
 
+test_that("Run.HiTME run layer2", {
+  skip_if_not(file.exists(test_data_path), "Test data not available")
+
+  # get ref.maps
+  ref.maps <- ProjecTILs::get.reference.maps(collection = "human",
+                                             as.list = F)
+
+  obj <- readRDS(test_data_path)
+  # Normalize data for scGate processing
+  obj <- Seurat::NormalizeData(obj)
+
+  result <- Run.HiTME(
+    object = obj,
+    ncores = 1,
+    scGate.model = "default",
+    ref.maps = ref.maps,
+    layer3 = NULL,
+    verbose = FALSE
+  )
+
+  expect_s4_class(result, "Seurat")
+})
+
+test_that("Run.HiTME merges functional.cluster into layer2", {
+  skip_if_not(file.exists(test_data_path), "Test data not available")
+
+  ref.maps <- ProjecTILs::get.reference.maps(collection = "human",
+                                             as.list = FALSE)
+
+  obj <- readRDS(test_data_path)
+  obj <- Seurat::NormalizeData(obj)
+
+  result <- Run.HiTME(
+    object = obj,
+    ncores = 1,
+    scGate.model = "default",
+    ref.maps = ref.maps,
+    layer3 = NULL,
+    verbose = FALSE
+  )
+
+  expect_s4_class(result, "Seurat")
+  expect_true(all(c("functional.cluster", "functional.cluster.conf", "layer2") %in%
+                    names(result@meta.data)))
+  expected_layer2 <- dplyr::if_else(
+    is.na(result$functional.cluster),
+    as.character(result$layer1),
+    as.character(result$functional.cluster)
+  )
+  expect_equal(as.character(result$layer2), expected_layer2)
+})
+
+test_that("Run.HiTME records layer2 metadata levels", {
+  skip_if_not(file.exists(test_data_path), "Test data not available")
+
+  ref.maps <- ProjecTILs::get.reference.maps(collection = "human",
+                                             as.list = FALSE)
+
+  obj <- readRDS(test_data_path)
+  obj <- Seurat::NormalizeData(obj)
+
+  result <- Run.HiTME(
+    object = obj,
+    ncores = 1,
+    scGate.model = "default",
+    ref.maps = ref.maps,
+    layer3 = NULL,
+    verbose = FALSE
+  )
+
+  ref_levels <- vapply(ref.maps, function(x) x@misc$layer1_link, character(1))
+  misc_layer2 <- result@misc[["layer2_param"]][["functional.cluster"]]
+
+  expect_true(is.list(misc_layer2))
+  expect_equal(misc_layer2[["References_user_specified"]], names(ref.maps))
+  expect_setequal(names(misc_layer2[["levels2_per_levels1"]]), ref_levels)
+  expect_true(all(lengths(misc_layer2[["levels2_per_levels1"]]) > 0))
+})
+
+test_that("Run.HiTME falls back to layer1 when no layer2 mapping is applicable", {
+  skip_if_not(file.exists(test_data_path), "Test data not available")
+
+  ref.maps <- ProjecTILs::get.reference.maps(collection = "human",
+                                             as.list = FALSE)
+  ref.maps <- lapply(ref.maps, function(r) {
+    r@misc$layer1_link <- "nonmatching_layer1"
+    r
+  })
+
+  obj <- readRDS(test_data_path)
+  obj <- Seurat::NormalizeData(obj)
+
+  result <- Run.HiTME(
+    object = obj,
+    ncores = 1,
+    scGate.model = "default",
+    ref.maps = ref.maps,
+    layer1_link = "layer1",
+    layer3 = NULL,
+    verbose = FALSE
+  )
+
+  expect_s4_class(result, "Seurat")
+  expect_true(all(is.na(result$functional.cluster)))
+  expect_equal(as.character(result$layer2), as.character(result$layer1))
+})

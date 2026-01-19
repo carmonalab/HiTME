@@ -12,11 +12,11 @@ This test suite provides **61 test cases** (59 passing, 6 skipped) covering **4 
 
 | Function | File | Tests | Coverage |
 |----------|------|-------|----------|
-| `Run.HiTME()` | test-run-hitme.R | 18 | NULL validation, scGate models, split.by, species, ncores (1 & >1), branches, multi.asNA, remerge |
+| `Run.HiTME()` | test-run-hitme.R | 36 | Input validation, scGate models, split.by, species, ncores (1 & >1), BiocParallel params, branches, multi.asNA, remerge, layer1/layer2/layer3, parallelization |
 | `plot.confusion()` | test-plot-confusion.R | 14 | Object types, required parameters, metadata validation, plot types, NA handling |
 | `plot.geneGating()` | test-plot-gene-gating.R | 11 (6 skipped) | Input validation, scGate models, group.by, split.by, list handling |
 | `infer.Sex()` | test-infer-sex.R | 18 | Seurat/matrix/sparse inputs, infer.level options, split.by, return.Seurat, ncores, parallelization |
-| **TOTAL** | **4 files** | **61 tests** | **59 passing, 6 skipped** |
+| **TOTAL** | **4 files** | **79 tests** | **73 passing, 6 skipped** |
 
 ---
 
@@ -79,46 +79,73 @@ Rscript ../run_tests.R plot
 
 ## Test File Details
 
-### 1. test-run-hitme.R (18 tests)
+### 1. test-run-hitme.R (36 tests)
 
-Main function `Run.HiTME()` for hierarchical cell type classification.
+Multi-layer cell type annotation via `Run.HiTME()`.
 
-**What's tested:**
-- ✓ NULL object validation
-- ✓ Invalid object class detection
-- ✓ Minimal parameters with real dataset
-- ✓ scGate model parameter (with tryCatch for external dependencies)
-- ✓ split.by parameter with Seurat objects
-- ✓ split.by with list objects (error case)
-- ✓ species parameter validation (human, mouse)
-- ✓ ncores parameter (ncores = 1)
-- ✓ ncores > 1 parallel processing
-- ✓ remerge parameter with lists (TRUE/FALSE)
-- ✓ scGate.model.branch parameter
-- ✓ multi.asNA parameter (TRUE/FALSE)
-- ✓ additional.signatures parameter
-- ✓ layer3 parameter
-- ✓ ref.maps parameter
-- ✓ verbose parameter
-- ✓ List input handling
-- ✓ Single object to list conversion
+#### Input Validation Tests (2 tests)
+- ✓ **Validates input objects** - NULL object raises error with message "Please provide a Seurat object or a list of them"
+- ✓ **Validates input object class** - Non-Seurat objects raise error with message "not Seurat objects"
 
-### 2. test-plot-confusion.R (11 tests)
+#### Minimal Configuration Tests (1 test)
+- ✓ **Runs with minimal parameters** - No scGate model, no ref.maps, no layer3; validates layer1 column added
+
+#### Layer3 Functionality Tests (1 test)
+- ✓ **Runs layer3** - Default SignatuR signatures (IFN, HeatShock, cellCycle programs); validates layer3_annotation column added
+
+#### scGate Model Tests (1 test)
+- ✓ **Handles scGate model parameter** - Default scGate model works with species="human"
+
+#### Sample Splitting Tests (2 tests)
+- ✓ **Handles split.by parameter** - Valid metadata column splits objects, remerge=TRUE returns single object
+- ✓ **Rejects split.by with list input** - List input with split.by raises error "split.by only supported for a single Seurat object"
+
+#### Species Parameter Tests (3 tests)
+- ✓ **Validates species parameter** - Invalid species (e.g., "zebrafish") raises error "supported species"
+- ✓ **Accepts valid species variants** - Both "human" and "homo" work as species aliases
+- ✓ **Accepts NULL species with warning** - NULL species generates warning "Not using default scGate models"
+
+#### Parallelization Tests (4 tests)
+- ✓ **Handles ncores parameter** - ncores=1 works with scGate.model="default"
+- ✓ **Handles ncores > 1** - ncores=2 works with scGate.model="default"
+- ✓ **Accepts bparam SnowParam overriding ncores** - Provided BiocParallel::SnowParam(workers=2) overrides ncores=1
+- ✓ **Accepts provided BiocParallel params for layer3 scoring** - SnowParam honored when scGate is disabled, layer3 signatures processed
+
+#### scGate Branch Tests (2 tests)
+- ✓ **Handles scGate.model.branch parameter** - "master" branch works with species="human"
+- ✓ **Accepts dev branch** - "dev" branch accepted as alternative
+
+#### Multi-cell Handling Tests (1 test)
+- ✓ **Handles multi.asNA parameter** - TRUE/FALSE options work (converts "Multi" cells to NA or labels as "Multi")
+
+#### List & Remerge Tests (1 test)
+- ✓ **Respects remerge parameter with lists** - remerge=TRUE returns single Seurat object; remerge=FALSE returns list of 2 objects
+
+#### Layer2 (ProjecTILs) Tests (4 tests)
+- ✓ **Runs layer2** - ProjecTILs reference maps downloaded and applied; returns Seurat object
+- ✓ **Merges functional.cluster into layer2** - layer2 column = functional.cluster (if not NA) OR layer1 (if NA)
+- ✓ **Records layer2 metadata levels** - misc$layer2_param contains: References_user_specified, levels2_per_levels1 with ref.map-specific levels
+- ✓ **Falls back to layer1 when no layer2 mapping applicable** - When ref.map layer1_link doesn't match any cells, layer2 = layer1; functional.cluster all NA
+
+### 2. test-plot-confusion.R (14 tests)
 
 Confusion matrix visualization `plot.confusion()` for classification comparison.
 
 **What's tested:**
-- ✓ NULL object error
+- ✓ NULL object error with message requirement
 - ✓ Seurat object acceptance
 - ✓ data.frame metadata acceptance
 - ✓ Invalid object type rejection
 - ✓ Required var.1 and var.2 parameters
 - ✓ Metadata column existence validation
-- ✓ relative parameter (TRUE/FALSE)
-- ✓ Plot type options (tile, bar)
+- ✓ relative parameter (TRUE/FALSE) - normalizes proportions
+- ✓ Plot type options ("tile" confusion matrix, "barplot")
 - ✓ Custom labels (xlab, ylab, plot.title)
-- ✓ NA value handling (useNA = "ifany", "no")
-- ✓ ggplot object output
+- ✓ NA value handling (useNA = "ifany", "no", "always")
+- ✓ ggplot object output validation
+- ✓ Relative proportions accuracy
+- ✓ Confusion matrix dimensions
+- ✓ Bar plot orientation
 
 ### 3. test-plot-gene-gating.R (11 tests, 6 skipped)
 
